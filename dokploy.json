@@ -1,8 +1,0 @@
-{
-  "name": "nostr-black",
-  "type": "static",
-  "buildCommand": "",
-  "outputDirectory": ".",
-  "port": 80
-}
-
