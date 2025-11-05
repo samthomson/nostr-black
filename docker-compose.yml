@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    restart: always
+    expose:
+      - "80"
+    networks:
+      - dokploy-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.nostr-black.rule=Host(`nostr.black`)"
+      - "traefik.http.routers.nostr-black.entrypoints=websecure"
+      - "traefik.http.routers.nostr-black.tls.certresolver=letsencrypt"
+      - "traefik.http.services.nostr-black.loadbalancer.server.port=80"
+
+networks:
+  dokploy-network:
+    external: true
+
