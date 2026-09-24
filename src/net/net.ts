@@ -52,7 +52,9 @@ export const httpEgress: typeof fetch = (input, init) => {
  * faked by DNS hijackers. Zero third parties, no API, always live.
  */
 const ONION_PROBE = 'https://facebookcorewwwi.onion/';
-const PROBE_TIMEOUT_MS = 8000;
+// Cold onion connections (new circuit: guard + rendezvous + intro) can take
+// well over 8s in Tor Browser — too short reads as "not on tor".
+const PROBE_TIMEOUT_MS = 25000;
 
 export const isTor = async (): Promise<boolean> => {
   try {

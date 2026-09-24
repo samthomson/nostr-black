@@ -11,6 +11,7 @@ const mockIsTor = vi.mocked(isTor);
 beforeEach(() => {
   mockIsTor.mockReset();
   window.sessionStorage.clear();
+  window.localStorage.clear();
 });
 
 describe('TorGate', () => {

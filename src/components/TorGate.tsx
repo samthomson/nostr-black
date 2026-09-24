@@ -32,8 +32,9 @@ export const TorGate = ({ children }: { children: React.ReactNode }) => {
 
   if (state === 'checking') {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-muted-foreground text-sm">checking connection…</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-center">
+        <h1 className="animate-pulse text-2xl font-bold tracking-tight">nostr.black</h1>
+        <p className="text-muted-foreground text-sm">connecting…</p>
       </div>
     );
   }
