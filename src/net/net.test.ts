@@ -14,22 +14,24 @@ afterEach(() => {
 });
 
 describe('isTor', () => {
-  it('is true when the https onion probe settles — only tor routes onions', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, type: 'opaque' });
+  it('is true when any https onion probe settles — only tor routes onions', async () => {
+    const hanging = Promise.withResolvers<Response>();
+    mockFetch.mockImplementation((url: string) =>
+      url.includes('facebook') ? Promise.resolve({ ok: true, type: 'opaque' }) : hanging.promise,
+    );
 
     expect(await isTor()).toBe(true);
-    expect(mockFetch.mock.calls[0][0]).toContain('.onion');
-    expect(mockFetch.mock.calls[0][0]).toMatch(/^https:/); // https page can't fetch http
+    expect(mockFetch.mock.calls.every(([url]) => url.match(/^https:.*\.onion\//))).toBe(true);
   });
 
-  it('is false when the probe fails at the network level (no tor)', async () => {
-    mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+  it('is false when every probe fails at the network level (no tor)', async () => {
+    mockFetch.mockRejectedValue(new TypeError('Failed to fetch'));
 
     expect(await isTor()).toBe(false);
   });
 
-  it('is false when the probe times out — unconfirmed is not on-tor', async () => {
-    mockFetch.mockRejectedValueOnce(new DOMException('aborted', 'TimeoutError'));
+  it('is false when every probe times out — unconfirmed is not on-tor', async () => {
+    mockFetch.mockRejectedValue(new DOMException('aborted', 'TimeoutError'));
 
     expect(await isTor()).toBe(false);
   });

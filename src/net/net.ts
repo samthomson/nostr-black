@@ -51,17 +51,23 @@ export const httpEgress: typeof fetch = (input, init) => {
  * may not fetch http (mixed content), and a cert-bearing onion can't be
  * faked by DNS hijackers. Zero third parties, no API, always live.
  */
-const ONION_PROBE = 'https://facebookcorewwwi.onion/';
+// Cert-bearing https onions. Addresses rotate (the original facebook onion
+// died), so probe several at once — one mechanism, redundant endpoints.
+const ONION_PROBES = [
+  'https://facebookwkhpilnemxj7asaniu7vnjjbiltxjqhye3mhbshg7kx5tfyd.onion/',
+  'https://protonmailrmez3lotccpshtdeeldrid3d5xgssot65nvldisoywqtu4ad.onion/',
+] as const;
 // Cold onion connections (new circuit: guard + rendezvous + intro) can take
 // well over 8s in Tor Browser — too short reads as "not on tor".
 const PROBE_TIMEOUT_MS = 25000;
 
 export const isTor = async (): Promise<boolean> => {
   try {
-    await fetch(ONION_PROBE, {
-      mode: 'no-cors',
-      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-    });
+    await Promise.any(
+      ONION_PROBES.map((url) =>
+        fetch(url, { mode: 'no-cors', signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) }),
+      ),
+    );
     return true;
   } catch {
     return false;
