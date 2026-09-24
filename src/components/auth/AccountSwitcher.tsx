@@ -22,7 +22,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   if (!currentUser) return null;
 
   const getDisplayName = (account: Account): string => {
-    return account.metadata.name ?? 'Anonymous';
+    return account.metadata.name ?? 'account';
   }
 
   // While the metadata query is in-flight and we don't yet have a name,

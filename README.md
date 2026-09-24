@@ -41,7 +41,7 @@ The idea is to start the user from a point of sensible privacy defualts. Such th
 |---|---|---|
 | Follow import, cache & restore | cache setting on by default | planned |
 | Network privacy | web: requires Tor Browser (client-side IsTor check); desktop: Tor bundled | planned |
-| Privacy score | | planned |
+| Privacy score | NIP-42 AUTH'd connections are identity-linked — feeds into the score | planned |
 | Privacy default settings | | planned |
 | How your activity looks from the outside | | planned |
 | Obfuscate client tag | | planned |
