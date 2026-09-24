@@ -5,7 +5,7 @@ Plan of record: `README.md`.
 ## Conduct
 
 - be concise in dialog always. use no more words than needed
-- no preambles, no recaps, no "what shipped" summaries. the diff is the answer
+- hard caps: answers ≤5 lines unless a decision genuinely needs more; task-done replies are one line; explanations max 3 bullets, only when asked or load-bearing
 - do only what is explicitly instructed. suggest additional tasks, never implement unapproved ideas or flesh out beyond what was asked
 - output must be product relevant: code, plans, technical docs. no marketing speak or filler
 - read before writing; never overwrite user-authored content
