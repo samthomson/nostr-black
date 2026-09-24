@@ -41,7 +41,7 @@ describe('TorGate', () => {
     expect(await screen.findByText('the app')).toBeTruthy();
   });
 
-  it('never locks the user out: continue-without-tor overrides the gate', async () => {
+  it('never locks the user out, and the override never persists across loads', async () => {
     mockIsTor.mockResolvedValue(false);
 
     const user = userEvent.setup();
@@ -53,17 +53,24 @@ describe('TorGate', () => {
 
     await user.click(await screen.findByRole('button', { name: /continue without tor/i }));
     expect(screen.getByText('the app')).toBeTruthy();
-    expect(window.sessionStorage.getItem('nostr:tor-override')).toBe('1');
 
-    // The override lasts for the tab session: a remount skips the check.
+    // The override was written nowhere: every storage a reload would keep
+    // is still empty after clicking through.
+    expect(window.sessionStorage.length).toBe(0);
+    expect(window.localStorage.length).toBe(0);
+    expect(document.cookie).toBe('');
+
+    // And the next mount (same document — storages survive it, as they
+    // would a reload) probes again instead of remembering.
     unmount();
     mockIsTor.mockClear();
+    mockIsTor.mockResolvedValue(false);
     render(
       <TorGate>
         <p>the app</p>
       </TorGate>,
     );
-    expect(screen.getByText('the app')).toBeTruthy();
-    expect(mockIsTor).not.toHaveBeenCalled();
+    expect(await screen.findByText(/can't confirm you're on tor/i)).toBeTruthy();
+    expect(mockIsTor).toHaveBeenCalledTimes(1);
   });
 });

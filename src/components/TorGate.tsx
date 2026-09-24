@@ -2,19 +2,15 @@ import { useEffect, useState } from 'react';
 import { isTor } from '@/net/net';
 import { Button } from '@/components/ui/button';
 
-const OVERRIDE_KEY = 'nostr:tor-override';
-
 /**
  * Web-build network gate. nostr.black warns when it can't confirm Tor:
- * relays would learn the user's IP. Identical in dev and production. The
- * user is never locked out — they can explicitly continue without tor (eg
- * on a vpn they trust), remembered for the tab session. The desktop build
- * is Tor-by-construction and will not mount this gate.
+ * relays would learn the user's IP. Identical in dev and production, and
+ * re-checked on every load — the override is per-page-view only, never
+ * persisted (a settings toggle to skip the check may come later). The
+ * desktop build is Tor-by-construction and will not mount this gate.
  */
 export const TorGate = ({ children }: { children: React.ReactNode }) => {
-  const [state, setState] = useState<'checking' | 'allowed' | 'blocked'>(() =>
-    window.sessionStorage.getItem(OVERRIDE_KEY) === '1' ? 'allowed' : 'checking',
-  );
+  const [state, setState] = useState<'checking' | 'allowed' | 'blocked'>('checking');
 
   useEffect(() => {
     if (state !== 'checking') return;
@@ -40,7 +36,6 @@ export const TorGate = ({ children }: { children: React.ReactNode }) => {
   }
 
   const override = () => {
-    window.sessionStorage.setItem(OVERRIDE_KEY, '1');
     setState('allowed');
   };
 
