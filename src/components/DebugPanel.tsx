@@ -38,9 +38,7 @@ export const DebugPanel = () => {
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="font-semibold">debug</span>
         <span className="text-muted-foreground">
-          {import.meta.env.DEV
-            ? 'dev (gate bypassed)'
-            : `built ${__BUILD_TS__.slice(0, 16).replace('T', ' ')}`}
+          {import.meta.env.DEV ? 'dev' : 'production'}
         </span>
       </div>
 

@@ -3,15 +3,11 @@
  * Nothing outside `src/net` may call `fetch` or construct a `WebSocket`
  * directly (see AGENTS.md, privacy doctrine).
  *
- * This is the browser implementation: direct connections, used for dev and
- * for the web build behind the IsTor gate. The Tauri desktop build replaces
- * the transports with Rust-backed ones that route through the bundled Tor
- * (arti SOCKS5) — same functions, different transport.
+ * This is the browser implementation: direct connections, used behind the
+ * Tor gate. The Tauri desktop build replaces the transports with Rust-backed
+ * ones that route through the bundled Tor (arti SOCKS5) — same functions,
+ * different transport.
  */
-
-import torExits from './tor-exits.json';
-
-const exitSet = new Set<string>(torExits);
 
 export interface EgressEntry {
   kind: 'ws' | 'http';
@@ -49,16 +45,13 @@ export const httpEgress: typeof fetch = (input, init) => {
 /**
  * Client-side Tor check for the web build (desktop is Tor-by-construction).
  *
- * Primary: probe a Tor Project .onion — only Tor can resolve/answer onion
- * addresses, so a settled response (any status, opaque body) means Tor. A
- * hard network failure means no Tor. Zero third parties, always live.
- *
- * Fallback (probe times out — slow circuit, indeterminate): CORS-enabled IP
- * echo (sees the IP + this origin, before any nostr activity) compared
- * against the build-time exit list. Known edge: a network that fakes onion
- * answers reads as "on tor" — rare; the gate is overridable anyway.
+ * One mechanism: probe an .onion that serves valid https. Only Tor can route
+ * onion addresses, so a settled response means Tor; any failure (DNS, TLS,
+ * timeout) means not confirmed. The https requirement matters: an https page
+ * may not fetch http (mixed content), and a cert-bearing onion can't be
+ * faked by DNS hijackers. Zero third parties, no API, always live.
  */
-const ONION_PROBE = 'http://2gzyxa5ihm7nsggfxnu52rck2vv4rvmdlkiu3zzui5du4xyclen53wid.onion/';
+const ONION_PROBE = 'https://facebookcorewwwi.onion/';
 const PROBE_TIMEOUT_MS = 8000;
 
 export const isTor = async (): Promise<boolean> => {
@@ -68,16 +61,7 @@ export const isTor = async (): Promise<boolean> => {
       signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
     });
     return true;
-  } catch (e) {
-    const timedOut =
-      e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError');
-    if (!timedOut) return false;
+  } catch {
+    return false;
   }
-
-  const res = await fetch('https://api.ipify.org?format=json', {
-    referrerPolicy: 'no-referrer',
-  });
-  if (!res.ok) throw new Error(`IP echo failed: ${res.status}`);
-  const { ip } = (await res.json()) as { ip: string };
-  return exitSet.has(ip);
 };

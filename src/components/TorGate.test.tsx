@@ -14,7 +14,7 @@ beforeEach(() => {
 });
 
 describe('TorGate', () => {
-  it('blocks the app when not on tor — identically in dev and production', async () => {
+  it('blocks the app when tor is not confirmed — identically in dev and production', async () => {
     mockIsTor.mockResolvedValue(false);
 
     render(
@@ -23,7 +23,7 @@ describe('TorGate', () => {
       </TorGate>,
     );
 
-    expect(await screen.findByText(/you're not on tor/i)).toBeTruthy();
+    expect(await screen.findByText(/can't confirm you're on tor/i)).toBeTruthy();
     expect(screen.queryByText('the app')).toBeNull();
     expect(mockIsTor).toHaveBeenCalledTimes(1);
   });
@@ -37,25 +37,6 @@ describe('TorGate', () => {
       </TorGate>,
     );
 
-    expect(await screen.findByText('the app')).toBeTruthy();
-  });
-
-  it('surfaces check errors and retries', async () => {
-    mockIsTor.mockRejectedValueOnce(new Error('probe failed'));
-    mockIsTor.mockResolvedValueOnce(true);
-
-    const user = userEvent.setup();
-    render(
-      <TorGate>
-        <p>the app</p>
-      </TorGate>,
-    );
-
-    expect(await screen.findByText(/could not verify tor status/i)).toBeTruthy();
-    expect(screen.getByText('probe failed')).toBeTruthy();
-    expect(screen.queryByText('the app')).toBeNull();
-
-    await user.click(screen.getByRole('button', { name: /retry/i }));
     expect(await screen.findByText('the app')).toBeTruthy();
   });
 

@@ -6,9 +6,6 @@ import { defineConfig } from "vitest/config";
 
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
-  define: {
-    __BUILD_TS__: JSON.stringify(new Date().toISOString()),
-  },
   server: {
     host: "::",
     port: 8080,

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/fetch-tor-exits.mjs && vite build -l error && cp dist/index.html dist/404.html",
+    "build": "vite build -l error && cp dist/index.html dist/404.html",
     "test": "tsc --noEmit && eslint --cache && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html"
   },
   "dependencies": {

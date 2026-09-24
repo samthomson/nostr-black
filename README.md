@@ -41,7 +41,7 @@ The idea is to start the user from a point of sensible privacy defualts. Such th
 | Feature | Notes | Status |
 |---|---|---|
 | Follow import, cache & restore | cache setting on by default | planned |
-| Network privacy | web: tor gate warns first, user can override (eg on a vpn); desktop: Tor bundled | done |
+| Network privacy | web: https onion probe check; gate warns when unconfirmed, user can override (eg on a vpn); desktop: Tor bundled | done |
 | Privacy score | NIP-42 AUTH'd connections are identity-linked — feeds into the score | planned |
 | Privacy default settings | | planned |
 | How your activity looks from the outside | | planned |
