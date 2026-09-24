@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { nip19 } from 'nostr-tools';
 import type * as NostrReact from '@nostrify/react';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 
@@ -97,5 +99,36 @@ describe('Index feed (logged in)', () => {
     );
 
     expect(await screen.findByText(/No notes found/i)).toBeTruthy();
+  });
+
+  it('renders nostr: mentions as profile links, not raw text', async () => {
+    const npub = nip19.npubEncode('c'.repeat(64));
+    feedEvents = [note('c'.repeat(64), 'ccc'.repeat(10).slice(0, 64), 1700000300, `hey nostr:${npub}`)];
+
+    render(
+      <TestApp>
+        <Index />
+      </TestApp>,
+    );
+
+    const link = await screen.findByRole('link', { name: new RegExp(npub.slice(0, 10)) });
+    expect(link.getAttribute('href')).toBe(`/${npub}`);
+  });
+
+  it('clamps long notes behind a show more toggle', async () => {
+    feedEvents = [
+      note('d'.repeat(64), 'ddd'.repeat(10).slice(0, 64), 1700000300, 'z'.repeat(500)),
+    ];
+
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Index />
+      </TestApp>,
+    );
+
+    expect(await screen.findByText(/z{500}/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /show more/i }));
+    expect(screen.getByRole('button', { name: /show less/i })).toBeTruthy();
   });
 });
