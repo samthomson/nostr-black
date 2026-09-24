@@ -51,11 +51,16 @@ export const httpEgress: typeof fetch = (input, init) => {
  * may not fetch http (mixed content), and a cert-bearing onion can't be
  * faked by DNS hijackers. Zero third parties, no API, always live.
  */
-// Cert-bearing https onions. Addresses rotate (the original facebook onion
-// died), so probe several at once — one mechanism, redundant endpoints.
+// Cert-bearing https onions from independent operators, raced via any():
+// no single party rotating/retiring their onion can break the check, and the
+// onions learn nothing (Tor strips the IP; they only see "someone probed").
 const ONION_PROBES = [
+  // Facebook (DigiCert EV)
   'https://facebookwkhpilnemxj7asaniu7vnjjbiltxjqhye3mhbshg7kx5tfyd.onion/',
+  // Proton Mail (EV)
   'https://protonmailrmez3lotccpshtdeeldrid3d5xgssot65nvldisoywqtu4ad.onion/',
+  // DuckDuckGo (DV)
+  'https://duckduckgogg42xjoc72x3sjasowoarfbgcmvfimaftt6twagswzczad.onion/',
 ] as const;
 // Cold onion connections (new circuit: guard + rendezvous + intro) can take
 // well over 8s in Tor Browser — too short reads as "not on tor".
