@@ -59,7 +59,8 @@ describe('Index logged out', () => {
     );
 
     expect(await screen.findByText('nostr.black')).toBeTruthy();
-    expect(screen.getByText(/private by default — public is the exception/i)).toBeTruthy();
+    expect(screen.getByText(/privacy focused nostr client/i)).toBeTruthy();
+    expect(screen.getByText(/big grey area inbetween/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /log in/i })).toBeTruthy();
     expect(screen.queryByText('second note')).toBeNull();
 

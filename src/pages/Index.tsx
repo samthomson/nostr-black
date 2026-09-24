@@ -18,9 +18,16 @@ const prepareNotes = (events: NostrEvent[]): NostrEvent[] =>
 const Landing = () => (
   <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-4 text-center">
     <h1 className="text-5xl font-bold tracking-tight">nostr.black</h1>
-    <p className="text-muted-foreground max-w-md">
-      a privacy focused nostr client. private by default — public is the exception.
-    </p>
+    <div className="text-muted-foreground max-w-md space-y-1">
+      <p>nostr.black is a privacy focused nostr client.</p>
+      <p>it lets you do what you want,</p>
+      <p>but it has an opinion, and guides you with it.</p>
+      <p>
+        public stuff you do is white, private black.
+        <br />
+        there's a big grey area inbetween…
+      </p>
+    </div>
     <LoginArea className="flex" />
   </div>
 );

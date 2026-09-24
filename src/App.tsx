@@ -7,6 +7,7 @@ import { InferSeoMetaPlugin } from 'unhead/plugins';
 import { Suspense } from 'react';
 import NostrProvider from '@/components/NostrProvider';
 import { NostrSync } from '@/components/NostrSync';
+import { DebugPanel } from '@/components/DebugPanel';
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { NostrLoginProvider } from '@nostrify/react/login';
@@ -49,6 +50,7 @@ export function App() {
                 <Suspense>
                   <AppRouter />
                 </Suspense>
+                <DebugPanel />
               </TooltipProvider>
             </NostrProvider>
           </NostrLoginProvider>

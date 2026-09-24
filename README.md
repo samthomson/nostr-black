@@ -33,6 +33,7 @@ The idea is to start the user from a point of sensible privacy defualts. Such th
 | Feature | NIPs | Status |
 |---|---|---|
 | Private follow list | [51](https://github.com/nostr-protocol/nips/blob/master/51.md) | planned |
+| Private mute list | [51](https://github.com/nostr-protocol/nips/blob/master/51.md) — encrypted-content construct works for any NIP-51 list | planned |
 | Private feed | TBD | planned |
 
 ## Privacy features
@@ -40,7 +41,7 @@ The idea is to start the user from a point of sensible privacy defualts. Such th
 | Feature | Notes | Status |
 |---|---|---|
 | Follow import, cache & restore | cache setting on by default | planned |
-| Network privacy | web: requires Tor Browser (client-side IsTor check); desktop: Tor bundled | planned |
+| Network privacy | web: tor gate warns first, user can override (eg on a vpn); desktop: Tor bundled | done |
 | Privacy score | NIP-42 AUTH'd connections are identity-linked — feeds into the score | planned |
 | Privacy default settings | | planned |
 | How your activity looks from the outside | | planned |
@@ -63,6 +64,7 @@ The idea is to start the user from a point of sensible privacy defualts. Such th
 | Multiple accounts | add/switch accounts, switched account defines the app experience; per-post dropdown posts from a burner without re-logging; with multiple accounts added, the publish button names the current account ("publish as john") to prevent accidental postings | planned |
 | Publish queue | outbound events are signed and broadcast immediately, retried on failure; connectivity loss never loses events | planned |
 | Media uploads | via Blossom ([NIP-B7](https://github.com/nostr-protocol/nips/blob/master/B7.md)) to the account's `kind:10063` servers | planned |
+| Feed privacy toggle | top-of-feed switch: private (nostr.black private kinds only) / hybrid (both) / public (classic events) | planned |
 
 ## Open questions
 

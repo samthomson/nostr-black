@@ -1,0 +1,78 @@
+import { useEffect, useState } from 'react';
+import { egressLog, isTor, type EgressEntry } from '@/net/net';
+import { useAppContext } from '@/hooks/useAppContext';
+
+const isDebugEnabled = () =>
+  new URLSearchParams(window.location.search).has('debug');
+
+/**
+ * Minimal debug panel, shown only with ?debug=1. Surfaces what the app is
+ * doing on the network: tor status, configured relays, and recent egress
+ * through the boundary (src/net). Read-only — a visibility tool, not a
+ * control surface.
+ */
+export const DebugPanel = () => {
+  const { config } = useAppContext();
+  const [entries, setEntries] = useState<EgressEntry[]>([]);
+  const [tor, setTor] = useState<'unknown' | 'checking' | boolean>('unknown');
+
+  useEffect(() => {
+    if (!isDebugEnabled()) return;
+    const timer = setInterval(() => setEntries([...egressLog]), 500);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!isDebugEnabled()) return null;
+
+  const checkTor = async () => {
+    setTor('checking');
+    try {
+      setTor(await isTor());
+    } catch {
+      setTor('unknown');
+    }
+  };
+
+  return (
+    <div className="fixed bottom-2 left-2 z-50 max-h-[50vh] w-80 overflow-y-auto rounded-md border bg-popover p-3 text-xs leading-relaxed text-popover-foreground">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="font-semibold">debug</span>
+        <span className="text-muted-foreground">
+          {import.meta.env.DEV
+            ? 'dev (gate bypassed)'
+            : `built ${__BUILD_TS__.slice(0, 16).replace('T', ' ')}`}
+        </span>
+      </div>
+
+      <div className="mb-2 flex items-center gap-2">
+        <span>
+          tor:{' '}
+          {tor === 'checking' ? '…' : tor === 'unknown' ? 'unknown' : String(tor)}
+        </span>
+        <button type="button" onClick={() => void checkTor()} className="underline">
+          check
+        </button>
+      </div>
+
+      <p className="mb-1 font-semibold">relays</p>
+      <ul className="mb-2 space-y-0.5">
+        {config.relayMetadata.relays.map((r) => (
+          <li key={r.url} className="truncate">
+            {r.read ? 'r' : '·'}
+            {r.write ? 'w' : '·'} {r.url}
+          </li>
+        ))}
+      </ul>
+
+      <p className="mb-1 font-semibold">egress ({entries.length})</p>
+      <ul className="space-y-0.5">
+        {entries.slice(0, 30).map((e, i) => (
+          <li key={`${e.ts}-${i}`} className="truncate">
+            <span className="text-muted-foreground">{e.kind}</span> {e.url}
+          </li>
+        ))}
+        {entries.length === 0 && <li className="text-muted-foreground">nothing yet</li>}
+      </ul>
+    </div>
+  );
+};

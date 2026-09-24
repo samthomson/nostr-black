@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { httpEgress, logEgress } from '@/net/net';
 import { type NostrSigner, NostrEvent, NostrFilter, NPool, NRelay1 } from '@nostrify/nostrify';
 import { getEventHash, verifyEvent } from 'nostr-tools';
 import { NostrContext } from '@nostrify/react';
@@ -34,9 +35,14 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
   // eslint-disable-next-line react-hooks/refs
   const [pool] = useState<NPool>(() => new NPool({
     open(url: string) {
+      logEgress('ws', url);
       return new NRelay1(url, {
-        // Gift-wrap (1059/21059) outer signatures are redundant on the client
-        // (ephemeral or group-shared key), so skip the Schnorr verify for them.
+        fetch: httpEgress,
+        // NIP-11 fetch goes through the egress boundary (src/net). Relay
+        // sockets: NRelay1 creates them internally (private createSocket, no
+        // injection seam) — identical in-browser; swap when Tauri/arti lands.
+        // Gift-wrap (1059/21059) outer signatures are ephemeral, so skip the
+        // Schnorr verify for them.
         // The event id (content hash) must still be validated so that the id we
         // index/dedupe on actually matches the event's contents; only the
         // signature check is redundant. Verify everything else in full.
