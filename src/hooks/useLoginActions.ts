@@ -7,7 +7,7 @@ import {
   useNostrLogin,
 } from '@nostrify/react/login';
 import { useAppContext } from '@/hooks/useAppContext';
-import { APP_RELAYS } from '@/lib/appRelays';
+import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 
 // NOTE: This file should not be edited except for adding new login methods.
 // nostr.black supports signers only — there is intentionally no nsec method.
@@ -63,7 +63,7 @@ export function useLoginActions() {
       // so the remote signer has multiple connection options during handshake.
       return relays.length > 0
         ? relays
-        : APP_RELAYS.relays.filter((r) => r.write).map((r) => r.url);
+        : DEFAULT_DISCOVERY_RELAYS;
     },
     // Log out the current user
     async logout(): Promise<void> {

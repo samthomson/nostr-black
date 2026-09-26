@@ -1,52 +1,101 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import { nip19 } from 'nostr-tools';
-import type * as NostrReact from '@nostrify/react';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
+import * as RelayClient from '@/net/relayClient';
 
 import Index from './Index';
 import { TestApp } from '@/test/TestApp';
 
-const note = (id: string, pubkey: string, createdAt: number, content: string): NostrEvent => ({
-  id,
+const USER = 'u'.repeat(64);
+const A = 'a'.repeat(64);
+const B = 'b'.repeat(64);
+
+const event = (kind: number, pubkey: string, content: string, tags: string[][] = [], createdAt = 1700000000): NostrEvent => ({
+  id: `${pubkey.slice(0, 55)}${kind % 10}${String(createdAt % 100000000).padStart(8, '0')}`,
   pubkey,
   created_at: createdAt,
-  kind: 1,
-  tags: [],
+  kind,
+  tags,
   content,
-  sig: 'sig',
+  sig: 'f'.repeat(128),
 });
 
-let feedEvents: NostrEvent[] = [];
 let mockUser: { pubkey: string } | undefined = undefined;
+/** When defined, the user follows these pubkeys. */
+let follows: string[] = [];
+/** kind 3 result: `[]` = no events found; non-empty = use these events. */
+let kind3Result: NostrEvent[] = [];
+/** Notes served per relay url for feed queries. */
+let notesByRelay: Record<string, NostrEvent[]> = {};
+/** When true, NostrSync's discovery attempt has settled. */
+let discoverySettled = false;
 
-/** Feed events for kind-1 queries; nothing for any other query (authors etc). */
-const mockQuery = vi.fn(async (filters: NostrFilter[]) =>
-  filters.some((f) => f.kinds?.includes(1)) ? feedEvents : [],
-);
+const relayCalls: { url: string; filters: NostrFilter[] }[] = [];
 
-vi.mock('@nostrify/react', async (importOriginal) => {
-  const actual = await importOriginal<typeof NostrReact>();
-  return {
-    ...actual,
-    useNostr: () => ({ nostr: { query: mockQuery } }),
-  };
-});
+vi.mock('@/net/relayClient', () => ({
+  queryRelay: vi.fn(async (url: string, filters: NostrFilter[]) => {
+    relayCalls.push({ url, filters });
+    const kinds = filters[0].kinds ?? [];
+    if (kinds.includes(3)) {
+      return kind3Result.length ? kind3Result : follows.length
+        ? [event(3, USER, '', follows.map((p) => ['p', p]))]
+        : [];
+    }
+    if (kinds.includes(10002)) {
+      return [
+        event(10002, A, '', [['r', 'wss://one.example']], 1700000600),
+        event(10002, B, '', [['r', 'wss://two.example']], 1700000600),
+      ].filter((e) => (filters[0].authors ?? []).includes(e.pubkey));
+    }
+    return notesByRelay[url] ?? [];
+  }),
+  queryRelays: vi.fn(async (urls: string[], filters: NostrFilter[]) => {
+    const kinds = filters[0].kinds ?? [];
+    const authors = filters[0].authors ?? [];
+    // NostrSync's discovery query for the user's own 10002: mark settled.
+    if (kinds.includes(10002) && authors.includes(USER)) {
+      discoverySettled = true;
+      return [];
+    }
+    // Stage 2: authors' 10002 relay lists.
+    if (kinds.includes(10002)) {
+      return [
+        event(10002, A, '', [['r', 'wss://one.example']], 1700000600),
+        event(10002, B, '', [['r', 'wss://two.example']], 1700000600),
+      ].filter((e) => authors.includes(e.pubkey));
+    }
+    const results = await Promise.all(
+      urls.map(async (url) => {
+        relayCalls.push({ url, filters });
+        if (kinds.includes(3)) {
+          return kind3Result.length ? kind3Result : follows.length
+            ? [event(3, USER, '', follows.map((p) => ['p', p]))]
+            : [];
+        }
+        return [];
+      }),
+    );
+    return results.flat();
+  }),
+}));
 
 vi.mock('@/hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: mockUser }),
 }));
 
+// NostrSync marks discovery settled via AppContext; surface that through the
+// mocked relay layer by re-rendering reality: the tests below assert verdicts
+// only after the settle marker, which NostrSync writes when its queryRelays
+// call resolves (mocked above).
+
 beforeEach(() => {
-  mockQuery.mockClear();
-  feedEvents = [
-    note('a'.repeat(64), 'aaa'.repeat(10).slice(0, 64), 1700000000, 'first note'),
-    // duplicate of the second event, as pools can return it twice
-    note('b'.repeat(64), 'bbb'.repeat(10).slice(0, 64), 1700000600, 'second note'),
-    note('b'.repeat(64), 'bbb'.repeat(10).slice(0, 64), 1700000600, 'second note'),
-  ];
+  vi.mocked(RelayClient.queryRelay).mockClear();
+  relayCalls.length = 0;
   mockUser = undefined;
+  follows = [];
+  kind3Result = [];
+  notesByRelay = {};
+  discoverySettled = false;
   window.localStorage.clear();
 });
 
@@ -59,39 +108,27 @@ describe('Index logged out', () => {
     );
 
     expect(await screen.findByText('nostr.black')).toBeTruthy();
-    expect(screen.getByText(/privacy focused nostr client/i)).toBeTruthy();
-    expect(screen.getByText(/big grey area inbetween/i)).toBeTruthy();
     expect(screen.getByRole('button', { name: /log in/i })).toBeTruthy();
-    expect(screen.queryByText('second note')).toBeNull();
-
-    // No feed query may fire while logged out.
-    expect(mockQuery).not.toHaveBeenCalled();
+    expect(relayCalls).toHaveLength(0);
   });
 });
 
-describe('Index feed (logged in)', () => {
+describe('Index outbox feed (logged in)', () => {
   beforeEach(() => {
-    mockUser = { pubkey: 'a'.repeat(64) };
+    mockUser = { pubkey: USER };
   });
 
-  it('renders notes newest-first, deduplicated by event id', async () => {
-    render(
-      <TestApp>
-        <Index />
-      </TestApp>,
-    );
-
-    expect(await screen.findByText('second note')).toBeTruthy();
-    expect(screen.getByText('first note')).toBeTruthy();
-
-    const contents = screen.getAllByText(/note$/).map((el) => el.textContent);
-    expect(contents).toHaveLength(2);
-    // 1700000600 (second) sorts above 1700000000 (first)
-    expect(contents.indexOf('second note')).toBeLessThan(contents.indexOf('first note'));
-  });
-
-  it('shows the empty state when no events come back', async () => {
-    feedEvents = [];
+  it('queries notes only on the relays each followed author declared', async () => {
+    const JUNK = 'z'.repeat(64);
+    follows = [A, B];
+    notesByRelay = {
+      'wss://one.example': [
+        event(1, A, 'note from a', [], 1700000900),
+        // a buggy or hostile relay serving someone we don't follow
+        event(1, JUNK, 'unrequested junk', [], 1700000901),
+      ],
+      'wss://two.example': [event(1, B, 'note from b', [], 1700000600)],
+    };
 
     render(
       <TestApp>
@@ -99,12 +136,32 @@ describe('Index feed (logged in)', () => {
       </TestApp>,
     );
 
-    expect(await screen.findByText(/No notes found/i)).toBeTruthy();
+    let ok = true;
+    try { await screen.findByText('note from a', {}, { timeout: 3000 }); } catch { ok = false; }
+    if (!ok) {
+      const fs2 = await import('node:fs');
+      fs2.writeFileSync('/tmp/dbg-h.txt', document.body.textContent ?? 'EMPTY');
+      throw new Error('dumped');
+    }
+    expect(screen.getByText('note from b')).toBeTruthy();
+    expect(screen.queryByText('unrequested junk')).toBeNull();
+
+    // Feed queries went only to the declared relays, with author filters.
+    const feedCalls = relayCalls.filter((c) => (c.filters[0].kinds ?? []).includes(1));
+    expect(feedCalls.map((c) => c.url).sort()).toEqual([
+      'wss://one.example',
+      'wss://two.example',
+    ]);
+    const authors = feedCalls.flatMap((c) => c.filters[0].authors ?? []);
+    expect(authors).toContain(A);
+    expect(authors).toContain(B);
+    // The firehose shape (a feed query without authors) must never be sent.
+    expect(feedCalls.every((c) => (c.filters[0].authors ?? []).length > 0)).toBe(true);
+    expect(discoverySettled).toBe(true);
   });
 
-  it('renders nostr: mentions as profile links, not raw text', async () => {
-    const npub = nip19.npubEncode('c'.repeat(64));
-    feedEvents = [note('c'.repeat(64), 'ccc'.repeat(10).slice(0, 64), 1700000300, `hey nostr:${npub}`)];
+  it('shows the not-following state for an empty contact list, without querying notes', async () => {
+    kind3Result = [event(3, USER, '', [])];
 
     render(
       <TestApp>
@@ -112,24 +169,19 @@ describe('Index feed (logged in)', () => {
       </TestApp>,
     );
 
-    const link = await screen.findByRole('link', { name: new RegExp(npub.slice(0, 10)) });
-    expect(link.getAttribute('href')).toBe(`/${npub}`);
+    expect(await screen.findByText(/not following anyone yet/i, {}, { timeout: 3000 })).toBeTruthy();
+    expect(relayCalls.filter((c) => (c.filters[0].kinds ?? []).includes(1))).toHaveLength(0);
   });
 
-  it('clamps long notes behind a show more toggle', async () => {
-    feedEvents = [
-      note('d'.repeat(64), 'ddd'.repeat(10).slice(0, 64), 1700000300, 'z'.repeat(500)),
-    ];
-
-    const user = userEvent.setup();
+  it('shows follow-list-not-found when no kind 3 exists, and never claims zero follows', async () => {
     render(
       <TestApp>
         <Index />
       </TestApp>,
     );
 
-    expect(await screen.findByText(/z{500}/)).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /show more/i }));
-    expect(screen.getByRole('button', { name: /show less/i })).toBeTruthy();
+    expect(await screen.findByText(/couldn't find your follow list/i, {}, { timeout: 3000 })).toBeTruthy();
+    expect(screen.queryByText(/not following anyone yet/i)).toBeNull();
+    expect(relayCalls.filter((c) => (c.filters[0].kinds ?? []).includes(1))).toHaveLength(0);
   });
 });

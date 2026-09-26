@@ -7,13 +7,12 @@ import { InferSeoMetaPlugin } from 'unhead/plugins';
 import { Suspense } from 'react';
 import NostrProvider from '@/components/NostrProvider';
 import { NostrSync } from '@/components/NostrSync';
-import { DebugPanel } from '@/components/DebugPanel';
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { NostrLoginProvider } from '@nostrify/react/login';
 import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
-import { APP_RELAYS } from '@/lib/appRelays';
+import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import AppRouter from './AppRouter';
 
 const head = createHead({
@@ -34,13 +33,14 @@ const queryClient = new QueryClient({
 
 const defaultConfig: AppConfig = {
   theme: "dark",
-  relayMetadata: APP_RELAYS,
+  relayMetadata: { relays: [], updatedAt: 0 },
+  discoveryRelays: DEFAULT_DISCOVERY_RELAYS,
 };
 
 export function App() {
   return (
     <UnheadProvider head={head}>
-      <AppProvider storageKey="nostr:app-config" defaultConfig={defaultConfig}>
+      <AppProvider storageKey="nostr:app-config/2" defaultConfig={defaultConfig}>
         <QueryClientProvider client={queryClient}>
           <NostrLoginProvider storageKey='nostr:login'>
             <NostrProvider>
@@ -50,7 +50,6 @@ export function App() {
                 <Suspense>
                   <AppRouter />
                 </Suspense>
-                <DebugPanel />
               </TooltipProvider>
             </NostrProvider>
           </NostrLoginProvider>

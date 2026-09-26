@@ -1,28 +1,25 @@
 import { useEffect, useState } from 'react';
 import { egressLog, isTor, type EgressEntry } from '@/net/net';
 import { useAppContext } from '@/hooks/useAppContext';
-
-const isDebugEnabled = () =>
-  new URLSearchParams(window.location.search).has('debug');
+import { hostOf } from '@/lib/format';
 
 /**
- * Minimal debug panel, shown only with ?debug=1. Surfaces what the app is
- * doing on the network: tor status, configured relays, and recent egress
- * through the boundary (src/net). Read-only — a visibility tool, not a
- * control surface.
+ * Minimal debug panel. Dumb component: the page owns visibility, this just
+ * renders what the app is doing on the network — tor status, configured
+ * relays, queries sent and recent egress through the boundary (src/net).
  */
-export const DebugPanel = () => {
+export const DebugPanel = ({ open, onClose }: { open: boolean; onClose: () => void }) => {
   const { config } = useAppContext();
   const [entries, setEntries] = useState<EgressEntry[]>([]);
   const [tor, setTor] = useState<'unknown' | 'checking' | boolean>('unknown');
 
   useEffect(() => {
-    if (!isDebugEnabled()) return;
+    if (!open) return;
     const timer = setInterval(() => setEntries([...egressLog]), 500);
     return () => clearInterval(timer);
-  }, []);
+  }, [open]);
 
-  if (!isDebugEnabled()) return null;
+  if (!open) return null;
 
   const checkTor = async () => {
     setTor('checking');
@@ -37,9 +34,9 @@ export const DebugPanel = () => {
     <div className="fixed bottom-2 left-2 z-50 max-h-[50vh] w-80 overflow-y-auto rounded-md border bg-popover p-3 text-xs leading-relaxed text-popover-foreground">
       <div className="mb-2 flex items-center justify-between gap-2">
         <span className="font-semibold">debug</span>
-        <span className="text-muted-foreground">
-          {import.meta.env.DEV ? 'dev' : 'production'}
-        </span>
+        <button type="button" onClick={onClose} className="text-muted-foreground underline">
+          close
+        </button>
       </div>
 
       <div className="mb-2 flex items-center gap-2">
@@ -66,7 +63,8 @@ export const DebugPanel = () => {
       <ul className="space-y-0.5">
         {entries.slice(0, 30).map((e, i) => (
           <li key={`${e.ts}-${i}`} className="truncate">
-            <span className="text-muted-foreground">{e.kind}</span> {e.url}
+            <span className="text-muted-foreground">{e.kind}</span>{' '}
+            {e.kind === 'query' ? e.url : hostOf(e.url)}
           </li>
         ))}
         {entries.length === 0 && <li className="text-muted-foreground">nothing yet</li>}

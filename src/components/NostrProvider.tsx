@@ -96,7 +96,9 @@ const NostrProvider: React.FC<NostrProviderProps> = (props) => {
 
       return [...allRelays];
     },
-    eoseTimeout: 200,
+    // Real relays (multi-relay group queries) routinely exceed the template's
+    // 200ms — an early return reads as "not found".
+    eoseTimeout: 2000,
   }));
 
   // Derive the current signer from the active login. This mirrors the

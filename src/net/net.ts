@@ -10,7 +10,7 @@
  */
 
 export interface EgressEntry {
-  kind: 'ws' | 'http';
+  kind: 'ws' | 'http' | 'query';
   url: string;
   ts: number;
 }
@@ -21,6 +21,12 @@ export const egressLog: EgressEntry[] = [];
 export const logEgress = (kind: EgressEntry['kind'], url: string): void => {
   egressLog.unshift({ kind, url, ts: Date.now() });
   if (egressLog.length > 100) egressLog.pop();
+};
+
+/** Logs a relay query (REQ) for the debug panel: kinds + author count. */
+export const logQuery = (kinds: number[], authors?: number): void => {
+  const detail = `REQ kinds=[${kinds.join(',')}]${authors !== undefined ? ` authors=${authors}` : ''}`;
+  logEgress('query', detail);
 };
 
 /**

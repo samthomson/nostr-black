@@ -1,4 +1,4 @@
-import { ReactNode, useEffect } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { z } from 'zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
 import { AppContext, type AppConfig, type AppContextType, type Theme, type RelayMetadata } from '@/contexts/AppContext';
@@ -26,6 +26,7 @@ const RelayMetadataSchema = z.object({
 const AppConfigSchema = z.object({
   theme: z.enum(['dark', 'light', 'system']),
   relayMetadata: RelayMetadataSchema,
+  discoveryRelays: z.array(z.url()),
 }) satisfies z.ZodType<AppConfig>;
 
 export function AppProvider(props: AppProviderProps) {
@@ -55,11 +56,15 @@ export function AppProvider(props: AppProviderProps) {
 
   const config = { ...defaultConfig, ...rawConfig };
 
+  // Runtime, non-persisted: when the last NIP-65 discovery attempt finished.
+  const [relaySyncedAt, setRelaySyncedAt] = useState<number | undefined>(undefined);
+
   const appContextValue: AppContextType = {
     config,
     updateConfig,
+    relaySyncedAt,
+    markRelaySynced: () => setRelaySyncedAt(Date.now()),
   };
-
   // Apply theme effects to document
   useApplyTheme(config.theme);
 
