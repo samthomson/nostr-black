@@ -11,6 +11,8 @@ interface RelayGroup {
   url: string;
   queries: EgressEntry[];
   totalEvents: number;
+  avgMs: number;
+  maxMs: number;
 }
 
 const groupByRelay = (entries: EgressEntry[]): RelayGroup[] => {
@@ -18,9 +20,15 @@ const groupByRelay = (entries: EgressEntry[]): RelayGroup[] => {
   for (const e of entries) {
     if (e.kind !== 'query') continue;
     const host = hostOf(e.url);
-    const group = groups.get(host) ?? { host, url: e.url, queries: [], totalEvents: 0 };
+    const group =
+      groups.get(host) ?? { host, url: e.url, queries: [], totalEvents: 0, avgMs: 0, maxMs: 0 };
     group.queries.push(e);
     group.totalEvents += e.events ?? 0;
+    const times = group.queries
+      .map((q) => q.ms)
+      .filter((ms): ms is number => ms !== undefined);
+    group.avgMs = times.length > 0 ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
+    group.maxMs = times.length > 0 ? Math.max(...times) : 0;
     groups.set(host, group);
   }
   // Most-queried relay first; stable within.
@@ -75,6 +83,8 @@ const DebugBody = () => {
                 <th className="pr-2">relay</th>
                 <th className="pr-2">queries</th>
                 <th className="pr-2">events</th>
+                <th className="pr-2">avg ms</th>
+                <th className="pr-2">max ms</th>
               </tr>
             </thead>
             <tbody>
@@ -102,6 +112,8 @@ const DebugBody = () => {
                     </table>
                   </td>
                   <td className="py-2 pr-2 font-mono">{g.totalEvents}</td>
+                  <td className="py-2 pr-2 font-mono">{g.avgMs}</td>
+                  <td className="py-2 pr-2 font-mono">{g.maxMs}</td>
                 </tr>
               ))}
               {relayGroups.length === 0 && (
