@@ -3,7 +3,7 @@ import { useSeoMeta } from '@unhead/react';
 import { Link } from 'react-router-dom';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { Note } from '@/components/Note';
-import { Shell } from '@/AppRouter';
+import { Shell } from '@/components/Shell';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useOutboxFeed } from '@/hooks/useOutboxFeed';
 import { Card, CardContent } from '@/components/ui/card';

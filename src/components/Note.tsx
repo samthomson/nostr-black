@@ -9,8 +9,10 @@ import { Button } from '@/components/ui/button';
 import { EventInfoDialog } from '@/components/EventInfoDialog';
 import { profileHref, eventHref, hostOf, npubOf, formatTimestamp } from '@/lib/format';
 
-/** Content long enough to clamp by default. */
+/** Content/image budget past which a note is collapsed with a fade. */
 const CLAMP_THRESHOLD = 420;
+/** More images than this and the note is collapsed; stacks dominate screens. */
+const IMAGE_CLAMP_COUNT = 2;
 
 /** Renders a bech32 id (npub/note/nevent/naddr…) as a link to its route. */
 const NostrRef = ({ bech32 }: { bech32: string }) => {
@@ -104,7 +106,7 @@ const repostedEvent = (event: NostrEvent): NostrEvent | null => {
   }
 };
 
-/** Author block: avatar + name link to the profile route. */
+/** Author block: name linking to the profile route. */
 const AuthorLink = ({ pubkey }: { pubkey: string }) => {
   const author = useAuthor(pubkey);
   const metadata = author.data?.metadata;
@@ -113,32 +115,30 @@ const AuthorLink = ({ pubkey }: { pubkey: string }) => {
   const href = profileHref(pubkey);
 
   return (
-    <span className="flex min-w-0 items-center gap-2">
-      <span className="truncate text-sm">
-        {href ? (
-          <a href={href} className="font-medium hover:underline">
-            {displayName ?? `${npub.slice(0, 10)}…`}
-          </a>
-        ) : (
-          displayName ?? `${npub.slice(0, 10)}…`
-        )}
-      </span>
+    <span className="truncate text-sm">
+      {href ? (
+        <a href={href} className="font-medium hover:underline">
+          {displayName ?? `${npub.slice(0, 10)}…`}
+        </a>
+      ) : (
+        displayName ?? `${npub.slice(0, 10)}…`
+      )}
     </span>
   );
 };
 
 /** Compact rendering of a reposted/quoted event. */
-const EmbeddedNote = ({ event, clamped }: { event: NostrEvent; clamped?: boolean }) => {
+const EmbeddedNote = ({ event }: { event: NostrEvent }) => {
   const images = mediaUrls(event);
 
   return (
     <blockquote className="space-y-1 border-l-2 border-muted-foreground/30 pl-3">
       <AuthorLink pubkey={event.pubkey} />
-      <div className={`whitespace-pre-wrap break-words text-sm ${clamped ? 'line-clamp-6' : ''}`}>
+      <div className="whitespace-pre-wrap break-words text-sm">
         {renderContent(event.content)}
       </div>
       {images.length > 0 && (
-        <div className="space-y-1">
+        <div className={`mt-1 gap-1 ${images.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
           {images.map((url) => (
             <img
               key={url}
@@ -162,15 +162,18 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
   const npub = npubOf(event.pubkey);
   const href = profileHref(event.pubkey);
   const embedded = repostedEvent(event);
+  const images = mediaUrls(event);
+  const allImages = [...images, ...(embedded ? mediaUrls(embedded) : [])];
   // Clamp measures what's actually rendered: embedded note content (kind 6
-  // content is a JSON blob, not display text) or the note's own text.
+  // content is a JSON blob, not display text) or the note's own text, plus
+  // image count — long image stacks dominate the screen just as much.
   const renderedText = embedded
     ? embedded.content
     : (event.kind === 30023
         ? (event.tags.find(([n]) => n === 'title')?.[1] ?? event.content)
         : event.content);
-  const clampable = renderedText.length > CLAMP_THRESHOLD;
-  const images = mediaUrls(event);
+  const clampable =
+    renderedText.length > CLAMP_THRESHOLD || allImages.length > IMAGE_CLAMP_COUNT;
   const kindLabel = KIND_LABELS[event.kind];
   // kind 16 references the reposted event via e tag; kind 1 quotes via q tag.
   const referenceId =
@@ -178,6 +181,7 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
     ?? event.tags.find(([n]) => n === 'e')?.[1]
     ?? event.tags.find(([n]) => n === 'q')?.[1];
   const quotedViaTag = !embedded && referenceId !== undefined;
+  const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
 
   return (
     <Card>
@@ -217,39 +221,42 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
             </Button>
           </div>
 
-          {embedded ? (
-            <EmbeddedNote event={embedded} clamped={clampable && !expanded} />
-          ) : quotedViaTag ? (
-            <a
-              href={eventHref(referenceId, event.pubkey) ?? '#'}
-              className="text-muted-foreground block truncate border-l-2 border-muted-foreground/30 pl-3 text-sm hover:underline"
-            >
-              {referenceId}
-            </a>
-          ) : (
-            <div
-              className={`whitespace-pre-wrap break-words text-sm ${clampable && !expanded ? 'line-clamp-6' : ''}`}
-            >
-              {renderContent(
-                event.kind === 30023
-                  ? (event.tags.find(([n]) => n === 'title')?.[1] ?? event.content)
-                  : event.content,
+          {/* Body: hard max-height with a bottom fade when collapsed — no
+              note may dominate the screen, whatever its text or images. */}
+          <div className="relative">
+            <div className={clampable && !expanded ? 'max-h-80 overflow-hidden' : ''}>
+              {embedded ? (
+                <EmbeddedNote event={embedded} />
+              ) : quotedViaTag ? (
+                <a
+                  href={eventHref(referenceId, event.pubkey) ?? '#'}
+                  className="text-muted-foreground block truncate border-l-2 border-muted-foreground/30 pl-3 text-sm hover:underline"
+                >
+                  {referenceId}
+                </a>
+              ) : (
+                <div className="whitespace-pre-wrap break-words text-sm">
+                  {renderContent(renderedText)}
+                </div>
+              )}
+
+              {!embedded && images.length > 0 && (
+                <div className={`mt-1 gap-1 ${images.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
+                  {images.map((url) => (
+                    <img
+                      key={url}
+                      src={url}
+                      alt={altText}
+                      className="max-h-96 w-full rounded-md object-cover"
+                    />
+                  ))}
+                </div>
               )}
             </div>
-          )}
-
-          {!embedded && images.length > 0 && (
-            <div className="space-y-1">
-              {images.map((url) => (
-                <img
-                  key={url}
-                  src={url}
-                  alt={event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author'}
-                  className="max-h-96 w-full rounded-md object-cover"
-                />
-              ))}
-            </div>
-          )}
+            {clampable && !expanded && (
+              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent" />
+            )}
+          </div>
 
           <div className="flex items-center gap-2">
             {foundOn && foundOn.length > 0 && (
@@ -264,7 +271,7 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
                 className="h-6 px-0 text-muted-foreground"
                 onClick={() => setExpanded(!expanded)}
               >
-                {expanded ? 'show less' : 'show more'}
+                {expanded ? 'show less' : 'read more'}
               </Button>
             )}
           </div>

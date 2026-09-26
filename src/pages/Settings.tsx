@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSeoMeta } from '@unhead/react';
-import { Shell } from '@/AppRouter';
+import { Shell } from '@/components/Shell';
 import { useAppContext } from '@/hooks/useAppContext';
 
 /**

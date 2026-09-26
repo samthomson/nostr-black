@@ -105,7 +105,7 @@ export const EventInfoDialog = ({
           <div className="space-y-1">
             <p className="text-muted-foreground text-sm">raw</p>
             <pre className="max-h-64 overflow-auto rounded-md border bg-muted p-3 text-xs leading-relaxed">
-              {JSON.stringify(event, null, 2)}
+              {JSON.stringify(event, null, 4)}
             </pre>
           </div>
         </div>

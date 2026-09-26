@@ -34,7 +34,8 @@ Plan of record: `README.md`.
 - lowercase UI copy (labels, buttons, status)
 - shadcn/ui components (`src/components/ui`), Tailwind, `cn()` merge; skeletons for loading, spinners only for buttons
 - read `App.tsx`, `AppRouter.tsx`, `NostrProvider` before touching them
-- package manager: npm
+- json is always formatted with 4-space indentation
+- one concern per file: e.g. AppRouter is just routes, templates live in their own component
 
 ## Tests & validation
 
