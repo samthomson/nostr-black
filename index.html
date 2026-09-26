@@ -1,25 +1,58 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>nostr.black</title>
-    <link rel="icon" type="image/svg+xml" href="favicon.svg">
-    <link rel="icon" type="image/x-icon" href="favicon.ico">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-        }
-        html, body {
-            width: 100%;
-            height: 100%;
-            background-color: #000000;
-            overflow: hidden;
-        }
-    </style>
-</head>
-<body>
-</body>
+<html
+    lang="en"
+    class="dark"
+>
+    <head>
+        <meta
+            charset="UTF-8"
+        >
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+        >
+        <meta
+            name="description"
+            content="a privacy focused nostr client"
+        >
+        <meta
+            property="og:type"
+            content="website"
+        >
+        <meta
+            property="og:title"
+            content="nostr.black"
+        >
+        <meta
+            property="og:description"
+            content="a privacy focused nostr client"
+        >
+        <title>nostr.black</title>
+        <link
+            rel="icon"
+            href="/favicon.svg"
+            type="image/svg+xml"
+        >
+        <link
+            rel="icon"
+            href="/favicon.ico"
+            sizes="32x32"
+        >
+        <link
+            rel="manifest"
+            href="/manifest.webmanifest"
+        >
+        <meta
+            http-equiv="content-security-policy"
+            content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; frame-src 'self' https:; font-src 'self'; base-uri 'self'; connect-src 'self' blob: https: wss:; img-src 'self' data: blob: https:; media-src 'self' https:"
+        >
+        <style>html{background:#000}</style>
+    </head>
+    <body>
+        <div id="root"></div>
+        <script
+            type="module"
+            src="/src/main.tsx"
+        ></script>
+    </body>
 </html>
-
