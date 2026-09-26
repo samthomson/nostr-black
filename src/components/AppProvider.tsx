@@ -1,7 +1,7 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { z } from 'zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { AppContext, type AppConfig, type AppContextType, type Theme, type RelayMetadata } from '@/contexts/AppContext';
+import { AppContext, type AppConfig, type Theme, type RelayMetadata } from '@/contexts/AppContext';
 
 interface AppProviderProps {
   children: ReactNode;
@@ -49,22 +49,29 @@ export function AppProvider(props: AppProviderProps) {
     }
   );
 
-  // Generic config updater with callback pattern
-  const updateConfig = (updater: (currentConfig: Partial<AppConfig>) => Partial<AppConfig>) => {
-    setConfig(updater);
-  };
+  // Generic config updater with callback pattern. useCallback is load-bearing:
+  // consumers (NostrSync) key effects on this identity — a new identity per
+  // render turns them into a query loop.
+  const updateConfig = useCallback(
+    (updater: (currentConfig: Partial<AppConfig>) => Partial<AppConfig>) => {
+      setConfig(updater);
+    },
+    []
+  );
 
-  const config = { ...defaultConfig, ...rawConfig };
+  const config = useMemo(
+    () => ({ ...defaultConfig, ...rawConfig }),
+    [defaultConfig, rawConfig]
+  );
 
   // Runtime, non-persisted: when the last NIP-65 discovery attempt finished.
   const [relaySyncedAt, setRelaySyncedAt] = useState<number | undefined>(undefined);
+  const markRelaySynced = useCallback(() => setRelaySyncedAt(Date.now()), []);
 
-  const appContextValue: AppContextType = {
-    config,
-    updateConfig,
-    relaySyncedAt,
-    markRelaySynced: () => setRelaySyncedAt(Date.now()),
-  };
+  const appContextValue = useMemo(
+    () => ({ config, updateConfig, relaySyncedAt, markRelaySynced }),
+    [config, updateConfig, relaySyncedAt, markRelaySynced]
+  );
   // Apply theme effects to document
   useApplyTheme(config.theme);
 

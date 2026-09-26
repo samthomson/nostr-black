@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
 import { Info, Repeat2 } from 'lucide-react';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { useAuthor } from '@/hooks/useAuthor';
+import { useEventById } from '@/hooks/useEventById';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,10 +45,19 @@ const NostrRef = ({ bech32 }: { bech32: string }) => {
  * and hashtags become links/spans. Never uses innerHTML — event content is
  * untrusted (see AGENTS.md).
  */
+const IMAGE_URL = /\.(jpe?g|png|gif|webp|avif)(\?[^#\s]*)?$/i;
+
+/**
+ * Renders note content as safe React nodes: nostr: entities (NIP-21),
+ * non-image URLs and hashtags. Image URLs are hoisted out of the text into
+ * the note's media grid — one way to render images, not two. Never uses
+ * innerHTML — event content is untrusted (see AGENTS.md).
+ */
 const renderContent = (content: string) =>
   content
     .split(/(nostr:[a-z0-9]+|https?:\/\/[^\s]+|#[\p{L}\p{N}_]+)/gu)
     .filter(Boolean)
+    .filter((token) => !(token.startsWith('http') && IMAGE_URL.test(token)))
     .map((token, i) => {
       if (token.startsWith('nostr:')) {
         return <NostrRef key={i} bech32={token.slice(6)} />;
@@ -75,6 +85,22 @@ const renderContent = (content: string) =>
       return token;
     });
 
+/** All image urls for an event: imeta/url tags plus image urls in content. */
+const imageUrls = (event: NostrEvent): string[] => {
+  const urls: string[] = [];
+  for (const [name, value, ...rest] of event.tags) {
+    if (name === 'url' && value && IMAGE_URL.test(value)) urls.push(value);
+    if (name === 'imeta') {
+      const url = [value, ...rest].find((p) => p.startsWith('url '))?.slice(4);
+      if (url) urls.push(url);
+    }
+  }
+  for (const token of event.content.split(/\s+/)) {
+    if (/^https?:\/\//.test(token) && IMAGE_URL.test(token)) urls.push(token);
+  }
+  return [...new Set(urls)];
+};
+
 const KIND_LABELS: Record<number, string> = {
   6: 'repost',
   16: 'repost',
@@ -82,19 +108,6 @@ const KIND_LABELS: Record<number, string> = {
   21: 'video',
   1063: 'file',
   30023: 'long-form',
-};
-
-/** Image/media urls from url, imeta and media tags. */
-const mediaUrls = (event: NostrEvent): string[] => {
-  const urls: string[] = [];
-  for (const [name, value, ...rest] of event.tags) {
-    if (name === 'url' && value) urls.push(value);
-    if (name === 'imeta') {
-      const url = [value, ...rest].find((p) => p.startsWith('url '))?.slice(4);
-      if (url) urls.push(url);
-    }
-  }
-  return urls;
 };
 
 /** Embedded event of a kind 6 repost, if parseable. */
@@ -130,7 +143,7 @@ const AuthorLink = ({ pubkey }: { pubkey: string }) => {
 
 /** Compact rendering of a reposted/quoted event. */
 const EmbeddedNote = ({ event }: { event: NostrEvent }) => {
-  const images = mediaUrls(event);
+  const images = imageUrls(event);
 
   return (
     <blockquote className="space-y-1 border-l-2 border-muted-foreground/30 pl-3">
@@ -163,11 +176,8 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
   const npub = npubOf(event.pubkey);
   const href = profileHref(event.pubkey);
   const embedded = repostedEvent(event);
-  const images = mediaUrls(event);
-  const allImages = [...images, ...(embedded ? mediaUrls(embedded) : [])];
-  // Clamp measures what's actually rendered: embedded note content (kind 6
-  // content is a JSON blob, not display text) or the note's own text, plus
-  // image count — long image stacks dominate the screen just as much.
+  const images = imageUrls(event);
+  const allImages = [...images, ...(embedded ? imageUrls(embedded) : [])];
   const renderedText = embedded
     ? embedded.content
     : (event.kind === 30023
@@ -176,12 +186,14 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
   const clampable =
     renderedText.length > CLAMP_THRESHOLD || allImages.length > IMAGE_CLAMP_COUNT;
   const kindLabel = KIND_LABELS[event.kind];
-  // kind 16 references the reposted event via e tag; kind 1 quotes via q tag.
-  const referenceId =
-    embedded?.id
-    ?? event.tags.find(([n]) => n === 'e')?.[1]
-    ?? event.tags.find(([n]) => n === 'q')?.[1];
+  const referenceId = embedded?.id ?? event.tags.find(([n]) => n === 'q')?.[1];
   const quotedViaTag = !embedded && referenceId !== undefined;
+  // A reply carries its parent (and thread root) in e tags: fetch the direct
+  // parent and render it as context above the reply.
+  const parentTag = event.tags.find(([n, , marker]) => n === 'e' && marker === 'reply')
+    ?? event.tags.find(([n, , marker]) => n === 'e' && marker === 'root');
+  const parentId = !embedded && !quotedViaTag ? parentTag?.[1] : undefined;
+  const parent = useEventById(parentId);
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
 
   return (
@@ -221,6 +233,12 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
               <Info className="size-3.5" />
             </Button>
           </div>
+          {parentId && (
+            <div className="text-muted-foreground text-xs">replying to</div>
+          )}
+          {parentId && parent.data && (
+            <EmbeddedNote event={parent.data} />
+          )}
 
           {/* Body: hard max-height with a bottom fade when collapsed — no
               note may dominate the screen, whatever its text or images. */}
@@ -279,7 +297,7 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
         </div>
       </CardContent>
 
-      <EventInfoDialog event={event} open={infoOpen} onOpenChange={setInfoOpen} />
+      <EventInfoDialog event={event} foundOn={foundOn} open={infoOpen} onOpenChange={setInfoOpen} />
     </Card>
   );
 };

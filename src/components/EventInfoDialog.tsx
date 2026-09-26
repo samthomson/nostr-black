@@ -23,10 +23,12 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }) 
  */
 export const EventInfoDialog = ({
   event,
+  foundOn,
   open,
   onOpenChange,
 }: {
   event: NostrEvent;
+  foundOn?: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
@@ -34,7 +36,7 @@ export const EventInfoDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[85dvh] overflow-y-auto p-0 gap-0 rounded-2xl">
+      <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[85dvh] overflow-y-auto p-0 gap-0 rounded-2xl">
         <DialogHeader className="px-6 pt-6">
           <DialogTitle className="text-lg font-semibold leading-none tracking-tight">
             event info
@@ -71,6 +73,9 @@ export const EventInfoDialog = ({
             <Row label="sig">
               <span className="font-mono text-xs">{shortHex(event.sig)}</span>
             </Row>
+            {foundOn && foundOn.length > 0 && (
+              <Row label="found on">{foundOn.join(', ')}</Row>
+            )}
           </div>
 
           {event.tags.length > 0 && (
@@ -84,17 +89,17 @@ export const EventInfoDialog = ({
                     : name === 'e' && value ? eventHref(value, event.pubkey)
                     : undefined;
                   return (
-                    <li key={i} className="flex min-w-0 gap-2">
-                      <span className="text-muted-foreground shrink-0">[{name}]</span>
+                    <li key={i} className="min-w-0">
+                      <span className="text-muted-foreground">[{name}] </span>
                       {href ? (
-                        <Link className="text-primary truncate underline underline-offset-2" to={href}>
+                        <Link className="text-primary break-all underline underline-offset-2" to={href}>
                           {value}
                         </Link>
                       ) : (
-                        <span className="truncate">{value ?? ''}</span>
+                        <span className="break-all">{value ?? ''}</span>
                       )}
                       {tag.slice(2).length > 0 && (
-                        <span className="text-muted-foreground truncate text-xs">{tag.slice(2).join(', ')}</span>
+                        <span className="text-muted-foreground break-all text-xs"> {tag.slice(2).join(', ')}</span>
                       )}
                     </li>
                   );
@@ -105,7 +110,7 @@ export const EventInfoDialog = ({
 
           <div className="space-y-1">
             <p className="text-muted-foreground text-sm">raw</p>
-            <pre className="max-h-64 overflow-auto rounded-md border bg-muted p-3 text-xs leading-relaxed">
+            <pre className="max-h-64 overflow-auto rounded-md border bg-muted p-3 text-xs leading-relaxed break-all whitespace-pre-wrap">
               {JSON.stringify(event, null, 4)}
             </pre>
           </div>
