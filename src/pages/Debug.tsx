@@ -6,8 +6,8 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { hostOf } from '@/lib/format';
 
 /**
- * Debug page: what the app is doing on the network — tor status, configured
- * relays, queries sent and recent egress through the boundary (src/net).
+ * Debug page: what the app asked of the network — relay queries with the
+ * filters sent and what came back, plus connection/socket history.
  */
 const DebugBody = () => {
   const { config } = useAppContext();
@@ -28,6 +28,8 @@ const DebugBody = () => {
     }
   };
 
+  const queries = entries.filter((e) => e.kind === 'query');
+
   return (
     <div className="space-y-6 text-sm">
       <div className="flex items-center gap-2">
@@ -41,40 +43,77 @@ const DebugBody = () => {
       </div>
 
       <div className="space-y-2">
-        <p className="font-medium">your relays</p>
-        <ul className="space-y-1">
-          {config.relayMetadata.relays.map((r) => (
-            <li key={r.url} className="truncate">
-              {r.read ? 'r' : '·'}
-              {r.write ? 'w' : '·'} {r.url}
-            </li>
-          ))}
-          {config.relayMetadata.relays.length === 0 && (
-            <li className="text-muted-foreground">(not fetched yet)</li>
-          )}
-        </ul>
+        <p className="font-medium">relay queries ({queries.length})</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="pr-2">relay</th>
+                <th className="pr-2">kinds</th>
+                <th className="pr-2">authors</th>
+                <th className="pr-2">events</th>
+                <th className="pr-2">ms</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {queries.slice(0, 40).map((q, i) => (
+                <tr key={`${q.ts}-${i}`} className="border-b">
+                  <td className="py-1 pr-2 font-mono">{hostOf(q.url)}</td>
+                  <td className="py-1 pr-2 font-mono">{q.kinds}</td>
+                  <td className="py-1 pr-2 font-mono">{q.authors ?? '—'}</td>
+                  <td className="py-1 pr-2 font-mono">{q.events ?? '…'}</td>
+                  <td className="py-1 pr-2 font-mono">{q.ms ?? '…'}</td>
+                  <td className={`py-1 font-mono ${q.status === 'empty' ? 'text-muted-foreground' : ''}`}>
+                    {q.status ?? 'pending'}
+                  </td>
+                </tr>
+              ))}
+              {queries.length === 0 && (
+                <tr><td className="text-muted-foreground">no queries yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="font-medium">
+          your relays{' '}
+          <span className="text-muted-foreground text-xs">
+            {config.relayMetadata.updatedAt > 0
+              ? `(fetched ${new Date(config.relayMetadata.updatedAt * 1000).toLocaleString()})`
+              : '(not fetched yet)'}
+          </span>
+        </p>
+        <table className="w-full text-left text-xs">
+          <tbody>
+            {config.relayMetadata.relays.map((r) => (
+              <tr key={r.url} className="border-b">
+                <td className="text-muted-foreground w-8 py-1 font-mono">
+                  {r.read ? 'r' : '·'}{r.write ? 'w' : '·'}
+                </td>
+                <td className="py-1 font-mono">{r.url}</td>
+              </tr>
+            ))}
+            {config.relayMetadata.relays.length === 0 && (
+              <tr><td className="text-muted-foreground">(not fetched yet)</td></tr>
+            )}
+          </tbody>
+        </table>
       </div>
 
       <div className="space-y-2">
         <p className="font-medium">discovery relays</p>
-        <ul className="space-y-1">
-          {config.discoveryRelays.map((url) => (
-            <li key={url} className="truncate">{url}</li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="space-y-2">
-        <p className="font-medium">egress ({entries.length})</p>
-        <ul className="space-y-1">
-          {entries.map((e, i) => (
-            <li key={`${e.ts}-${i}`} className="truncate">
-              <span className="text-muted-foreground">{e.kind}</span>{' '}
-              {e.kind === 'query' ? e.url : hostOf(e.url)}
-            </li>
-          ))}
-          {entries.length === 0 && <li className="text-muted-foreground">nothing yet</li>}
-        </ul>
+        <table className="w-full text-left text-xs">
+          <tbody>
+            {config.discoveryRelays.map((url) => (
+              <tr key={url} className="border-b">
+                <td className="py-1 font-mono">{url}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

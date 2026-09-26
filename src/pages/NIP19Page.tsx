@@ -1,20 +1,23 @@
 import { nip19 } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
-import type { DecodeResult } from '@/lib/format';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAppContext } from '@/hooks/useAppContext';
 import { queryRelay } from '@/net/relayClient';
 import { Note } from '@/components/Note';
+import { Shell } from '@/components/Shell';
+import { ProfilePage } from '@/pages/Profile';
+import type { DecodeResult } from '@/lib/format';
+import { readRelays } from '@/lib/appRelays';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import NotFound from './NotFound';
-import { readRelays } from '@/lib/appRelays';
 
 /** Resolves a decoded pointer to (id, relay hints) for fetching. */
 const pointerOf = (
   decoded: DecodeResult,
 ): { id: string; relays: string[] } | null => {
+  if (decoded.type === 'note') return { id: decoded.data, relays: [] };
   if (decoded.type === 'nevent') {
     return { id: decoded.data.id, relays: [...(decoded.data.relays ?? [])] };
   }
@@ -23,8 +26,8 @@ const pointerOf = (
 
 /**
  * Renders a single event by its NIP-19 identifier: fetched from the relay
- * hints embedded in the pointer plus the app's configured/discovery relays,
- * rendered with the same Note component the feed uses.
+ * hints embedded in the pointer plus the app's relays, rendered with the
+ * same Note component the feed uses.
  */
 const EventPage = ({ identifier }: { identifier: string }) => {
   const { config } = useAppContext();
@@ -32,13 +35,7 @@ const EventPage = ({ identifier }: { identifier: string }) => {
   const decoded = nip19.decode(identifier);
   const pointer = pointerOf(decoded);
   const relays = pointer
-    ? [
-        ...new Set([
-          ...pointer.relays,
-          ...readRelays(config),
-          ...config.discoveryRelays,
-        ]),
-      ]
+    ? [...new Set([...pointer.relays, ...readRelays(config)])]
     : [];
 
   const { data: event, isLoading } = useQuery({
@@ -99,15 +96,25 @@ export function NIP19Page() {
 
   switch (decoded.type) {
     case 'npub':
+      return <ProfilePage pubkey={decoded.data} />;
+
     case 'nprofile':
-      return <div>Profile placeholder</div>;
+      return <ProfilePage pubkey={decoded.data.pubkey} />;
 
     case 'note':
     case 'nevent':
-      return <EventPage identifier={identifier} />;
+      return (
+        <Shell>
+          <EventPage identifier={identifier} />
+        </Shell>
+      );
 
     case 'naddr':
-      return <div>Addressable event placeholder</div>;
+      return (
+        <Shell>
+          <div>Addressable event placeholder</div>
+        </Shell>
+      );
 
     default:
       return <NotFound />;

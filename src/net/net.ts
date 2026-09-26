@@ -13,20 +13,42 @@ export interface EgressEntry {
   kind: 'ws' | 'http' | 'query';
   url: string;
   ts: number;
+  /** Query entries only: */
+  kinds?: string;
+  authors?: number;
+  events?: number;
+  ms?: number;
+  status?: 'ok' | 'empty' | 'error';
 }
 
-/** Ring buffer of recent egress, rendered by the debug panel (?debug=1). */
+/** Ring buffer of recent egress, rendered by the debug page. */
 export const egressLog: EgressEntry[] = [];
 
 export const logEgress = (kind: EgressEntry['kind'], url: string): void => {
   egressLog.unshift({ kind, url, ts: Date.now() });
-  if (egressLog.length > 100) egressLog.pop();
+  if (egressLog.length > 200) egressLog.pop();
 };
 
-/** Logs a relay query (REQ) for the debug panel: kinds + author count. */
-export const logQuery = (kinds: number[], authors?: number): void => {
-  const detail = `REQ kinds=[${kinds.join(',')}]${authors !== undefined ? ` authors=${authors}` : ''}`;
-  logEgress('query', detail);
+/** Logs a relay query (REQ) as a structured entry the debug page renders. */
+export const logQuery = (url: string, kinds: number[], authors?: number): EgressEntry => {
+  const entry: EgressEntry = {
+    kind: 'query',
+    url,
+    ts: Date.now(),
+    kinds: kinds.join(','),
+    authors,
+    status: 'ok',
+  };
+  egressLog.unshift(entry);
+  if (egressLog.length > 200) egressLog.pop();
+  return entry;
+};
+
+/** Completes a query entry with its outcome. */
+export const logQueryDone = (entry: EgressEntry, events: number, ms: number): void => {
+  entry.events = events;
+  entry.ms = ms;
+  entry.status = events > 0 ? 'ok' : 'empty';
 };
 
 /**

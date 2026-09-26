@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { profileHref, eventHref, shortHex } from '@/lib/format';
+import { Link } from 'react-router-dom';
 
 /** One row of a parsed field, when it applies. */
 const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -46,9 +47,9 @@ export const EventInfoDialog = ({
               {(() => {
                 const href = eventHref(event.id, event.pubkey);
                 return href ? (
-                  <a className="text-primary underline underline-offset-2" href={href}>
+                  <Link className="text-primary underline underline-offset-2" to={href}>
                     {event.id}
-                  </a>
+                  </Link>
                 ) : (
                   event.id
                 );
@@ -56,9 +57,9 @@ export const EventInfoDialog = ({
             </Row>
             <Row label="author">
               {authorHref ? (
-                <a className="text-primary underline underline-offset-2" href={authorHref}>
+                <Link className="text-primary underline underline-offset-2" to={authorHref}>
                   {nip19.npubEncode(event.pubkey)}
-                </a>
+                </Link>
               ) : (
                 event.pubkey
               )}
@@ -86,9 +87,9 @@ export const EventInfoDialog = ({
                     <li key={i} className="flex min-w-0 gap-2">
                       <span className="text-muted-foreground shrink-0">[{name}]</span>
                       {href ? (
-                        <a className="text-primary truncate underline underline-offset-2" href={href}>
+                        <Link className="text-primary truncate underline underline-offset-2" to={href}>
                           {value}
-                        </a>
+                        </Link>
                       ) : (
                         <span className="truncate">{value ?? ''}</span>
                       )}

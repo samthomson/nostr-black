@@ -1,6 +1,6 @@
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { verifyEvent as nostrVerifyEvent } from 'nostr-tools';
-import { logQuery, wsConnect } from './net';
+import { logQuery, logQueryDone, wsConnect } from './net';
 
 export interface RelayQueryOpts {
   /** Hard cap for the whole exchange; collected events are returned on expiry. */
@@ -26,7 +26,8 @@ export const queryRelay = async (
   // Per-relay deadline, jumble-generous: outbox relays vary wildly in speed,
   // and cutting early loses that relay's unique events permanently.
   const { timeoutMs = 10000, signal } = opts;
-  logQuery(filters[0]?.kinds ?? [], filters[0]?.authors?.length);
+  const startedAt = Date.now();
+  const entry = logQuery(url, filters[0]?.kinds ?? [], filters[0]?.authors?.length);
 
   return new Promise<NostrEvent[]>((resolve) => {
     const events: NostrEvent[] = [];
@@ -38,6 +39,7 @@ export const queryRelay = async (
     const finish = () => {
       if (settled) return;
       settled = true;
+      logQueryDone(entry, events.length, Date.now() - startedAt);
       try {
         ws.close();
       } catch {

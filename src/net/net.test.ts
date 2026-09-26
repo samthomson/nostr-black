@@ -46,14 +46,14 @@ describe('egress log', () => {
     expect(egressLog[0]).toMatchObject({ kind: 'http', url: 'https://example.com/info' });
   });
 
-  it('is a ring buffer capped at 100 entries', () => {
-    for (let i = 0; i < 120; i++) {
+  it('is a ring buffer capped at 200 entries', () => {
+    for (let i = 0; i < 220; i++) {
       logEgress('ws', `wss://relay-${i}.example/`);
     }
 
-    expect(egressLog).toHaveLength(100);
+    expect(egressLog).toHaveLength(200);
     // Newest first — the earliest entries were evicted.
-    expect(egressLog[0].url).toBe('wss://relay-119.example/');
+    expect(egressLog[0].url).toBe('wss://relay-219.example/');
     expect(egressLog.at(-1)?.url).toBe('wss://relay-20.example/');
   });
 });

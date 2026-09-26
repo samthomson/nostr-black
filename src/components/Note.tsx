@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
 import { Info, Repeat2 } from 'lucide-react';
@@ -32,9 +33,9 @@ const NostrRef = ({ bech32 }: { bech32: string }) => {
   }
 
   return (
-    <a href={`/${bech32}`} className="text-primary underline underline-offset-2">
+    <Link to={`/${bech32}`} className="text-primary underline underline-offset-2">
       @{label}
-    </a>
+    </Link>
   );
 };
 
@@ -117,9 +118,9 @@ const AuthorLink = ({ pubkey }: { pubkey: string }) => {
   return (
     <span className="truncate text-sm">
       {href ? (
-        <a href={href} className="font-medium hover:underline">
+        <Link to={href} className="font-medium hover:underline">
           {displayName ?? `${npub.slice(0, 10)}…`}
-        </a>
+        </Link>
       ) : (
         displayName ?? `${npub.slice(0, 10)}…`
       )}
@@ -193,9 +194,9 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-baseline gap-2">
             {href ? (
-              <a href={href} className="truncate text-sm font-medium hover:underline">
+              <Link to={href} className="truncate text-sm font-medium hover:underline">
                 {displayName ?? `${npub.slice(0, 10)}…`}
-              </a>
+              </Link>
             ) : (
               <span className="truncate text-sm font-medium">
                 {displayName ?? `${npub.slice(0, 10)}…`}
@@ -228,12 +229,12 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
               {embedded ? (
                 <EmbeddedNote event={embedded} />
               ) : quotedViaTag ? (
-                <a
-                  href={eventHref(referenceId, event.pubkey) ?? '#'}
+                <Link
+                  to={eventHref(referenceId, event.pubkey) ?? '/'}
                   className="text-muted-foreground block truncate border-l-2 border-muted-foreground/30 pl-3 text-sm hover:underline"
                 >
                   {referenceId}
-                </a>
+                </Link>
               ) : (
                 <div className="whitespace-pre-wrap break-words text-sm">
                   {renderContent(renderedText)}
