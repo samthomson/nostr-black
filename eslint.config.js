@@ -9,7 +9,7 @@ import htmlEslint from "@html-eslint/eslint-plugin";
 import customRules from "./eslint-rules/index.js";
 
 export default defineConfig(
-  globalIgnores(["dist", ".agents"]),
+  globalIgnores(["dist", ".agents", "src-tauri/target", "src-tauri/gen"]),
   {
     name: "app/ts",
     files: ["**/*.{ts,tsx}"],
