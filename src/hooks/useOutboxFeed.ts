@@ -110,13 +110,14 @@ export const useOutboxFeed = () => {
 
       // Every declared relay is queried — in bounded waves, each wave's
       // results prepended to the feed as a block the moment it lands.
+      // The query ALSO returns the full result: TanStack caches it, so a
+      // remount (lock/unlock, navigation) repopulates instantly instead of
+      // flashing "no notes" while state rebuilds.
       const entries = [...groups.entries()];
-      let total = 0;
+      const allEvents: NostrEvent[] = [];
+      const foundOnAll: Record<string, string[]> = {};
       for (let i = 0; i < entries.length; i += MAX_PARALLEL_RELAYS) {
-        // Headroom check BEFORE fetching the next wave — a wave that's
-        // already in flight always lands (the first wave must always
-        // render, whatever its size).
-        if (total >= FEED_SIZE) break;
+        if (allEvents.length >= FEED_SIZE) break;
         const wave = entries.slice(i, i + MAX_PARALLEL_RELAYS);
         const waveResults = await Promise.all(
           wave.map(async ([url, authors]) => {
@@ -136,15 +137,14 @@ export const useOutboxFeed = () => {
         const waveEvents = waveResults
           .flatMap((r) => r.events)
           .filter((e) => allowed.has(e.pubkey))
-          // Trim to the remaining render budget so the feed stays bounded
-          // (a single wave can hold hundreds of events).
-          .slice(0, Math.max(0, FEED_SIZE - total));
+          .slice(0, Math.max(0, FEED_SIZE - allEvents.length));
         const waveRelays = Object.assign({}, ...waveResults.map((r) => r.relays));
-        total += waveEvents.length;
+        allEvents.push(...waveEvents);
+        Object.assign(foundOnAll, waveRelays);
         if (waveEvents.length > 0) prependBatch(waveEvents, waveRelays);
       }
 
-      return total;
+      return { notes: allEvents, foundOn: foundOnAll };
     },
   });
 
@@ -153,12 +153,17 @@ export const useOutboxFeed = () => {
   // relays — the user sees loading, not a broken-looking feed.
   const discoverySettled = relaySyncedAt !== undefined;
   const settled = follows.isSuccess && discoverySettled;
+  const feedData = feed.data as { notes: NostrEvent[]; foundOn: Record<string, string[]> } | undefined;
+
+  // Progressive batches when live; cached query result when remounting
+  // (lock/unlock, navigation) — one derivation, no scattered conditionals.
+  const notes = batches.length > 0 ? batches.flat() : (feedData?.notes ?? []);
 
   return {
-    notes: batches.flat(),
-    foundOn,
+    notes,
+    foundOn: batches.length > 0 ? foundOn : (feedData?.foundOn ?? {}),
     isLoading:
-      (follows.isLoading || relayLists.isLoading || feed.isLoading) || (!discoverySettled && batches.length === 0),
+      (follows.isLoading || relayLists.isLoading || feed.isLoading) || (!discoverySettled && notes.length === 0),
     // Only claim "not following anyone" from an actual (empty) contact list.
     noFollows: settled && !!contactList && followSet.length === 0,
     followsNotFound: settled && !contactList,
