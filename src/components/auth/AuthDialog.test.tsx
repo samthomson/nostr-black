@@ -48,15 +48,17 @@ describe('AuthDialog', () => {
     expect(screen.getByRole('button', { name: /log in with bunker/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /open signer app/i })).toBeTruthy();
   });
-  it('contains no secret-key input anywhere in the dialog', async () => {
+  it('the nsec option is memory-only: input present, nothing persisted', async () => {
     renderDialog();
     await screen.findByRole('button', { name: /log in with bunker/i });
 
-    // The privacy contract: the only input in the document is the bunker URI.
-    // Radix portals to document.body, so query the document, not the container.
+    // The privacy contract now: exactly two inputs (bunker URI + session-only
+    // nsec), and the nsec path must state its memory-only nature.
     const inputs = document.body.querySelectorAll('input');
-    expect(inputs).toHaveLength(1);
-    expect((inputs[0] as HTMLInputElement).placeholder).toBe('bunker://…');
+    expect(inputs).toHaveLength(2);
+    const placeholders = Array.from(inputs).map((i) => (i as HTMLInputElement).placeholder);
+    expect(placeholders).toContain('bunker://…');
+    expect(placeholders.find((p) => p.includes('session only'))).toBeTruthy();
   });
   it('refuses an nsec pasted into the bunker field', async () => {
     const user = userEvent.setup();

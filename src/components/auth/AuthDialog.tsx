@@ -3,6 +3,7 @@ import { Loader2, Puzzle, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useKeystore } from '@/auth/useKeystore';
 import {
   useLoginActions,
   generateNostrConnectParams,
@@ -30,12 +31,14 @@ const connectStatusLabel = (status: NostrConnectStatus | null): string => {
 
 
 /**
- * Login dialog. nostr.black never touches secret keys: signers only —
- * NIP-07 browser extension, NIP-46 bunker URI, or a nostrconnect remote
- * signer app. There is deliberately no nsec input and no key generation.
+ * Login dialog. Signer-first: NIP-07 browser extension, NIP-46 bunker URI,
+ * or a nostrconnect remote signer app. The nsec option is memory-only —
+ * the key lives in the keystore for this session and is never written to
+ * disk (see src/auth/keystore.ts).
  */
 const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   const [bunkerInput, setBunkerInput] = useState('');
+  const [nsecInput, setNsecInput] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginError, setLoginError] = useState('');
 
@@ -51,6 +54,7 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
   const [hasOpenedSigner, setHasOpenedSigner] = useState(false);
 
   const login = useLoginActions();
+  const keystore = useKeystore();
   // Stable refs so the nostrconnect listening effect below doesn't restart on
   // every parent render. Parents typically pass inline arrow functions for
   // onClose, and useLoginActions returns a fresh object each render — without
@@ -191,6 +195,16 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
       });
   };
 
+  // Memory-only nsec login: unlock the keystore for this session.
+  const handleNsecLogin = () => {
+    try {
+      keystore.login(nsecInput);
+      onClose();
+    } catch {
+      setLoginError('Invalid key — expected nsec1…');
+    }
+  };
+
   // Once the user launches the signer app we replace the login form with a
   // progress view so they see feedback while the handshake completes.
   const showProgressView = hasOpenedSigner;
@@ -270,6 +284,30 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
                 </Button>
               </form>
 
+              <form
+                className="space-y-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleNsecLogin();
+                }}
+              >
+                <Input
+                  type="password"
+                  value={nsecInput}
+                  onChange={(e) => setNsecInput(e.target.value)}
+                  placeholder="nsec1… (session only)"
+                  className="font-mono"
+                  aria-label="Secret key"
+                  autoComplete="off"
+                />
+                <Button type="submit" disabled={isLoggingIn} variant="outline" className="w-full h-12 rounded-full">
+                  Log in with key — this session only
+                </Button>
+                <p className="text-xs text-muted-foreground text-center">
+                  kept in memory, never written to disk, cleared when you close the app
+                </p>
+              </form>
+
               <Button
                 type="button"
                 variant="ghost"
@@ -281,8 +319,8 @@ const AuthDialog: React.FC<AuthDialogProps> = ({ isOpen, onClose }) => {
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">
-                nostr.black never handles your secret key. Use a signer: a browser extension, a
-                bunker, or a remote signer app.
+                a signer (extension, bunker, remote app) is the safest option. a pasted
+                key works for this session only and enables local cryptography.
               </p>
             </>
           )}

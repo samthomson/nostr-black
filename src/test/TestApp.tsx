@@ -5,6 +5,7 @@ import { NostrLoginProvider } from '@nostrify/react/login';
 import NostrProvider from '@/components/NostrProvider';
 import { NostrSync } from '@/components/NostrSync';
 import { AppProvider } from '@/components/AppProvider';
+import { KeystoreProvider } from '@/auth/KeystoreProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 
@@ -31,6 +32,7 @@ export function TestApp({ children }: TestAppProps) {
   return (
     <UnheadProvider head={head}>
       <AppProvider storageKey='test-app-config' defaultConfig={defaultConfig}>
+        <KeystoreProvider>
         <QueryClientProvider client={queryClient}>
           <NostrLoginProvider storageKey='test-login'>
             <NostrProvider>
@@ -41,6 +43,7 @@ export function TestApp({ children }: TestAppProps) {
             </NostrProvider>
           </NostrLoginProvider>
         </QueryClientProvider>
+        </KeystoreProvider>
       </AppProvider>
     </UnheadProvider>
   );

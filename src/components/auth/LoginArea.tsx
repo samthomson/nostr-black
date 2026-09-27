@@ -5,6 +5,7 @@ import { QuickLoginDialog } from './QuickLoginDialog';
 import { useLoggedInAccounts } from '@/hooks/useLoggedInAccounts';
 import { AccountSwitcher } from './AccountSwitcher';
 import { cn } from '@/lib/utils';
+import { useKeystore } from '@/auth/useKeystore';
 
 /** Minimal shape of the NIP-07 provider injected at `window.nostr`. */
 interface Nip07Provider {
@@ -29,6 +30,7 @@ export interface LoginAreaProps {
 
 export function LoginArea({ className }: LoginAreaProps) {
   const { currentUser } = useLoggedInAccounts();
+  const { unlocked } = useKeystore();
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [quickLoginPubkey, setQuickLoginPubkey] = useState<string | null>(null);
 
@@ -50,7 +52,7 @@ export function LoginArea({ className }: LoginAreaProps) {
 
   return (
     <div className={cn('inline-flex items-center justify-center', className)}>
-      {currentUser ? (
+      {currentUser || unlocked ? (
         <AccountSwitcher onAddAccountClick={() => setAuthDialogOpen(true)} />
       ) : (
         <Button
