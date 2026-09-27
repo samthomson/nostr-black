@@ -33,3 +33,7 @@ yarn.lock
 .env
 .env.*
 !.env.example
+
+# tauri
+src-tauri/target/
+src-tauri/gen/

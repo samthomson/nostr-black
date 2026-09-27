@@ -5,6 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
     "build": "vite build -l error && cp dist/index.html dist/404.html",
     "test": "tsc --noEmit && eslint --cache && vitest run --reporter=dot --silent && vite build -l error && cp dist/index.html dist/404.html"
   },
@@ -13,6 +16,7 @@
     "@nostrify/react": "^0.6.8",
     "@radix-ui/react-toast": "^1.2.1",
     "@tanstack/react-query": "^5.100.5",
+    "@tauri-apps/api": "^2.12.0",
     "@unhead/react": "^3.1.0",
     "buffer": "^6.0.3",
     "class-variance-authority": "^0.7.1",
@@ -33,6 +37,7 @@
     "@html-eslint/eslint-plugin": "^0.59.0",
     "@html-eslint/parser": "^0.59.0",
     "@tailwindcss/vite": "^4.2.4",
+    "@tauri-apps/cli": "^2.11.5",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.7",
