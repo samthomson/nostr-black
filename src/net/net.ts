@@ -94,7 +94,12 @@ const ONION_PROBES = [
 // well over 8s in Tor Browser — too short reads as "not on tor".
 const PROBE_TIMEOUT_MS = 25000;
 
+/** Desktop is Tor by construction; the web build probes https onions. */
 export const isTor = async (): Promise<boolean> => {
+  if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
+    return true;
+  }
+
   try {
     await Promise.any(
       ONION_PROBES.map((url) =>

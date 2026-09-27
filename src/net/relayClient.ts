@@ -1,12 +1,15 @@
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { verifyEvent as nostrVerifyEvent } from 'nostr-tools';
 import { logQuery, logQueryDone, wsConnect } from './net';
+import { queryRelay as queryRelayDesktop } from './relayClient.desktop';
 
 export interface RelayQueryOpts {
   /** Hard cap for the whole exchange; collected events are returned on expiry. */
   timeoutMs?: number;
   signal?: AbortSignal;
 }
+
+const desktop = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 /**
  * Minimal owned relay REQ client: open, ask, collect until EOSE or timeout,
@@ -18,7 +21,7 @@ export interface RelayQueryOpts {
  * Events are signature-verified before being returned — relay data is
  * untrusted.
  */
-export const queryRelay = async (
+const queryRelayBrowser = async (
   url: string,
   filters: NostrFilter[],
   opts: RelayQueryOpts = {},
@@ -99,7 +102,7 @@ export const queryRelay = async (
 };
 
 /** Queries several relays with the same filters and merges the results. */
-export const queryRelays = async (
+const queryRelaysBrowser = async (
   urls: string[],
   filters: NostrFilter[],
   opts: RelayQueryOpts = {},
@@ -108,3 +111,18 @@ export const queryRelays = async (
   return [...new Map(results.flat().map((e) => [e.id, e])).values()];
 };
 
+/**
+ * Transport dispatch: one name for consumers, two implementations. Desktop
+ * routes through bundled Tor (Rust/arti via invoke); web uses the owned
+ * browser client.
+ */
+export const queryRelay: typeof queryRelayBrowser = desktop
+  ? queryRelayDesktop
+  : queryRelayBrowser;
+
+export const queryRelays: typeof queryRelaysBrowser = desktop
+  ? (urls, filters, opts) =>
+      Promise.all(urls.map((url) => queryRelayDesktop(url, filters, opts))).then((results) =>
+        [...new Map(results.flat().map((e) => [e.id, e])).values()],
+      )
+  : queryRelaysBrowser;

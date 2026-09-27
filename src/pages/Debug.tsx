@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSeoMeta } from '@unhead/react';
+import { Link } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
 import { egressLog, isTor, type EgressEntry } from '@/net/net';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -72,6 +73,11 @@ const DebugBody = () => {
         <button type="button" onClick={() => void checkTor()} className="underline">
           check
         </button>
+      </div>
+      <div>
+        <Link to="/crash" className="text-muted-foreground text-sm underline underline-offset-4">
+          crash test page →
+        </Link>
       </div>
 
       <div className="space-y-2">
