@@ -73,3 +73,12 @@ export const formatTimestamp = (createdAt: number, now = Date.now() / 1000): str
   }
   return `${relative} · ${date.toLocaleDateString([], { day: 'numeric', month: 'short' })}`;
 };
+
+/**
+ * Media URL for <img src>: on desktop, routed through the torasset://
+ * protocol (Rust fetches over Tor); on web, the URL as-is.
+ */
+export const assetUrl = (url: string): string =>
+  typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
+    ? `torasset://${url}`
+    : url;

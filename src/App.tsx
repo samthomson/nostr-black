@@ -10,6 +10,7 @@ import { NostrSync } from '@/components/NostrSync';
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { NostrLoginProvider } from '@nostrify/react/login';
+import { KeystoreProvider } from '@/auth/KeystoreProvider';
 import { AppProvider } from '@/components/AppProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
@@ -41,6 +42,7 @@ export function App() {
   return (
     <UnheadProvider head={head}>
       <AppProvider storageKey="nostr:app-config/2" defaultConfig={defaultConfig}>
+        <KeystoreProvider>
         <QueryClientProvider client={queryClient}>
           <NostrLoginProvider storageKey='nostr:login'>
             <NostrProvider>
@@ -54,6 +56,7 @@ export function App() {
             </NostrProvider>
           </NostrLoginProvider>
         </QueryClientProvider>
+        </KeystoreProvider>
       </AppProvider>
     </UnheadProvider>
   );

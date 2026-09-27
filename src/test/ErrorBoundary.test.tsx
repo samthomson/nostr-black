@@ -23,7 +23,7 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText('Test content')).toBeInTheDocument();
   });
 
-  it('catches and displays error when child throws', () => {
+  it('catches and shows the black screen of death when child throws', () => {
     // Suppress console.error for this test
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -33,8 +33,10 @@ describe('ErrorBoundary', () => {
       </ErrorBoundary>
     );
 
-    expect(screen.getByText('Something went wrong')).toBeInTheDocument();
-    expect(screen.getByText('An unexpected error occurred. The error has been reported.')).toBeInTheDocument();
+    expect(screen.getByText(/A problem has been detected and nostr\.black/)).toBeInTheDocument();
+    expect(screen.getByText('Test error')).toBeInTheDocument();
+    expect(screen.getByText('Try Again')).toBeInTheDocument();
+    expect(screen.getByText('Reload Page')).toBeInTheDocument();
 
     consoleSpy.mockRestore();
   });

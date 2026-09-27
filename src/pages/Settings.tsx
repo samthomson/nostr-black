@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useSeoMeta } from '@unhead/react';
 import { Shell } from '@/components/Shell';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { Link } from 'react-router-dom';
 
 /**
  * Settings page: relay configuration. The user's NIP-65 relay list (fetched,
@@ -89,6 +91,23 @@ const SettingsBody = () => {
 
 const SettingsPage = () => {
   useSeoMeta({ title: 'settings — nostr.black' });
+  const { user } = useCurrentUser();
+
+  // Logged-out settings (discovery relays, pre-login) render inside the
+  // landing page, not the app shell — the shell's other tabs need a session.
+  if (!user) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-4">
+        <h1 className="text-3xl font-bold tracking-tight">nostr.black</h1>
+        <div className="w-full max-w-md space-y-6">
+          <SettingsBody />
+        </div>
+        <Link to="/" className="text-muted-foreground text-sm underline underline-offset-4">
+          back
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <Shell>

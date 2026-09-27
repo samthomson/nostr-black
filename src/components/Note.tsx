@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EventInfoDialog } from '@/components/EventInfoDialog';
-import { profileHref, eventHref, hostOf, npubOf, formatTimestamp } from '@/lib/format';
+import { profileHref, eventHref, hostOf, npubOf, formatTimestamp, assetUrl } from '@/lib/format';
 
 /** Content/image budget past which a note is collapsed with a fade. */
 const CLAMP_THRESHOLD = 420;
@@ -156,7 +156,7 @@ const EmbeddedNote = ({ event }: { event: NostrEvent }) => {
           {images.map((url) => (
             <img
               key={url}
-              src={url}
+              src={assetUrl(url)}
               alt={event.tags.find(([n]) => n === 'alt')?.[1] ?? 'embedded image'}
               className="max-h-96 w-full rounded-md object-cover"
             />
@@ -200,7 +200,7 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
     <Card>
       <CardContent className="flex gap-3 p-4">
         <Avatar className="size-10 shrink-0">
-          {metadata?.picture && <AvatarImage src={metadata.picture} />}
+          {metadata?.picture && <AvatarImage src={assetUrl(metadata.picture)} />}
           <AvatarFallback>{npub.slice(4, 6).toUpperCase()}</AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1 space-y-1">
@@ -264,7 +264,7 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
                   {images.map((url) => (
                     <img
                       key={url}
-                      src={url}
+                      src={assetUrl(url)}
                       alt={altText}
                       className="max-h-96 w-full rounded-md object-cover"
                     />

@@ -11,15 +11,24 @@ interface ErrorBoundaryProps {
   fallback?: ReactNode;
 }
 
+/** Wraps the boundary + children with a key that changes on reset, forcing
+ * a clean remount — crashed children keep their bad state otherwise. */
+export const RemountingBoundary = ({ resetKey, children }: { resetKey: number; children: ReactNode }) => (
+  <ErrorBoundary key={resetKey}>{children}</ErrorBoundary>
+);
 
-
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+/**
+ * to the nostr.black palette. Full-bleed crash page: error name/message,
+ * open stack trace, try again / reload.
+ */
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState & { resetCount: number }> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = {
       hasError: false,
       error: null,
       errorInfo: null,
+      resetCount: 0,
     };
   }
 
@@ -33,18 +42,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Error caught by ErrorBoundary:', error, errorInfo);
 
-    this.setState({
-      error,
-      errorInfo,
-    });
+    this.setState({ errorInfo });
   }
 
   handleReset = () => {
-    this.setState({
+    this.setState((s) => ({
       hasError: false,
       error: null,
       errorInfo: null,
-    });
+      resetCount: s.resetCount + 1,
+    }));
   };
 
   render() {
@@ -54,60 +61,51 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       }
 
       return (
-        <div className="min-h-screen bg-background flex items-center justify-center p-4">
-          <div className="max-w-md w-full space-y-4">
-            <div className="text-center">
-              <h2 className="text-2xl font-bold text-foreground mb-2">
-                Something went wrong
-              </h2>
-              <p className="text-muted-foreground">
-                An unexpected error occurred. The error has been reported.
-              </p>
-            </div>
+        <div className="min-h-screen bg-black text-white p-8 font-['Lucida_Console','Consolas','Courier_New','monospace'] overflow-auto">
+          <div className="max-w-4xl">
+            <h1 className="text-2xl mb-6 font-bold">
+              A problem has been detected and nostr.black needs to restart.
+            </h1>
 
-            <div className="bg-muted p-4 rounded-lg">
-              <details className="text-sm">
-                <summary className="cursor-pointer font-medium text-foreground">
-                  Error details
-                </summary>
-                <div className="mt-2 space-y-2">
-                  <div>
-                    <strong className="text-foreground">Message:</strong>
-                    <p className="text-muted-foreground mt-1">
-                      {this.state.error?.message}
-                    </p>
-                  </div>
-                  {this.state.error?.stack && (
-                    <div>
-                      <strong className="text-foreground">Stack trace:</strong>
-                      <pre className="text-xs text-muted-foreground mt-1 overflow-auto max-h-32">
-                        {this.state.error.stack}
-                      </pre>
-                    </div>
-                  )}
+            <div className="space-y-4 text-sm leading-relaxed">
+              <div className="mt-4">
+                <div className="bg-white/10 p-4 border border-white/20">
+                  <p className="mb-2 font-bold">{this.state.error?.name || 'Error'}</p>
+                  <p>{this.state.error?.message || 'No error message available'}</p>
                 </div>
-              </details>
-            </div>
+              </div>
 
-            <div className="flex gap-2">
-              <button
-                onClick={this.handleReset}
-                className="flex-1 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-              >
-                Try again
-              </button>
-              <button
-                onClick={() => window.location.reload()}
-                className="flex-1 px-4 py-2 bg-secondary text-secondary-foreground rounded-md hover:bg-secondary/90 transition-colors"
-              >
-                Reload page
-              </button>
+              {this.state.error?.stack && (
+                <details className="mt-6" open>
+                  <summary className="text-xs cursor-pointer hover:text-white/80">Stack trace</summary>
+                  <pre className="mt-2 bg-white/10 p-2 overflow-auto max-h-48 text-[9px] leading-tight border border-white/20">
+                    {this.state.error.stack}
+                  </pre>
+                </details>
+              )}
+
+              <div className="mt-12 flex gap-4">
+                <button
+                  onClick={this.handleReset}
+                  className="px-6 py-2 bg-white text-black font-bold hover:bg-gray-200 transition-colors"
+                >
+                  Try Again
+                </button>
+                <button
+                  onClick={() => window.location.reload()}
+                  className="px-6 py-2 bg-white/10 border border-white hover:bg-white/20 transition-colors"
+                >
+                  Reload Page
+                </button>
+              </div>
             </div>
           </div>
         </div>
       );
     }
 
-    return this.props.children;
+    // Keying on resetCount forces a clean remount after "Try Again" —
+    // crashed children keep their bad state otherwise and re-throw.
+    return <div key={this.state.resetCount}>{this.props.children}</div>;
   }
 }
