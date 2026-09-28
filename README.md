@@ -64,9 +64,9 @@ The idea is to start the user from a point of sensible privacy defualts. Such th
 | Multiple accounts | add/switch accounts, switched account defines the app experience; per-post dropdown posts from a burner without re-logging; with multiple accounts added, the publish button names the current account ("publish as john") to prevent accidental postings | planned |
 | Publish queue | outbound events are signed and broadcast immediately, retried on failure; connectivity loss never loses events | planned |
 | Media uploads | via Blossom ([NIP-B7](https://github.com/nostr-protocol/nips/blob/master/B7.md)) to the account's `kind:10063` servers | planned |
-| Expiring notes | [NIP-40](https://github.com/nostr-protocol/nips/blob/master/40.md) `expiration` tag; relay enforced. ui has per note and default/global setting; for notes and replies | planned |
 | UI text size | small / medium / large buttons or native ⌘ + / −; persisted | planned |
 | Feed privacy toggle | top-of-feed switch: private (nostr.black private kinds only) / hybrid (both) / public (classic events) | planned |
+| Expiring notes | [NIP-40](https://github.com/nostr-protocol/nips/blob/master/40.md) `expiration` tag; relay enforced. ui has per note and default/global setting; for notes and replies | planned |
 
 ## Open questions
 
