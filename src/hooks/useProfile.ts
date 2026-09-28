@@ -70,6 +70,49 @@ export function useProfileNotes(pubkey: string | undefined, writeRelays: string[
   });
 }
 
+/** The author's kind-3 follow list — used for "following" count on profiles. */
+export function useProfileFollows(pubkey: string | undefined, writeRelays: string[]) {
+  const { config } = useAppContext();
+  const { state: userState } = useUserState();
+  return useQuery({
+    queryKey: ['profile', 'follows', pubkey, writeRelays.join(',')],
+    enabled: !!pubkey,
+    queryFn: async (c): Promise<number> => {
+      const own = writeRelays.length > 0
+        ? await queryRelays(writeRelays, [{ kinds: [3], authors: [pubkey!], limit: 1 }], { signal: c.signal })
+        : [];
+      const events = own.length > 0
+        ? own
+        : await queryRelays(
+          readRelays(userState, config),
+          [{ kinds: [3], authors: [pubkey!], limit: 1 }],
+          { signal: c.signal },
+        );
+      const latest = events.sort((a, b) => b.created_at - a.created_at)[0];
+      return latest ? latest.tags.filter((t) => t[0] === 'p' && t[1]).length : 0;
+    },
+  });
+}
+
+/** Bounded sample of accounts that follow this pubkey (kind 3 with #p). */
+export function useProfileFollowerSample(pubkey: string | undefined, writeRelays: string[]) {
+  const { config } = useAppContext();
+  const { state: userState } = useUserState();
+  return useQuery({
+    queryKey: ['profile', 'followers', pubkey, writeRelays.join(',')],
+    enabled: !!pubkey,
+    queryFn: async (c): Promise<number> => {
+      const relays = [...new Set([...writeRelays, ...readRelays(userState, config)])];
+      const events = await queryRelays(
+        relays,
+        [{ kinds: [3], '#p': [pubkey!], limit: 200 }],
+        { signal: c.signal },
+      );
+      return new Set(events.map((e) => e.pubkey)).size;
+    },
+  });
+}
+
 /** Fetch one event by id, trying relay hints in order (NIP-19 pointers). */
 export function useEventFetch(id: string | undefined, relays: string[]) {
   return useQuery({
