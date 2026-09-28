@@ -9,6 +9,7 @@ import type { UserState } from '@/contexts/UserStateContext';
  * for feed content. Editable in settings.
  */
 export const DEFAULT_DISCOVERY_RELAYS = [
+  'wss://relay.nostr.black/',
   'wss://relay.samt.st/',
   'wss://bruh.samt.st/',
   'wss://testnet.samt.st/',
