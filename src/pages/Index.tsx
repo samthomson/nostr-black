@@ -59,7 +59,7 @@ const Landing = () => {
   const activeStep: Step = step === 'tor' && onTor === true ? 'login' : step;
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 text-center">
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-4 py-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center">
       <MovingBackground />
       {/* Soft scrim so the copy reads over the animated grid without a
           hard container — the grid fades toward the text. */}
@@ -73,9 +73,9 @@ const Landing = () => {
       />
 
       <div className="relative z-10 isolate flex w-full max-w-sm flex-col items-center gap-6">
-        <h1 className="text-4xl font-bold"><BrandMark /></h1>
+        <h1 className="text-3xl font-bold sm:text-4xl"><BrandMark /></h1>
 
-        <div className="text-muted-foreground w-full space-y-1 text-center text-base">
+        <div className="text-muted-foreground w-full space-y-1 text-center text-sm sm:text-base">
           <p>nostr.black is a privacy focused nostr client.</p>
           <p>it lets you do what you want,</p>
           <p>but it has an opinion, and guides you with it.</p>
@@ -87,7 +87,7 @@ const Landing = () => {
           </p>
         </div>
 
-        <div className="w-full rounded-sm border bg-card p-6 shadow-lg">
+        <div className="w-full rounded-sm border bg-card p-4 shadow-lg sm:p-6">
           <AnimateHeight>
             {activeStep === 'start' && (
               <div className="flex justify-center">
