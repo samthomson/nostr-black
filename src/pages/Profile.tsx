@@ -12,6 +12,7 @@ import {
 } from '@/hooks/useProfile';
 import { npubOf } from '@/lib/format';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
+import { useAuthor } from '@/hooks/useAuthor';
 import { useAsset } from '@/hooks/useAsset';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -56,12 +57,16 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
 
   const relayLists = useProfileRelays(pubkey);
   const writeRelays = relayLists.data?.write ?? [];
+  // Seed from useAuthor (same cache as account chip / feed) so the picture
+  // is not blank while the outbox-aware profile metadata query catches up.
+  const author = useAuthor(pubkey);
   const metadata = useProfileMetadata(pubkey, writeRelays);
   const notes = useProfileNotes(pubkey, writeRelays, PROFILE_NOTE_KINDS, NOTES_LIMIT);
   const follows = useProfileFollows(pubkey, writeRelays);
   const followers = useProfileFollowerSample(pubkey, writeRelays);
 
-  const about = metadata.data;
+  const about = metadata.data ?? author.data?.metadata;
+  const waitingMetadata = !about && (metadata.isPending || author.isPending);
   const displayName = about?.display_name || about?.name || `${npub.slice(0, 10)}…`;
   const relayCount = (relayLists.data?.write.length ?? 0) + (relayLists.data?.read.length ?? 0);
   // write∪read may double-count; prefer unique from the map if available
@@ -78,6 +83,7 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
             <ProfileAvatar
               pubkey={pubkey}
               metadata={about}
+              waitingMetadata={waitingMetadata}
               className="border-background size-16 border-2 sm:size-20"
             />
           </div>

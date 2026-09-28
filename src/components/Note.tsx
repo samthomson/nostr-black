@@ -329,7 +329,12 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
   return (
     <Card>
       <CardContent className="flex gap-3 p-4">
-        <ProfileAvatar pubkey={event.pubkey} metadata={metadata} className="size-10 shrink-0" />
+        <ProfileAvatar
+          pubkey={event.pubkey}
+          metadata={metadata}
+          waitingMetadata={author.isPending && !metadata}
+          className="size-10 shrink-0"
+        />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-baseline gap-2">
             {href ? (
