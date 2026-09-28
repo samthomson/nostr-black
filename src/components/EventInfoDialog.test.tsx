@@ -117,9 +117,34 @@ describe('Note UI', () => {
       </TestApp>,
     );
 
-    // The replied-to author is named immediately (p tag resolution),
-    // even before the parent event itself loads.
+    // Lone p tag names the replied-to author before the parent loads.
     expect(await screen.findByText(/replying to/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: new RegExp(nip19.npubEncode(B).slice(0, 10)) })).toBeTruthy();
+  });
+
+  it('names the reply-target author, not the thread OP, when both are tagged', async () => {
+    const OP = 'c'.repeat(64);
+    const replyToReply = {
+      ...event,
+      id: 'e'.repeat(64),
+      tags: [
+        ['e', '1'.repeat(64), '', 'root', OP],
+        ['e', '2'.repeat(64), '', 'reply', B],
+        ['p', OP],
+        ['p', B],
+      ],
+      content: 'replying to the reply',
+    };
+    render(
+      <TestApp>
+        <Note event={replyToReply} />
+      </TestApp>,
+    );
+
+    // Must link B (reply e-tag author), never OP just because they're also a p.
+    const link = await screen.findByRole('link', { name: /replying to/ });
+    expect(link.getAttribute('href')).toBe(`/${nip19.npubEncode(B)}`);
+    expect(link.getAttribute('href')).not.toBe(`/${nip19.npubEncode(OP)}`);
   });
 
   it('renders @npub mentions as profile links with resolved names', async () => {

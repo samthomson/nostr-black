@@ -203,9 +203,9 @@ const EmbeddedNote = ({ event }: { event: NostrEvent }) => {
   );
 };
 
-/** Reply affordance: always names the replied-to author (last p tag), even
- * before (or without) the parent event itself — a reply must never look
- * like free-floating text out of context. */
+/** Reply affordance: names the author of the parent event (the person
+ * actually replied to). Prefers the loaded parent event's pubkey; until
+ * then uses the NIP-10 e-tag author when present. */
 const ReplyContext = ({
   parentPubkey,
   settled,
@@ -306,20 +306,23 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
   const kindLabel = KIND_LABELS[event.kind];
   const referenceId = embedded?.id ?? event.tags.find(([n]) => n === 'q')?.[1];
   const quotedViaTag = !embedded && referenceId !== undefined;
-  // A reply carries its parent in e tags — but conventions vary (NIP-10):
-  // modern events use "reply"/"root" markers, legacy ones are positional
-  // (first e = root, last e = reply). nip10.parse handles both; the p tag
-  // matching the reply position names the replied-to author.
+  // A reply carries its parent in e tags — nip10.parse resolves root/reply
+  // markers (and legacy positional tags). The replied-to *person* is the
+  // author of the reply-target event — never "last p tag" (p tags are
+  // unordered; reverse-iteration often puts the thread OP last).
   const nip10Ref = !embedded && !quotedViaTag ? nip10.parse(event) : undefined;
   const parentId = nip10Ref?.reply?.id ?? nip10Ref?.root?.id;
-  const parentPubkey = parentId ? nip10Ref?.profiles?.at(-1)?.pubkey : undefined;
-  // Relay hints for the parent: the e tag's third element, plus wherever
-  // this reply itself was found (parents and replies usually co-locate).
+  const taggedAuthor =
+    nip10Ref?.reply?.author
+    ?? (nip10Ref?.profiles?.length === 1 ? nip10Ref.profiles[0].pubkey : undefined);
   const parentHints = [
     ...(nip10Ref?.reply?.relays ?? nip10Ref?.root?.relays ?? []),
     ...(foundOn ?? []),
   ];
-  const parent = useEventById(parentId, parentPubkey, parentHints);
+  const parent = useEventById(parentId, taggedAuthor, parentHints);
+  // Prefer the fetched parent's pubkey; fall back to NIP-10 e-tag author or
+  // a lone p tag. Never profiles.at(-1).
+  const parentPubkey = parent.data?.pubkey ?? taggedAuthor;
   const clientTag = event.tags.find(([n]) => n === 'client')?.[1];
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
 
