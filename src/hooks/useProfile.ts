@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent, NostrMetadata } from '@nostrify/nostrify';
 import { queryRelay, queryRelays } from '@/net/net';
 import { useAppContext } from './useAppContext';
+import { useUserState } from './useUserState';
 import { readRelays } from '@/lib/appRelays';
 import { buildAuthorRelayMap, parseRelayList } from '@/lib/outbox';
 
@@ -12,12 +13,13 @@ import { buildAuthorRelayMap, parseRelayList } from '@/lib/outbox';
 
 export function useProfileRelays(pubkey: string | undefined) {
   const { config } = useAppContext();
+  const { state: userState } = useUserState();
   return useQuery({
     queryKey: ['profile', 'relays', pubkey],
     enabled: !!pubkey,
     queryFn: async (c) => {
       const events = await queryRelays(
-        readRelays(config),
+        readRelays(userState, config),
         [{ kinds: [10002], authors: [pubkey!], limit: 1 }],
         { signal: c.signal },
       );
@@ -28,6 +30,7 @@ export function useProfileRelays(pubkey: string | undefined) {
 
 export function useProfileMetadata(pubkey: string | undefined, writeRelays: string[]) {
   const { config } = useAppContext();
+  const { state: userState } = useUserState();
   return useQuery({
     queryKey: ['profile', 'metadata', pubkey, writeRelays.join(',')],
     enabled: !!pubkey,
@@ -38,7 +41,7 @@ export function useProfileMetadata(pubkey: string | undefined, writeRelays: stri
         : [];
       const events = own.length > 0
         ? own
-        : await queryRelays(readRelays(config), [{ kinds: [0], authors: [pubkey!], limit: 1 }], { signal: c.signal });
+        : await queryRelays(readRelays(userState, config), [{ kinds: [0], authors: [pubkey!], limit: 1 }], { signal: c.signal });
       const latest = events.sort((a, b) => b.created_at - a.created_at)[0];
       if (!latest) return undefined;
       try {

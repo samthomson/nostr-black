@@ -7,7 +7,7 @@ import {
   type NostrConnectStatus,
   useNostrLogin,
 } from '@nostrify/react/login';
-import { useAppContext } from '@/hooks/useAppContext';
+import { useUserState } from '@/hooks/useUserState';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 
 // NOTE: This file should not be edited except for adding new login methods.
@@ -19,7 +19,7 @@ export { generateNostrConnectParams, generateNostrConnectURI } from '@nostrify/r
 export function useLoginActions() {
 
   const { logins, addLogin, setLogin, removeLogin } = useNostrLogin();
-  const { config } = useAppContext();
+  const { state: userState } = useUserState();
 
   // Add a login and promote it to be the current user. Without the
   // setLogin call the new login is appended to the end of the array,
@@ -57,7 +57,7 @@ export function useLoginActions() {
     },
     // Get the relay URLs for NIP-46 nostrconnect communication
     getRelayUrls(): string[] {
-      const relays = config.relayMetadata.relays
+      const relays = userState.relayMetadata.relays
         .filter((r) => r.write)
         .map((r) => r.url);
       // Fall back to the app default relays if the user has none configured,

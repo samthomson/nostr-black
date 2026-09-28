@@ -1,6 +1,4 @@
-
 import { Link, useLocation } from 'react-router-dom';
-import { Bug, Newspaper, Settings } from 'lucide-react';
 
 import { LoginArea } from '@/components/auth/LoginArea';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
@@ -12,12 +10,13 @@ import { ConnectionStatus } from '@/components/ConnectionStatus';
 export const Shell = ({ children }: { children: React.ReactNode }) => {
   const { pathname } = useLocation();
 
-  const navItem = (to: string, icon: React.ReactNode, label: string) => (
+  const navItem = (to: string, label: string) => (
     <Link
       to={to}
-      className={`flex items-center gap-3 rounded-md px-2 py-2 text-sm font-medium hover:bg-accent ${pathname === to ? 'bg-accent' : ''}`}
+      className={`block rounded-lg px-4 py-3 text-lg transition-colors hover:bg-accent ${
+        pathname === to ? 'font-bold' : 'font-normal text-muted-foreground'
+      }`}
     >
-      {icon}
       {label}
     </Link>
   );
@@ -25,12 +24,12 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <div className="flex min-h-0 flex-1">
-        <aside className="hidden w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r p-4 md:flex">
-          <Link to="/" className="mb-4 px-2 font-semibold tracking-tight">nostr.black</Link>
-          {navItem('/', <Newspaper className="size-4" />, 'your feed')}
-          {navItem('/settings', <Settings className="size-4" />, 'settings')}
-          {navItem('/debug', <Bug className="size-4" />, 'debug')}
-        </aside>
+        <nav className="flex w-64 shrink-0 flex-col gap-1 overflow-y-auto border-r p-4">
+          <Link to="/" className="mb-6 px-4 text-xl font-bold tracking-tight">nostr.black</Link>
+          {navItem('/', 'Feed')}
+          {navItem('/settings', 'Settings')}
+          {navItem('/debug', 'Debug')}
+        </nav>
 
         <div className="flex min-w-0 flex-1 flex-col">
           <header className="shrink-0 border-b bg-background/95 backdrop-blur">

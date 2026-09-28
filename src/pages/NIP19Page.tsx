@@ -2,6 +2,7 @@ import { nip19 } from 'nostr-tools';
 import { useParams } from 'react-router-dom';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useUserState } from '@/hooks/useUserState';
 import { useEventFetch } from '@/hooks/useProfile';
 import { readRelays } from '@/lib/appRelays';
 import { Note } from '@/components/Note';
@@ -30,11 +31,12 @@ const pointerOf = (
  */
 const EventPage = ({ identifier }: { identifier: string }) => {
   const { config } = useAppContext();
+  const { state: userState } = useUserState();
 
   const decoded = nip19.decode(identifier);
   const pointer = pointerOf(decoded);
   const relays = pointer
-    ? [...new Set([...pointer.relays, ...readRelays(config)])]
+    ? [...new Set([...pointer.relays, ...readRelays(userState, config)])]
     : [];
 
   const { data: event, isLoading } = useEventFetch(pointer?.id, relays);

@@ -3,6 +3,7 @@ import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 
 import { useCurrentUser } from "./useCurrentUser";
 import { useAppContext } from "./useAppContext";
+import { useUserState } from './useUserState';
 import { writeRelays } from "@/lib/appRelays";
 
 import type { NostrEvent } from "@nostrify/nostrify";
@@ -17,6 +18,7 @@ export function useNostrPublish(): UseMutationResult<
 > {
   const { user } = useCurrentUser();
   const { config } = useAppContext();
+  const { state: userState } = useUserState();
 
   return useMutation({
     mutationFn: async (t: EventTemplate) => {
@@ -35,7 +37,7 @@ export function useNostrPublish(): UseMutationResult<
           created_at: t.created_at ?? Math.floor(Date.now() / 1000),
         });
 
-        await publishEvent(event, writeRelays(config));
+        await publishEvent(event, writeRelays(userState, config));
         return event;
       } else {
         throw new Error("User is not logged in");

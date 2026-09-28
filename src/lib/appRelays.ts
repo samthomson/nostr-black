@@ -1,4 +1,5 @@
 import type { AppConfig } from '@/contexts/AppContext';
+import type { UserState } from '@/contexts/UserStateContext';
 
 /**
  * Discovery relays — hardcoded defaults for `config.discoveryRelays` (the
@@ -17,8 +18,8 @@ export const DEFAULT_DISCOVERY_RELAYS = [
  * Relays to READ from: the user's fetched NIP-65 read relays, falling back
  * to the discovery defaults until their list has been fetched.
  */
-export const readRelays = (config: AppConfig): string[] => {
-  const user = config.relayMetadata.relays.filter((r) => r.read).map((r) => r.url);
+export const readRelays = (state: UserState, config: AppConfig): string[] => {
+  const user = state.relayMetadata.relays.filter((r) => r.read).map((r) => r.url);
   return user.length > 0 ? user : config.discoveryRelays;
 };
 
@@ -26,7 +27,7 @@ export const readRelays = (config: AppConfig): string[] => {
  * Relays to WRITE to: the user's fetched NIP-65 write relays, falling back
  * to the discovery defaults until their list has been fetched.
  */
-export const writeRelays = (config: AppConfig): string[] => {
-  const user = config.relayMetadata.relays.filter((r) => r.write).map((r) => r.url);
+export const writeRelays = (state: UserState, config: AppConfig): string[] => {
+  const user = state.relayMetadata.relays.filter((r) => r.write).map((r) => r.url);
   return user.length > 0 ? user : config.discoveryRelays;
 };

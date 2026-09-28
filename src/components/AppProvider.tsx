@@ -1,7 +1,7 @@
-import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo } from 'react';
 import { z } from 'zod';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
-import { AppContext, type AppConfig, type Theme, type RelayMetadata } from '@/contexts/AppContext';
+import { AppContext, type AppConfig, type Theme } from '@/contexts/AppContext';
 
 interface AppProviderProps {
   children: ReactNode;
@@ -11,21 +11,10 @@ interface AppProviderProps {
   defaultConfig: AppConfig;
 }
 
-// Zod schema for RelayMetadata validation
-const RelayMetadataSchema = z.object({
-  relays: z.array(z.object({
-    url: z.url(),
-    read: z.boolean(),
-    write: z.boolean(),
-  })),
-  updatedAt: z.number(),
-}) satisfies z.ZodType<RelayMetadata>;
-
 
 // Zod schema for AppConfig validation
 const AppConfigSchema = z.object({
   theme: z.enum(['dark', 'light', 'system']),
-  relayMetadata: RelayMetadataSchema,
   discoveryRelays: z.array(z.url()),
   torEnabled: z.boolean(),
   mediaEnabled: z.boolean(),
@@ -68,14 +57,10 @@ export function AppProvider(props: AppProviderProps) {
   );
 
   // Runtime, non-persisted: when the last NIP-65 discovery attempt finished.
-  const [relaySyncedAt, setRelaySyncedAt] = useState<number | undefined>(undefined);
-  const markRelaySynced = useCallback(() => setRelaySyncedAt(Date.now()), []);
-  const [relaySyncNonce, setRelaySyncNonce] = useState(0);
-  const bumpRelaySync = useCallback(() => setRelaySyncNonce((n) => n + 1), []);
 
   const appContextValue = useMemo(
-    () => ({ config, updateConfig, relaySyncedAt, markRelaySynced, relaySyncNonce, bumpRelaySync }),
-    [config, updateConfig, relaySyncedAt, markRelaySynced, relaySyncNonce, bumpRelaySync]
+    () => ({ config, updateConfig }),
+    [config, updateConfig]
   );
   // Apply theme effects to document
   useApplyTheme(config.theme);

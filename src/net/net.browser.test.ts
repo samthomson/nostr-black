@@ -113,6 +113,23 @@ describe('queryRelay (browser transport)', () => {
     vi.unstubAllGlobals();
   });
 
+  it('surfaces NOTICE auth refusals instead of silent empties', async () => {
+    vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
+    setAuthSigner(undefined);
+
+    const promise = queryRelay('wss://notice.example/', [{ kinds: [1] }]);
+    const ws = FakeWebSocket.instances.at(-1)!;
+    ws.open();
+    ws.frame(['NOTICE', 'auth-required: please authenticate']);
+    ws.frame(['EOSE', subIdOf(ws)]);
+    const events = await promise;
+    expect(events).toEqual([]);
+    const entry = egressLog.find((e) => e.kind === 'query') as EgressEntry;
+    expect(entry.status).toBe('auth');
+    expect(entry.reason).toContain('auth-required');
+    vi.unstubAllGlobals();
+  });
+
   it('collects EVENT frames until EOSE', async () => {
     vi.stubGlobal('WebSocket', FakeWebSocket as unknown as typeof WebSocket);
 

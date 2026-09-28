@@ -10,6 +10,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { NostrLoginProvider } from '@nostrify/react/login';
 import { KeystoreProvider } from '@/auth/KeystoreProvider';
 import { AppProvider } from '@/components/AppProvider';
+import { UserStateProvider } from '@/components/UserStateProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { QueryDevtools } from '@/components/QueryDevtools';
@@ -34,7 +35,6 @@ const queryClient = new QueryClient({
 
 const defaultConfig: AppConfig = {
   theme: "dark",
-  relayMetadata: { relays: [], updatedAt: 0 },
   discoveryRelays: DEFAULT_DISCOVERY_RELAYS,
   torEnabled: true,
   mediaEnabled: true,
@@ -45,6 +45,7 @@ export function App() {
   return (
     <UnheadProvider head={head}>
       <AppProvider storageKey="nostr:app-config/2" defaultConfig={defaultConfig}>
+        <UserStateProvider storageKey="nostr:user-state">
         <KeystoreProvider>
         <QueryClientProvider client={queryClient}>
           <NostrLoginProvider storageKey='nostr:login'>
@@ -53,6 +54,7 @@ export function App() {
           <QueryDevtools />
         </QueryClientProvider>
         </KeystoreProvider>
+        </UserStateProvider>
       </AppProvider>
     </UnheadProvider>
   );

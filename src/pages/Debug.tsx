@@ -3,8 +3,10 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useUserState } from '@/hooks/useUserState';
 import { useEgress, useIsTor } from '@/hooks/useEgress';
 import type { EgressEntry } from '@/hooks/useEgress';
+import { useMediaCache } from '@/hooks/useMediaCache';
 import { hostOf } from '@/lib/format';
 
 /** Per-relay view: all queries to one relay grouped into one row. */
@@ -17,11 +19,21 @@ interface RelayGroup {
   maxMs: number;
 }
 
-/** Worst recent health of a relay: auth-required beats nothing, errors win. */
-const relayHealth = (g: RelayGroup): 'auth' | 'error' | undefined => {
+type RelayHealth = 'error' | 'auth' | 'empty' | 'ok';
+
+/** Worst recent health of a relay: error > auth > everything-empty > ok. */
+const relayHealth = (g: RelayGroup): RelayHealth => {
   if (g.queries.some((q) => q.status === 'error')) return 'error';
   if (g.queries.some((q) => q.status === 'auth')) return 'auth';
-  return undefined;
+  if (g.queries.length > 0 && g.queries.every((q) => (q.events ?? 0) === 0)) return 'empty';
+  return 'ok';
+};
+
+const HEALTH_STYLE: Record<RelayHealth, string> = {
+  error: 'text-red-500',
+  auth: 'text-amber-500',
+  empty: 'text-yellow-700',
+  ok: 'text-emerald-600',
 };
 
 const groupByRelay = (entries: EgressEntry[]): RelayGroup[] => {
@@ -40,22 +52,53 @@ const groupByRelay = (entries: EgressEntry[]): RelayGroup[] => {
     group.maxMs = times.length > 0 ? Math.max(...times) : 0;
     groups.set(host, group);
   }
-  // Most-queried relay first; stable within.
+  // Unhealthy relays first (worst health, then most queries); healthy after.
+  const order: Record<RelayHealth, number> = { error: 0, auth: 1, empty: 2, ok: 3 };
   return [...groups.values()].sort(
-    (a, b) => b.queries.length - a.queries.length || a.host.localeCompare(b.host),
+    (a, b) =>
+      order[relayHealth(a)] - order[relayHealth(b)] ||
+      b.queries.length - a.queries.length ||
+      a.host.localeCompare(b.host),
   );
 };
 
-/**
- * Debug page: what the app asked of the network, grouped by relay — one row
- * per relay, that relay's queries (kinds, authors, results, timing) within.
- */
-/** Human label for a query cache key (["outbox","feed",…] → 'feed'). */
-const keyLabel = (key: readonly unknown[]): string => {
-  const parts = key.map((k) => (typeof k === 'string' ? k : '…')).filter((k) => k !== '');
-  if (parts[0] === 'outbox') return parts[1] ?? 'outbox';
-  if (parts[0] === 'nostr') return parts[1] ?? 'nostr';
-  return parts[0] ?? key.join(',');
+/** Tree node for the data section: domain → queries → data summaries. */
+interface DataNode {
+  label: string;
+  count?: string;
+  children?: DataNode[];
+}
+
+/** Short, human label for a key segment: hex/bech32 ids become #abc123. */
+const leafLabel = (raw: string): string =>
+  raw.length > 16 && /^[a-z0-9]+$/i.test(raw) ? `#${raw.slice(0, 6)}` : raw;
+
+const dataTree = (entries: { queryKey: readonly unknown[]; state: { status: string; data: unknown } }[]): DataNode[] => {
+  const domains = new Map<string, { label: string; count: number; byName: Map<string, number> }>();
+  for (const q of entries) {
+    const key = q.queryKey.map((k) => (typeof k === 'string' ? k : '')).filter(Boolean);
+    const domain = key[0] === 'outbox' ? 'feed pipeline' : key[0] === 'profile' ? 'profiles' : key[0] === 'nostr' ? 'accounts' : (key[0] ?? 'other');
+    const leaf = leafLabel(
+      key[0] === 'outbox' || key[0] === 'profile' || key[0] === 'nostr' ? (key[1] ?? key[0]) : (key[1] ?? '…'),
+    );
+    const d = domains.get(domain) ?? { label: domain, count: 0, byName: new Map() };
+    const data = q.state.data;
+    const n = Array.isArray(data)
+      ? data.length
+      : data && typeof data === 'object' && 'notes' in (data as Record<string, unknown>)
+        ? (data as { notes: unknown[] }).notes.length
+        : data === undefined
+          ? 0
+          : 1;
+    d.count += n;
+    d.byName.set(leaf, (d.byName.get(leaf) ?? 0) + n);
+    domains.set(domain, d);
+  }
+  return [...domains.values()].map((d) => ({
+    label: d.label,
+    count: `${d.count} items`,
+    children: [...d.byName.entries()].map(([label, n]) => ({ label, count: String(n) })),
+  }));
 };
 
 const runTestQuery = async () => {
@@ -70,19 +113,140 @@ const runTestQuery = async () => {
 
 const DebugBody = () => {
   const { config } = useAppContext();
+  const { state: userState } = useUserState();
   const entries = useEgress();
   const onTor = useIsTor();
   const queryClient = useQueryClient();
   const cache = queryClient.getQueryCache().getAll();
+  const media = useMediaCache();
 
   const relayGroups = groupByRelay(entries);
-  const tor = onTor;
+  const unhealthy = relayGroups.filter((g) => relayHealth(g) !== 'ok' && relayHealth(g) !== 'empty');
+  const empty = relayGroups.filter((g) => relayHealth(g) === 'empty');
+  const healthy = relayGroups.length - unhealthy.length - empty.length;
 
   return (
     <div className="space-y-6 text-sm">
-      <div className="flex items-center gap-2">
-        <span>tor: {tor === undefined ? '…' : String(tor)}</span>
+      {/* Health summary: the answer to "is anything wrong?" at a glance. */}
+      <div className="flex flex-wrap gap-2 font-mono text-xs">
+        <span className="rounded-sm border px-2 py-1">
+          tor: {onTor === undefined ? '…' : String(onTor)}
+        </span>
+        <span className={`${healthy > 0 ? HEALTH_STYLE.ok : ''} rounded-sm border px-2 py-1`}>
+          {healthy} relays serving
+        </span>
+        {empty.length > 0 && (
+          <span className={`${HEALTH_STYLE.empty} rounded-sm border px-2 py-1`}>
+            {empty.length} returning nothing
+          </span>
+        )}
+        {unhealthy.length > 0 && (
+          <span className={`${HEALTH_STYLE.error} rounded-sm border px-2 py-1`}>
+            {unhealthy.length} failing: {unhealthy.map((g) => g.host).join(', ')}
+          </span>
+        )}
+        <span className="rounded-sm border px-2 py-1">
+          media cache {(media.bytes / 1024 / 1024).toFixed(1)} MB
+        </span>
       </div>
+
+      <div className="space-y-2">
+        <p className="font-medium">
+          relays — problems first{' '}
+          <span className="text-muted-foreground text-xs font-normal">
+            problems first — ○ empty is often normal (niche relays hold
+            nothing for your follows); ✕ and ▲ are real refusals
+          </span>
+        </p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="text-muted-foreground">
+                <th className="pr-2">relay</th>
+                <th className="pr-2">queries</th>
+                <th className="pr-2">events</th>
+                <th className="pr-2">avg ms</th>
+                <th className="pr-2">max ms</th>
+              </tr>
+            </thead>
+            <tbody>
+              {relayGroups.map((g) => {
+                const health = relayHealth(g);
+                const reason = g.queries.find((q) => q.reason)?.reason;
+                return (
+                  <tr key={g.host} className="border-b align-top">
+                    <td className="py-2 pr-2 font-mono">
+                      <span className={HEALTH_STYLE[health]}>
+                        {health === 'error' ? '✕ ' : health === 'auth' ? '▲ ' : health === 'empty' ? '○ ' : '✓ '}
+                      </span>
+                      {g.host}
+                      {reason && (
+                        <span className="text-muted-foreground block text-[10px]" title={reason}>
+                          {reason.slice(0, 60)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-2 pr-2">
+                      <table>
+                        <tbody>
+                          {g.queries.slice(0, 8).map((q, i) => (
+                            <tr key={`${q.ts}-${i}`} className="text-muted-foreground">
+                              <td className="pr-2 font-mono">{q.kinds}</td>
+                              <td className="pr-2 font-mono">a:{q.authors ?? '—'}</td>
+                              <td className="pr-2 font-mono">{q.events ?? '…'} ev</td>
+                              <td className="pr-2 font-mono">{q.ms ?? '…'} ms</td>
+                              <td className={`pr-2 font-mono ${q.status === 'empty' ? '' : HEALTH_STYLE[health]}`}>
+                                {q.status ?? 'pending'}
+                              </td>
+                            </tr>
+                          ))}
+                          {g.queries.length > 8 && (
+                            <tr><td className="text-muted-foreground">+{g.queries.length - 8} more…</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </td>
+                    <td className="py-2 pr-2 font-mono">{g.totalEvents}</td>
+                    <td className="py-2 pr-2 font-mono">{g.avgMs}</td>
+                    <td className="py-2 pr-2 font-mono">{g.maxMs}</td>
+                  </tr>
+                );
+              })}
+              {relayGroups.length === 0 && (
+                <tr><td className="text-muted-foreground">no queries yet</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <p className="font-medium">
+          data held locally{' '}
+          <span className="text-muted-foreground text-xs font-normal">
+            what the app has fetched this session, grouped by domain
+          </span>
+        </p>
+        <ul className="space-y-1 font-mono text-xs">
+          {dataTree(cache).map((node) => (
+            <li key={node.label}>
+              <details>
+                <summary className="cursor-pointer">
+                  {node.label} — {node.count}
+                </summary>
+                <ul className="text-muted-foreground ml-4">
+                  {node.children?.map((c) => (
+                    <li key={c.label}>
+                      {c.label}: {c.count}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </li>
+          ))}
+        </ul>
+      </div>
+
       <div className="space-y-2">
         <p className="font-medium">
           test query{' '}
@@ -115,90 +279,18 @@ const DebugBody = () => {
       </div>
 
       <div className="space-y-2">
-        <p className="font-medium">relay queries ({entries.filter((e) => e.kind === 'query').length} to {relayGroups.length} relays)</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="text-muted-foreground">
-                <th className="pr-2">relay</th>
-                <th className="pr-2">queries</th>
-                <th className="pr-2">events</th>
-                <th className="pr-2">avg ms</th>
-                <th className="pr-2">max ms</th>
-              </tr>
-            </thead>
-            <tbody>
-              {relayGroups.map((g) => (
-                <tr key={g.host} className="border-b align-top">
-                  <td className="py-2 pr-2 font-mono">
-                    {relayHealth(g) === 'auth' && <span className="mr-1 text-amber-500">▲</span>}
-                    {relayHealth(g) === 'error' && <span className="mr-1 text-red-500">✕</span>}
-                    {g.host}
-                  </td>
-                  <td className="py-2 pr-2">
-                    <table>
-                      <tbody>
-                        {g.queries.slice(0, 8).map((q, i) => (
-                          <tr key={`${q.ts}-${i}`} className="text-muted-foreground">
-                            <td className="pr-2 font-mono">{q.kinds}</td>
-                            <td className="pr-2 font-mono">a:{q.authors ?? '—'}</td>
-                            <td className="pr-2 font-mono">{q.events ?? '…'} ev</td>
-                            <td className="pr-2 font-mono">{q.ms ?? '…'} ms</td>
-                            <td
-                              className={`pr-2 font-mono ${
-                                q.status === 'auth'
-                                  ? 'text-amber-500'
-                                  : q.status === 'error'
-                                    ? 'text-red-500'
-                                    : q.status === 'empty'
-                                      ? 'text-yellow-700'
-                                      : 'text-foreground'
-                              }`}
-                              title={q.reason}
-                            >
-                              {q.status ?? 'pending'}
-                            </td>
-                          </tr>
-                        ))}
-                        {g.queries.length > 8 && (
-                          <tr><td className="text-muted-foreground">+{g.queries.length - 8} more…</td></tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </td>
-                  <td className="py-2 pr-2 font-mono">{g.totalEvents}</td>
-                  <td className="py-2 pr-2 font-mono">{g.avgMs}</td>
-                  <td className="py-2 pr-2 font-mono">{g.maxMs}</td>
-                </tr>
-              ))}
-              {relayGroups.length === 0 && (
-                <tr><td className="text-muted-foreground">no queries yet</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <p className="font-medium">
-          your relays{' '}
-          <span className="text-muted-foreground text-xs">
-            {config.relayMetadata.updatedAt > 0
-              ? `(fetched ${new Date(config.relayMetadata.updatedAt * 1000).toLocaleString()})`
-              : '(not fetched yet)'}
-          </span>
-        </p>
+        <p className="font-medium">your relays (NIP-65)</p>
         <table className="w-full text-left text-xs">
           <tbody>
-            {config.relayMetadata.relays.map((r) => (
+            {userState.relayMetadata.relays.map((r) => (
               <tr key={r.url} className="border-b">
-                <td className="text-muted-foreground w-8 py-1 font-mono">
-                  {r.read ? 'r' : '·'}{r.write ? 'w' : '·'}
+                <td className="py-1 font-mono">
+                  {r.read ? 'r' : '·'}
+                  {r.write ? 'w' : '·'} {r.url}
                 </td>
-                <td className="py-1 font-mono">{r.url}</td>
               </tr>
             ))}
-            {config.relayMetadata.relays.length === 0 && (
+            {userState.relayMetadata.relays.length === 0 && (
               <tr><td className="text-muted-foreground">(not fetched yet)</td></tr>
             )}
           </tbody>
@@ -214,44 +306,6 @@ const DebugBody = () => {
                 <td className="py-1 font-mono">{url}</td>
               </tr>
             ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="space-y-2">
-        <p className="font-medium">local query cache ({cache.length} entries)</p>
-        <table className="w-full text-left text-xs">
-          <thead>
-            <tr className="text-muted-foreground">
-              <th className="pr-2">query</th>
-              <th className="pr-2">status</th>
-              <th className="pr-2">data</th>
-              <th className="pr-2">updated</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cache.map((q) => {
-              const data = q.state.data as unknown;
-              const count = Array.isArray(data)
-                ? `${data.length} items`
-                : data && typeof data === 'object' && 'notes' in (data as Record<string, unknown>)
-                  ? `${(data as { notes: unknown[] }).notes.length} notes`
-                  : data === undefined
-                    ? '—'
-                    : 'object';
-              return (
-                <tr key={q.queryHash} className="border-b">
-                  <td className="py-1 pr-2 font-mono">{keyLabel(q.queryKey)}</td>
-                  <td className="py-1 pr-2 font-mono">{q.state.status}</td>
-                  <td className="py-1 pr-2 font-mono">{count}</td>
-                  <td className="py-1 pr-2 font-mono">
-                    {q.state.dataUpdatedAt > 0
-                      ? new Date(q.state.dataUpdatedAt).toLocaleTimeString()
-                      : '—'}
-                  </td>
-                </tr>
-              );
-            })}
           </tbody>
         </table>
       </div>

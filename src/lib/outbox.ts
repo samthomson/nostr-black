@@ -80,3 +80,20 @@ export const buildRelayGroups = (
   );
 };
 
+
+/**
+ * Merge two deduped note lists into one newest-first feed. Each wave's
+ * results merge at their chronological position — no author clusters from
+ * relay-wave arrival order. Both inputs may share ids (dedup keeps the
+ * first occurrence); ties break on id for stable ordering.
+ */
+export const mergeFeed = (
+  existing: readonly NostrEvent[],
+  incoming: readonly NostrEvent[],
+): NostrEvent[] => {
+  const byId = new Map(existing.map((e) => [e.id, e]));
+  for (const e of incoming) if (!byId.has(e.id)) byId.set(e.id, e);
+  return [...byId.values()].sort(
+    (a, b) => b.created_at - a.created_at || (a.id < b.id ? -1 : 1),
+  );
+};

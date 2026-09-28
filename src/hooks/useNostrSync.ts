@@ -1,8 +1,10 @@
 import { useEffect } from 'react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useUserState } from '@/hooks/useUserState';
 import { useAppContext } from '@/hooks/useAppContext';
 import { queryRelays, setAuthSigner } from '@/net/net';
 import { writeRelays } from '@/lib/appRelays';
+import { parseFollows } from '@/lib/outbox';
 
 /**
  * Global sync: the user's NIP-65 relay list (kind 10002), plus wiring the
@@ -10,7 +12,8 @@ import { writeRelays } from '@/lib/appRelays';
  */
 export function useNostrSync() {
   const { user } = useCurrentUser();
-  const { config, updateConfig, markRelaySynced, relaySyncNonce } = useAppContext();
+  const { state, updateUser, markRelaySynced, relaySyncNonce } = useUserState();
+  const { config } = useAppContext();
 
   // NIP-42: relays that challenge us get a signed kind 22242 from the
   // current user's signer. Unset when logged out.
@@ -40,21 +43,37 @@ export function useNostrSync() {
         // ask their write relays ∪ their discovery relays.
         const relays = [
           ...new Set([
-            ...writeRelays(config),
+            ...writeRelays(state, config),
             ...config.discoveryRelays,
           ]),
         ];
         const events = await queryRelays(
           relays,
-          [{ kinds: [10002], authors: [user.pubkey], limit: 1 }],
+          [
+            { kinds: [10002], authors: [user.pubkey], limit: 1 },
+            { kinds: [3], authors: [user.pubkey], limit: 1 },
+          ],
         );
 
         // Latest 10002 wins (replaceable kind).
-        const event = events.sort((a, b) => b.created_at - a.created_at)[0];
+        const event = events
+          .filter((e) => e.kind === 10002)
+          .sort((a, b) => b.created_at - a.created_at)[0];
+
+        // Latest kind 3 (follow list) — same replaceable rules.
+        const contact = events
+          .filter((e) => e.kind === 3)
+          .sort((a, b) => b.created_at - a.created_at)[0];
+        if (contact && contact.created_at > state.follows.updatedAt) {
+          updateUser((current) => ({
+            ...current,
+            follows: { pubkeys: parseFollows(contact), updatedAt: contact.created_at },
+          }));
+        }
         if (!event) return;
 
         // Only update if the event is newer than our stored data
-        if (event.created_at > config.relayMetadata.updatedAt) {
+        if (event.created_at > state.relayMetadata.updatedAt) {
           const fetchedRelays = event.tags
             .filter(([name]) => name === 'r')
             .map(([_, url, marker]) => ({
@@ -64,7 +83,7 @@ export function useNostrSync() {
             }));
 
           if (fetchedRelays.length > 0) {
-            updateConfig((current) => ({
+            updateUser((current) => ({
               ...current,
               relayMetadata: {
                 relays: fetchedRelays,
@@ -85,5 +104,5 @@ export function useNostrSync() {
     // Deps keyed to updatedAt: re-sync when a newer 10002 lands, not on
     // every relay-array identity change (which this sync itself causes).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, config.relayMetadata.updatedAt, updateConfig, markRelaySynced, relaySyncNonce]);
+  }, [user, state.relayMetadata.updatedAt, updateUser, markRelaySynced, relaySyncNonce]);
 }

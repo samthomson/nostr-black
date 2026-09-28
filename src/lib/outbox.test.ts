@@ -5,6 +5,7 @@ import {
   parseRelayList,
   buildAuthorRelayMap,
   buildRelayGroups,
+  mergeFeed,
 } from './outbox';
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -106,5 +107,26 @@ describe('buildRelayGroups', () => {
       'wss://tiny.example',
     ]);
     expect(groups.get('wss://tiny.example')).toEqual([C]);
+  });
+});
+
+describe('mergeFeed', () => {
+  const note = (id: string, created_at: number) =>
+    ({ id, pubkey: 'a'.repeat(64), kind: 1, created_at, tags: [], content: id, sig: 'x' }) as NostrEvent;
+
+  it('merges wave arrival order into chronological order', () => {
+    // Wave 1 lands first with older events; wave 2 arrives later with newer.
+    const wave1 = [note('old1', 1000), note('old2', 900)];
+    const wave2 = [note('new1', 2000), note('mid', 1500)];
+    const merged = mergeFeed(wave1, wave2);
+    expect(merged.map((e) => e.id)).toEqual(['new1', 'mid', 'old1', 'old2']);
+  });
+
+  it('dedupes shared ids, interleaving authors by time', () => {
+    const alice = [note('a3', 3000), note('a1', 1000)];
+    const bob = [note('b2', 2000), note('b0', 4000), note('a3', 3000)];
+    const merged = mergeFeed(alice, bob);
+    expect(merged.map((e) => e.id)).toEqual(['b0', 'a3', 'b2', 'a1']);
+    expect(merged.filter((e) => e.id === 'a3')).toHaveLength(1);
   });
 });

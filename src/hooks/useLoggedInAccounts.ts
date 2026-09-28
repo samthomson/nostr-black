@@ -4,6 +4,7 @@ import type { NostrEvent, NostrMetadata } from '@nostrify/nostrify';
 import { useNostrLogin } from '@nostrify/react/login';
 import { readRelays } from '@/lib/appRelays';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useUserState } from '@/hooks/useUserState';
 import { queryRelays } from '@/net/net';
 
 export interface Account {
@@ -16,13 +17,14 @@ export interface Account {
 export function useLoggedInAccounts() {
   const { logins, setLogin, removeLogin } = useNostrLogin();
   const { config } = useAppContext();
+  const { state: userState } = useUserState();
 
   const { data: authors = [], isLoading } = useQuery({
     queryKey: ['nostr', 'logins', logins.map((l) => l.id).join(';')],
     enabled: logins.length > 0,
     queryFn: async (c) => {
       const events = await queryRelays(
-        readRelays(config),
+        readRelays(userState, config),
         [{ kinds: [0], authors: logins.map((l) => l.pubkey) }],
         { signal: c.signal },
       );

@@ -9,6 +9,7 @@ Plan of record: `README.md`.
 - programming-style feedback from the user is captured here as rules. components stay thin and dumb (props in, render out); generic deterministic pure functions live once in `src/lib` utils, never duplicated inside components
 - output must be product relevant: code, plans, technical docs. no marketing speak or filler
 - read before writing; never overwrite user-authored content
+- user-facing copy is user-authored: never modify, rewrite, or "improve" existing copy (UI text, landing pages, error messages, README prose) without explicit permission in the current conversation. propose options; do not apply
 - do not plan for failure: build features that work. surface errors, never mask them — no swallowed catches, fallback values, or graceful-degradation UI hiding a bug
 - one correct way, no legacy fallbacks. pre-launch: no migrations, no back-compat branches, no old-shape guards. change the schema and move on
 

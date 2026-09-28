@@ -4,6 +4,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { publish, setRoutePreference } from '@/net/net';
 import { isDesktop } from '@/net/runtime';
 import { useAppContext } from './useAppContext';
+import { useUserState } from './useUserState';
 import { useCurrentUser } from './useCurrentUser';
 
 /** Publish the user's NIP-65 relay list as a fresh kind 10002: signs with
@@ -11,7 +12,8 @@ import { useCurrentUser } from './useCurrentUser';
  * discovery (outbox-correct), and updates config on success. */
 export function usePublishRelayList() {
   const { user } = useCurrentUser();
-  const { config, updateConfig } = useAppContext();
+  const { config } = useAppContext();
+  const { updateUser } = useUserState();
 
   return useMutation({
     mutationFn: async (relays: { url: string; read: boolean; write: boolean }[]) => {
@@ -31,7 +33,7 @@ export function usePublishRelayList() {
       ])];
       await publish(event, targets);
 
-      updateConfig((current) => ({
+      updateUser((current) => ({
         ...current,
         relayMetadata: { relays, updatedAt: event.created_at },
       }));

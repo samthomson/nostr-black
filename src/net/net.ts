@@ -308,6 +308,14 @@ const runQuery = async (
       if (reason) entry.reason = reason.slice(0, 120);
       if (reason.includes('auth')) entry.status = 'auth';
       finished = true;
+    } else if (type === 'NOTICE' && typeof a === 'string') {
+      // Relays explain refusals via NOTICE (e.g. "auth-required") — capture
+      // it so "empty" can be told apart from "refused".
+      if (a) entry.reason = a.slice(0, 120);
+      if (a.includes('auth') && entry.status !== 'auth') {
+        entry.status = 'auth';
+        finished = true;
+      }
     } else if (type === 'AUTH') {
       // NIP-42 challenge: sign kind 22242, answer, re-send the REQ.
       if (authSigner && !authed) {

@@ -4,6 +4,7 @@ import { Loader2, RefreshCw } from 'lucide-react';
 import { nip19 } from 'nostr-tools';
 import { Shell } from '@/components/Shell';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useUserState } from '@/hooks/useUserState';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePublishRelayList } from '@/hooks/useTransport';
 import { useMediaCache } from '@/hooks/useMediaCache';
@@ -62,10 +63,11 @@ const Section = ({ title, hint, children }: {
 );
 
 const SettingsBody = () => {
-  const { config, updateConfig, bumpRelaySync } = useAppContext();
+  const { config, updateConfig } = useAppContext();
+  const { state: userState, bumpRelaySync } = useUserState();
   const { user } = useCurrentUser();
   const publishListMutation = usePublishRelayList();
-  const syncedAt = config.relayMetadata.updatedAt;
+  const syncedAt = userState.relayMetadata.updatedAt;
 
   const [draft, setDraft] = useState<string | null>(null);
   const [newRelay, setNewRelay] = useState('');
@@ -75,8 +77,8 @@ const SettingsBody = () => {
 
   // Local working copy of the relay list; "publish" writes it to nostr as a
   // fresh kind 10002 and updates config optimistically on success.
-  const [relays, setRelays] = useState(config.relayMetadata.relays);
-  const dirty = JSON.stringify(relays) !== JSON.stringify(config.relayMetadata.relays);
+  const [relays, setRelays] = useState(userState.relayMetadata.relays);
+  const dirty = JSON.stringify(relays) !== JSON.stringify(userState.relayMetadata.relays);
 
   const saveDiscovery = () => {
     const list = (draft ?? '')
@@ -118,7 +120,7 @@ const SettingsBody = () => {
         title="relays"
         hint={
           syncedAt > 0
-            ? `${config.relayMetadata.relays.length} in your kind 10002 (won ${new Date(syncedAt * 1000).toLocaleString()})`
+            ? `${userState.relayMetadata.relays.length} in your kind 10002 (won ${new Date(syncedAt * 1000).toLocaleString()})`
             : 'not fetched yet — log in and your list will appear here'
         }
       >
@@ -176,7 +178,7 @@ const SettingsBody = () => {
           <button
             type="button"
             onClick={() => {
-              setRelays(config.relayMetadata.relays);
+              setRelays(userState.relayMetadata.relays);
               bumpRelaySync();
             }}
             className="text-muted-foreground flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium hover:bg-accent"
@@ -187,7 +189,7 @@ const SettingsBody = () => {
           {dirty && (
             <button
               type="button"
-              onClick={() => setRelays(config.relayMetadata.relays)}
+              onClick={() => setRelays(userState.relayMetadata.relays)}
               className="text-muted-foreground rounded-full px-3 py-1.5 text-xs font-medium hover:bg-accent"
             >
               discard

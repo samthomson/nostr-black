@@ -206,7 +206,15 @@ const EmbeddedNote = ({ event }: { event: NostrEvent }) => {
 /** Reply affordance: always names the replied-to author (last p tag), even
  * before (or without) the parent event itself — a reply must never look
  * like free-floating text out of context. */
-const ReplyContext = ({ parentPubkey, loaded }: { parentPubkey: string | undefined; loaded: boolean }) => {
+const ReplyContext = ({
+  parentPubkey,
+  settled,
+  loaded,
+}: {
+  parentPubkey: string | undefined;
+  settled: boolean;
+  loaded: boolean;
+}) => {
   const author = useAuthor(parentPubkey);
   const name = author.data?.metadata?.display_name || author.data?.metadata?.name;
   const href = parentPubkey ? profileHref(parentPubkey) : undefined;
@@ -221,7 +229,10 @@ const ReplyContext = ({ parentPubkey, loaded }: { parentPubkey: string | undefin
       ) : (
         <span>replying to…</span>
       )}
-      {!loaded && <span className="text-muted-foreground/60">· fetching parent…</span>}
+      {!settled && <span className="text-muted-foreground/60">· fetching parent…</span>}
+      {settled && !loaded && (
+        <span className="text-muted-foreground/60">· parent not on your relays</span>
+      )}
     </div>
   );
 };
@@ -302,7 +313,13 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
   const nip10Ref = !embedded && !quotedViaTag ? nip10.parse(event) : undefined;
   const parentId = nip10Ref?.reply?.id ?? nip10Ref?.root?.id;
   const parentPubkey = parentId ? nip10Ref?.profiles?.at(-1)?.pubkey : undefined;
-  const parent = useEventById(parentId);
+  // Relay hints for the parent: the e tag's third element, plus wherever
+  // this reply itself was found (parents and replies usually co-locate).
+  const parentHints = [
+    ...(nip10Ref?.reply?.relays ?? nip10Ref?.root?.relays ?? []),
+    ...(foundOn ?? []),
+  ];
+  const parent = useEventById(parentId, parentPubkey, parentHints);
   const clientTag = event.tags.find(([n]) => n === 'client')?.[1];
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
 
@@ -341,7 +358,11 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
             </Button>
           </div>
           {parentId && (
-            <ReplyContext parentPubkey={parentPubkey} loaded={!!parent.data} />
+            <ReplyContext
+              parentPubkey={parentPubkey}
+              settled={!parent.isPending}
+              loaded={!!parent.data}
+            />
           )}
           {parentId && parent.data && (
             <EmbeddedNote event={parent.data} />

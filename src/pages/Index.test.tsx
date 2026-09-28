@@ -27,6 +27,8 @@ let follows: string[] = [];
 let kind3Result: NostrEvent[] = [];
 /** Notes served per relay url for feed queries. */
 let notesByRelay: Record<string, NostrEvent[]> = {};
+/** Optional per-author 10002 override: pubkey → declared relay urls. */
+let authorRelays: Record<string, string[]> | null = null;
 /** When true, NostrSync's discovery attempt has settled. */
 let discoverySettled = false;
 
@@ -45,6 +47,11 @@ vi.mock('@/net/net', async (importOriginal) => {
           : [];
       }
       if (kinds.includes(10002)) {
+        if (authorRelays) {
+          return Object.entries(authorRelays)
+            .filter(([pubkey]) => (filters[0].authors ?? []).includes(pubkey))
+            .map(([pubkey, urls]) => event(10002, pubkey, '', urls.map((u) => ['r', u]), 1700000600));
+        }
         return [
           event(10002, A, '', [['r', 'wss://one.example']], 1700000600),
           event(10002, B, '', [['r', 'wss://two.example']], 1700000600),
@@ -62,6 +69,11 @@ vi.mock('@/net/net', async (importOriginal) => {
       }
       // Stage 2: authors' 10002 relay lists.
       if (kinds.includes(10002)) {
+        if (authorRelays) {
+          return Object.entries(authorRelays)
+            .filter(([pubkey]) => authors.includes(pubkey))
+            .map(([pubkey, urls]) => event(10002, pubkey, '', urls.map((u) => ['r', u]), 1700000600));
+        }
         return [
           event(10002, A, '', [['r', 'wss://one.example']], 1700000600),
           event(10002, B, '', [['r', 'wss://two.example']], 1700000600),
@@ -99,6 +111,7 @@ beforeEach(() => {
   follows = [];
   kind3Result = [];
   notesByRelay = {};
+  authorRelays = null;
   discoverySettled = false;
   window.localStorage.clear();
 });
@@ -135,18 +148,12 @@ describe('Index outbox feed (logged in)', () => {
     };
 
     render(
-      <TestApp>
+      <TestApp userState={{ follows: { pubkeys: [A, B], updatedAt: 1 } }}>
         <Index />
       </TestApp>,
     );
 
-    let ok = true;
-    try { await screen.findByText('note from a', {}, { timeout: 3000 }); } catch { ok = false; }
-    if (!ok) {
-      const fs2 = await import('node:fs');
-      fs2.writeFileSync('/tmp/dbg-h.txt', document.body.textContent ?? 'EMPTY');
-      throw new Error('dumped');
-    }
+    expect(await screen.findByText('note from a', {}, { timeout: 3000 })).toBeTruthy();
     expect(screen.getByText('note from b')).toBeTruthy();
     expect(screen.queryByText('unrequested junk')).toBeNull();
 
@@ -164,11 +171,29 @@ describe('Index outbox feed (logged in)', () => {
     expect(discoverySettled).toBe(true);
   });
 
-  it('shows the not-following state for an empty contact list, without querying notes', async () => {
-    kind3Result = [event(3, USER, '', [])];
+  it('shows every relay a note was found on, not just one', async () => {
+    authorRelays = { [A]: ['wss://one.example', 'wss://two.example'] };
+    notesByRelay = {
+      'wss://one.example': [event(1, A, 'multi-relay note', [], 1700000700)],
+      'wss://two.example': [event(1, A, 'multi-relay note', [], 1700000700)],
+    };
 
     render(
-      <TestApp>
+      <TestApp userState={{ follows: { pubkeys: [A], updatedAt: 1 } }}>
+        <Index />
+      </TestApp>,
+    );
+
+    await screen.findByText('multi-relay note', {}, { timeout: 3000 });
+    // Stage 2 declares both relays for author A, so the note is queried on
+    // both — and both must appear as provenance pills.
+    expect(await screen.findByText('one.example')).toBeTruthy();
+    expect(await screen.findByText('two.example')).toBeTruthy();
+  });
+
+  it('shows the not-following state for an empty contact list, without querying notes', async () => {
+    render(
+      <TestApp userState={{ follows: { pubkeys: [], updatedAt: 1 } }}>
         <Index />
       </TestApp>,
     );
