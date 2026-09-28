@@ -20,6 +20,7 @@ tokio-native-tls = "0.3"
 native-tls = "0.2"
 base64 = "0.22"
 futures-util = "0.3"
+tauri-plugin-window-state = "2.5.0"
 
 [profile.release]
 strip = true

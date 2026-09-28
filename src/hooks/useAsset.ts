@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { isDesktop } from '@/net/runtime';
-import { fetchAssetUrl, prioritizeAsset } from '@/net/media';
+import { fetchAssetUrl, prioritizeAsset, type MediaKind } from '@/net/media';
 
 export interface Asset {
   /** Renderable URL — undefined while loading or after failure. */
@@ -20,7 +20,10 @@ export interface Asset {
  * Attach `ref` to the element; when it scrolls into view the fetch is
  * promoted to the front of the queue (viewport media loads first).
  */
-export function useAsset(url: string | undefined): Asset & { ref: React.RefObject<HTMLDivElement | null> } {
+export function useAsset(
+  url: string | undefined,
+  kind: MediaKind = 'media',
+): Asset & { ref: React.RefObject<HTMLDivElement | null> } {
   const desktop = isDesktop();
   const [blobUrl, setBlobUrl] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -29,7 +32,7 @@ export function useAsset(url: string | undefined): Asset & { ref: React.RefObjec
   useEffect(() => {
     if (!url || !desktop) return;
     let alive = true;
-    fetchAssetUrl(url)
+    fetchAssetUrl(url, kind)
       .then((u) => {
         if (alive) {
           setBlobUrl(u);
@@ -42,7 +45,7 @@ export function useAsset(url: string | undefined): Asset & { ref: React.RefObjec
     return () => {
       alive = false;
     };
-  }, [url, desktop]);
+  }, [url, kind, desktop]);
 
   // Viewport boost: seeing it means wanting it now.
   useEffect(() => {

@@ -505,6 +505,8 @@ fn main() {
     }));
     eprintln!("[nostr.black] starting, bootstrapping tor…");
     tauri::Builder::default()
+        // Remember window position/size across restarts (official plugin).
+        .plugin(tauri_plugin_window_state::Builder::new().build())
         .setup(|_app| {
             // Bootstrap on tauri's async runtime — it must outlive the client.
             // A thread-local runtime would be dropped when the thread exits,

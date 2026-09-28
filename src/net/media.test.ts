@@ -54,6 +54,20 @@ describe('media cache (memory + IndexedDB)', () => {
     expect(vi.mocked(invoke)).toHaveBeenCalledTimes(1); // served from IDB, not network
   });
 
+  it('never evicts avatars to make room for media', async () => {
+    await clearMediaCache();
+    await setMediaCacheMaxBytes(1024 * 1024); // 1 MB total
+    await fetchAssetUrl('https://img.example/face.png', 'avatar');
+    // Media bucket budget is ~1MB-64MB → clamped to 1MB min, but avatar has
+    // its own protected budget: filling media can't touch the avatar entry.
+    for (let i = 0; i < 3; i++) {
+      await fetchAssetUrl(`https://img.example/big-${i}.png`, 'media');
+    }
+    // The avatar is still cached (no refetch → invoke still at 4 calls).
+    await fetchAssetUrl('https://img.example/face.png', 'avatar');
+    expect(vi.mocked(invoke)).toHaveBeenCalledTimes(4);
+  });
+
   it('forgetting failures after clear lets a retry run', async () => {
     vi.mocked(invoke).mockRejectedValueOnce(new Error('boom'));
     await expect(fetchAssetUrl('https://img.example/bad.png')).rejects.toThrow('boom');

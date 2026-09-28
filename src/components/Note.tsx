@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { nip19 } from 'nostr-tools';
-import { Info, Loader2, Repeat2 } from 'lucide-react';
+import { nip10, nip19 } from 'nostr-tools';
+import { CornerDownRight, Info, Loader2, Repeat2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useEventById } from '@/hooks/useEventById';
@@ -203,13 +203,44 @@ const EmbeddedNote = ({ event }: { event: NostrEvent }) => {
   );
 };
 
+/** Reply affordance: always names the replied-to author (last p tag), even
+ * before (or without) the parent event itself — a reply must never look
+ * like free-floating text out of context. */
+const ReplyContext = ({ parentPubkey, loaded }: { parentPubkey: string | undefined; loaded: boolean }) => {
+  const author = useAuthor(parentPubkey);
+  const name = author.data?.metadata?.display_name || author.data?.metadata?.name;
+  const href = parentPubkey ? profileHref(parentPubkey) : undefined;
+  const shortNpub = parentPubkey ? `${npubOf(parentPubkey).slice(0, 10)}…` : '';
+  return (
+    <div className="text-muted-foreground flex items-center gap-1 text-xs">
+      <CornerDownRight className="size-3" />
+      {href ? (
+        <Link to={href} className="underline underline-offset-2 hover:decoration-foreground">
+          replying to {name ?? shortNpub}
+        </Link>
+      ) : (
+        <span>replying to…</span>
+      )}
+      {!loaded && <span className="text-muted-foreground/60">· fetching parent…</span>}
+    </div>
+  );
+};
+
 /**
  * Provenance footer: which relays served the event, and over which route.
  * Separate from content (below read-more) and visually distinct: muted relay
  * pills vs a colored route pill.
  */
-const NoteMeta = ({ foundOn, route }: { foundOn?: string[]; route?: 'tor' | 'direct' }) => {
-  if ((!foundOn || foundOn.length === 0) && !route) return null;
+const NoteMeta = ({
+  foundOn,
+  route,
+  client,
+}: {
+  foundOn?: string[];
+  route?: 'tor' | 'direct';
+  client?: string;
+}) => {
+  if ((!foundOn || foundOn.length === 0) && !route && !client) return null;
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1 border-t pt-1.5">
       {foundOn?.map((url) => (
@@ -220,6 +251,11 @@ const NoteMeta = ({ foundOn, route }: { foundOn?: string[]; route?: 'tor' | 'dir
           {hostOf(url)}
         </span>
       ))}
+      {client && (
+        <span className="rounded-sm border px-1 py-0.5 font-mono text-[10px] leading-none text-muted-foreground">
+          via {client}
+        </span>
+      )}
       {route && (
         <span
           className={`rounded-sm px-1 py-0.5 font-mono text-[10px] leading-none ${
@@ -228,7 +264,7 @@ const NoteMeta = ({ foundOn, route }: { foundOn?: string[]; route?: 'tor' | 'dir
               : 'bg-amber-600/15 text-amber-500'
           }`}
         >
-          {route === 'tor' ? '⏁ tor' : 'direct'}
+          {route === 'tor' ? '⏁ tor' : 'clearnet'}
         </span>
       )}
     </div>
@@ -259,12 +295,15 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
   const kindLabel = KIND_LABELS[event.kind];
   const referenceId = embedded?.id ?? event.tags.find(([n]) => n === 'q')?.[1];
   const quotedViaTag = !embedded && referenceId !== undefined;
-  // A reply carries its parent (and thread root) in e tags: fetch the direct
-  // parent and render it as context above the reply.
-  const parentTag = event.tags.find(([n, , marker]) => n === 'e' && marker === 'reply')
-    ?? event.tags.find(([n, , marker]) => n === 'e' && marker === 'root');
-  const parentId = !embedded && !quotedViaTag ? parentTag?.[1] : undefined;
+  // A reply carries its parent in e tags — but conventions vary (NIP-10):
+  // modern events use "reply"/"root" markers, legacy ones are positional
+  // (first e = root, last e = reply). nip10.parse handles both; the p tag
+  // matching the reply position names the replied-to author.
+  const nip10Ref = !embedded && !quotedViaTag ? nip10.parse(event) : undefined;
+  const parentId = nip10Ref?.reply?.id ?? nip10Ref?.root?.id;
+  const parentPubkey = parentId ? nip10Ref?.profiles?.at(-1)?.pubkey : undefined;
   const parent = useEventById(parentId);
+  const clientTag = event.tags.find(([n]) => n === 'client')?.[1];
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
 
   return (
@@ -302,7 +341,7 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
             </Button>
           </div>
           {parentId && (
-            <div className="text-muted-foreground text-xs">replying to</div>
+            <ReplyContext parentPubkey={parentPubkey} loaded={!!parent.data} />
           )}
           {parentId && parent.data && (
             <EmbeddedNote event={parent.data} />
@@ -351,7 +390,7 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
             </Button>
           )}
 
-          <NoteMeta foundOn={foundOn} route={route} />
+          <NoteMeta foundOn={foundOn} route={route} client={clientTag} />
         </div>
       </CardContent>
 

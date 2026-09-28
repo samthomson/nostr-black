@@ -31,6 +31,7 @@ interface StoredBlob {
   data: ArrayBuffer;
   bytes: number;
   lastAccess: number;
+  bucket: MediaKind;
 }
 
 interface MemoryEntry {
@@ -39,9 +40,21 @@ interface MemoryEntry {
   lastAccess: number;
 }
 
-const memory = new Map<string, MemoryEntry>(); // iteration order = eviction order
-let totalBytes = 0;
-let maxBytes = 1024 * 1024 * 1024; // 1 GB
+/**
+ * Two buckets with separate budgets: avatars are small and constantly
+ * re-encountered (every note by that author) — they must never be evicted
+ * to make room for one-off note media. Media evicts within its own budget;
+ * avatars within theirs.
+ */
+export type MediaKind = 'avatar' | 'media';
+const AVATAR_BUDGET = 128 * 1024 * 1024;
+
+const memory: Record<MediaKind, Map<string, MemoryEntry>> = {
+  avatar: new Map(),
+  media: new Map(),
+};
+const bucketBytes: Record<MediaKind, number> = { avatar: 0, media: 0 };
+let maxBytes = 1024 * 1024 * 1024; // 1 GB total
 
 const failures = new Set<string>();
 
@@ -58,7 +71,7 @@ const db = (): Promise<IDBPDatabase> => {
   return dbPromise;
 };
 
-export const mediaCacheBytes = (): number => totalBytes;
+export const mediaCacheBytes = (): number => bucketBytes.avatar + bucketBytes.media;
 export const mediaCacheMaxBytes = (): number => maxBytes;
 
 /** Set the cache budget, evicting least-recently-used entries immediately. */
@@ -69,9 +82,11 @@ export const setMediaCacheMaxBytes = async (bytes: number): Promise<void> => {
 
 /** Drop everything from both layers. Errors are forgotten too. */
 export const clearMediaCache = async (): Promise<void> => {
-  for (const { blobUrl } of memory.values()) URL.revokeObjectURL(blobUrl);
-  memory.clear();
-  totalBytes = 0;
+  for (const bucket of ['avatar', 'media'] as const) {
+    for (const { blobUrl } of memory[bucket].values()) URL.revokeObjectURL(blobUrl);
+    memory[bucket].clear();
+    bucketBytes[bucket] = 0;
+  }
   failures.clear();
   try {
     (await db()).clear(STORE);
@@ -80,19 +95,25 @@ export const clearMediaCache = async (): Promise<void> => {
   }
 };
 
-/** Least-recently-used first: memory map preserves access order, and IDB
- * entries beyond what memory knows about are swept by lastAccess index. */
+/** LRU within each bucket — cross-bucket pressure never evicts avatars. */
 const evict = async (): Promise<void> => {
-  while (totalBytes > maxBytes) {
-    const oldest = memory.keys().next().value;
-    if (oldest === undefined) break;
-    totalBytes -= memory.get(oldest)!.bytes;
-    URL.revokeObjectURL(memory.get(oldest)!.blobUrl);
-    memory.delete(oldest);
-    try {
-      (await db()).delete(STORE, oldest);
-    } catch {
-      // memory-only
+  const budgets: Record<MediaKind, number> = {
+    avatar: Math.min(AVATAR_BUDGET, Math.max(maxBytes / 8, 1024 * 1024)),
+    media: Math.max(maxBytes - AVATAR_BUDGET, 1024 * 1024),
+  };
+  for (const bucket of ['avatar', 'media'] as const) {
+    while (bucketBytes[bucket] > budgets[bucket]) {
+      const oldest = memory[bucket].keys().next().value;
+      if (oldest === undefined) break;
+      const entry = memory[bucket].get(oldest)!;
+      bucketBytes[bucket] -= entry.bytes;
+      URL.revokeObjectURL(entry.blobUrl);
+      memory[bucket].delete(oldest);
+      try {
+        (await db()).delete(STORE, oldest);
+      } catch {
+        // memory-only
+      }
     }
   }
 };
@@ -140,9 +161,9 @@ const release = (): void => {
 
 const FETCH_TIMEOUT_MS = 60_000;
 
-const remember = (url: string, blob: Blob, blobUrl: string): void => {
-  totalBytes += blob.size;
-  memory.set(url, { blobUrl, bytes: blob.size, lastAccess: Date.now() });
+const remember = (url: string, blob: Blob, blobUrl: string, bucket: MediaKind): void => {
+  bucketBytes[bucket] += blob.size;
+  memory[bucket].set(url, { blobUrl, bytes: blob.size, lastAccess: Date.now() });
 };
 
 /**
@@ -150,16 +171,16 @@ const remember = (url: string, blob: Blob, blobUrl: string): void => {
  * network (desktop) / identity (web). Throws on failure — callers decide
  * how to surface the error.
  */
-export const fetchAssetUrl = async (url: string): Promise<string> => {
+export const fetchAssetUrl = async (url: string, kind: MediaKind = 'media'): Promise<string> => {
   if (!isDesktop()) return url;
 
   const now = Date.now();
-  const hit = memory.get(url);
+  const hit = memory[kind].get(url);
   if (hit) {
     // Refresh LRU position.
-    memory.delete(url);
+    memory[kind].delete(url);
     hit.lastAccess = now;
-    memory.set(url, hit);
+    memory[kind].set(url, hit);
     return hit.blobUrl;
   }
   if (failures.has(url)) throw new Error('media fetch failed earlier');
@@ -170,7 +191,8 @@ export const fetchAssetUrl = async (url: string): Promise<string> => {
     if (stored) {
       const blob = new Blob([stored.data], { type: stored.mime });
       const blobUrl = URL.createObjectURL(blob);
-      remember(url, blob, blobUrl);
+      // Entries persisted before buckets existed default to media.
+      remember(url, blob, blobUrl, stored.bucket ?? 'media');
       (await db()).put(STORE, { ...stored, lastAccess: now } satisfies StoredBlob).catch(() => {/* lastAccess refresh is best-effort */});
       return blobUrl;
     }
@@ -190,7 +212,7 @@ export const fetchAssetUrl = async (url: string): Promise<string> => {
     const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
     const blob = new Blob([bytes], { type: mime });
     const blobUrl = URL.createObjectURL(blob);
-    remember(url, blob, blobUrl);
+    remember(url, blob, blobUrl, kind);
     try {
       await (await db()).put(
         STORE,
@@ -199,6 +221,7 @@ export const fetchAssetUrl = async (url: string): Promise<string> => {
           data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
           bytes: blob.size,
           lastAccess: now,
+          bucket: kind,
         } satisfies StoredBlob,
         url,
       );

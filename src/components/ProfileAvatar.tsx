@@ -18,7 +18,7 @@ export const ProfileAvatar = ({
   metadata: NostrMetadata | undefined;
   className?: string;
 }) => {
-  const { url: picture, error, ref } = useAsset(metadata?.picture);
+  const { url: picture, error, ref } = useAsset(metadata?.picture, 'avatar');
   const loading = !!metadata?.picture && !picture && !error;
   return (
     <div ref={ref} className="inline-flex leading-none">

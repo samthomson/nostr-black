@@ -45,7 +45,7 @@ export const ConnectionStatus = () => {
       <div className="flex overflow-hidden rounded-sm border" role="group" aria-label="transport route">
         {([true, false] as const).map((tor) => (
           <button
-            key={tor ? 'tor' : 'direct'}
+            key={tor ? 'tor' : 'clearnet'}
             type="button"
             onClick={() => set(tor)}
             className={`px-2 py-0.5 leading-none transition-colors ${
@@ -56,7 +56,7 @@ export const ConnectionStatus = () => {
                 : 'hover:bg-accent'
             }`}
           >
-            {tor ? 'tor' : 'direct'}
+            {tor ? 'tor' : 'clearnet'}
           </button>
         ))}
       </div>

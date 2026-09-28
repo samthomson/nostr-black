@@ -100,6 +100,28 @@ describe('Note UI', () => {
     expect(await screen.findByText('two.example')).toBeTruthy();
   });
 
+  it('shows reply context for legacy positional e tags (no NIP-10 markers)', async () => {
+    const legacyReply = {
+      ...event,
+      id: 'e'.repeat(64),
+      tags: [
+        ['e', '1'.repeat(64)], // root, positional
+        ['e', '2'.repeat(64)], // reply target, positional (last e)
+        ['p', B],
+      ],
+      content: 'agreed, same here',
+    };
+    render(
+      <TestApp>
+        <Note event={legacyReply} />
+      </TestApp>,
+    );
+
+    // The replied-to author is named immediately (p tag resolution),
+    // even before the parent event itself loads.
+    expect(await screen.findByText(/replying to/)).toBeTruthy();
+  });
+
   it('renders @npub mentions as profile links with resolved names', async () => {
     const mention = nip19.npubEncode(B);
     const withMention = { ...event, content: `hey ${'@' + mention} look` };
