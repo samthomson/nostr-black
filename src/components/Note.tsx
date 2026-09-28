@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
-import { Info, Repeat2 } from 'lucide-react';
+import { Info, Loader2, Repeat2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useAuthor } from '@/hooks/useAuthor';
 import { useEventById } from '@/hooks/useEventById';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useAppContext } from '@/hooks/useAppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EventInfoDialog } from '@/components/EventInfoDialog';
-import { profileHref, eventHref, hostOf, npubOf, formatTimestamp, assetUrl } from '@/lib/format';
+import { ProfileAvatar } from '@/components/ProfileAvatar';
+import { useAsset } from '@/hooks/useAsset';
+import { profileHref, eventHref, hostOf, npubOf, formatTimestamp } from '@/lib/format';
 
 /** Content/image budget past which a note is collapsed with a fade. */
 const CLAMP_THRESHOLD = 420;
@@ -27,7 +29,7 @@ const NostrRef = ({ bech32 }: { bech32: string }) => {
   const metadata = author.data?.metadata;
 
   let label = `${bech32.slice(0, 10)}…`;
-  if (decoded.type === 'npub') {
+  if (decoded.type === 'npub' || decoded.type === 'nprofile') {
     label = metadata?.display_name || metadata?.name || label;
   } else if (decoded.type === 'note' || decoded.type === 'nevent' || decoded.type === 'naddr') {
     label = 'note';
@@ -45,7 +47,6 @@ const NostrRef = ({ bech32 }: { bech32: string }) => {
  * and hashtags become links/spans. Never uses innerHTML — event content is
  * untrusted (see AGENTS.md).
  */
-const IMAGE_URL = /\.(jpe?g|png|gif|webp|avif)(\?[^#\s]*)?$/i;
 
 /**
  * Renders note content as safe React nodes: nostr: entities (NIP-21),
@@ -55,12 +56,15 @@ const IMAGE_URL = /\.(jpe?g|png|gif|webp|avif)(\?[^#\s]*)?$/i;
  */
 const renderContent = (content: string) =>
   content
-    .split(/(nostr:[a-z0-9]+|https?:\/\/[^\s]+|#[\p{L}\p{N}_]+)/gu)
+    .split(/(nostr:[a-z0-9]+|@(?:npub|nprofile|note|nevent|naddr)1[a-z0-9]+|https?:\/\/[^\s]+|#[\p{L}\p{N}_]+)/gu)
     .filter(Boolean)
-    .filter((token) => !(token.startsWith('http') && IMAGE_URL.test(token)))
+    .filter((token) => !(token.startsWith('http') && MEDIA_URL.test(token)))
     .map((token, i) => {
       if (token.startsWith('nostr:')) {
         return <NostrRef key={i} bech32={token.slice(6)} />;
+      }
+      if (/^@(npub|nprofile|note|nevent|naddr)1/.test(token)) {
+        return <NostrRef key={i} bech32={token.slice(1)} />;
       }
       if (/^https?:\/\//.test(token)) {
         return (
@@ -85,20 +89,57 @@ const renderContent = (content: string) =>
       return token;
     });
 
-/** All image urls for an event: imeta/url tags plus image urls in content. */
-const imageUrls = (event: NostrEvent): string[] => {
+const VIDEO_URL = /\.(mp4|webm|mov)(\?[^#\s]*)?$/i;
+const MEDIA_URL = /\.(jpe?g|png|gif|webp|avif|mp4|webm|mov)(\?[^#\s]*)?$/i;
+
+/** All media urls for an event: imeta/url tags plus media urls in content. */
+const mediaUrls = (event: NostrEvent): string[] => {
   const urls: string[] = [];
   for (const [name, value, ...rest] of event.tags) {
-    if (name === 'url' && value && IMAGE_URL.test(value)) urls.push(value);
+    if (name === 'url' && value && MEDIA_URL.test(value)) urls.push(value);
     if (name === 'imeta') {
       const url = [value, ...rest].find((p) => p.startsWith('url '))?.slice(4);
       if (url) urls.push(url);
     }
   }
   for (const token of event.content.split(/\s+/)) {
-    if (/^https?:\/\//.test(token) && IMAGE_URL.test(token)) urls.push(token);
+    if (/^https?:\/\//.test(token) && MEDIA_URL.test(token)) urls.push(token);
   }
   return [...new Set(urls)];
+};
+
+/** One media item from an event: <img> or <video> (with controls), fetched
+ * through the transport layer via useAsset. Failures are visible — a media
+ * layer that fails silently is undebuggable. */
+const MediaItem = ({ url, alt }: { url: string; alt: string }) => {
+  const { url: src, error, ref } = useAsset(url);
+  if (!src) {
+    if (error) {
+      return (
+        <div className="flex h-20 w-full items-center justify-center rounded-md border border-dashed px-2 text-center font-mono text-[10px] text-red-500">
+          media failed: {error}
+        </div>
+      );
+    }
+    return (
+      <div ref={ref} className="flex h-32 w-full items-center justify-center gap-2 rounded-md bg-muted text-xs text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" />
+        loading media…
+      </div>
+    );
+  }
+  if (VIDEO_URL.test(url)) {
+    return (
+      <div ref={ref}>
+        <video src={src} controls preload="metadata" className="max-h-96 w-full rounded-md object-cover" />
+      </div>
+    );
+  }
+  return (
+    <div ref={ref}>
+      <img src={src} alt={alt} className="max-h-96 w-full rounded-md object-cover" />
+    </div>
+  );
 };
 
 const KIND_LABELS: Record<number, string> = {
@@ -143,7 +184,7 @@ const AuthorLink = ({ pubkey }: { pubkey: string }) => {
 
 /** Compact rendering of a reposted/quoted event. */
 const EmbeddedNote = ({ event }: { event: NostrEvent }) => {
-  const images = imageUrls(event);
+  const media = mediaUrls(event);
 
   return (
     <blockquote className="space-y-1 border-l-2 border-muted-foreground/30 pl-3">
@@ -151,15 +192,10 @@ const EmbeddedNote = ({ event }: { event: NostrEvent }) => {
       <div className="whitespace-pre-wrap break-words text-sm">
         {renderContent(event.content)}
       </div>
-      {images.length > 0 && (
-        <div className={`mt-1 gap-1 ${images.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
-          {images.map((url) => (
-            <img
-              key={url}
-              src={assetUrl(url)}
-              alt={event.tags.find(([n]) => n === 'alt')?.[1] ?? 'embedded image'}
-              className="max-h-96 w-full rounded-md object-cover"
-            />
+      {media.length > 0 && (
+        <div className={`mt-1 gap-1 ${media.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
+          {media.map((url) => (
+            <MediaItem key={url} url={url} alt={event.tags.find(([n]) => n === 'alt')?.[1] ?? 'embedded media'} />
           ))}
         </div>
       )}
@@ -167,7 +203,40 @@ const EmbeddedNote = ({ event }: { event: NostrEvent }) => {
   );
 };
 
-export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[] }) => {
+/**
+ * Provenance footer: which relays served the event, and over which route.
+ * Separate from content (below read-more) and visually distinct: muted relay
+ * pills vs a colored route pill.
+ */
+const NoteMeta = ({ foundOn, route }: { foundOn?: string[]; route?: 'tor' | 'direct' }) => {
+  if ((!foundOn || foundOn.length === 0) && !route) return null;
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1 border-t pt-1.5">
+      {foundOn?.map((url) => (
+        <span
+          key={url}
+          className="rounded-sm bg-muted px-1 py-0.5 font-mono text-[10px] leading-none text-muted-foreground"
+        >
+          {hostOf(url)}
+        </span>
+      ))}
+      {route && (
+        <span
+          className={`rounded-sm px-1 py-0.5 font-mono text-[10px] leading-none ${
+            route === 'tor'
+              ? 'bg-emerald-600/15 text-emerald-500'
+              : 'bg-amber-600/15 text-amber-500'
+          }`}
+        >
+          {route === 'tor' ? '⏁ tor' : 'direct'}
+        </span>
+      )}
+    </div>
+  );
+};
+export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: string[]; route?: 'tor' | 'direct' }) => {
+  const { config } = useAppContext();
+  const showMedia = config.mediaEnabled;
   const author = useAuthor(event.pubkey);
   const [expanded, setExpanded] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -176,15 +245,17 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
   const npub = npubOf(event.pubkey);
   const href = profileHref(event.pubkey);
   const embedded = repostedEvent(event);
-  const images = imageUrls(event);
-  const allImages = [...images, ...(embedded ? imageUrls(embedded) : [])];
+  const media = showMedia ? mediaUrls(event) : [];
+  const allMedia = showMedia
+    ? [...mediaUrls(event), ...(embedded ? mediaUrls(embedded) : [])]
+    : [];
   const renderedText = embedded
     ? embedded.content
     : (event.kind === 30023
         ? (event.tags.find(([n]) => n === 'title')?.[1] ?? event.content)
         : event.content);
   const clampable =
-    renderedText.length > CLAMP_THRESHOLD || allImages.length > IMAGE_CLAMP_COUNT;
+    renderedText.length > CLAMP_THRESHOLD || allMedia.length > IMAGE_CLAMP_COUNT;
   const kindLabel = KIND_LABELS[event.kind];
   const referenceId = embedded?.id ?? event.tags.find(([n]) => n === 'q')?.[1];
   const quotedViaTag = !embedded && referenceId !== undefined;
@@ -199,10 +270,7 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
   return (
     <Card>
       <CardContent className="flex gap-3 p-4">
-        <Avatar className="size-10 shrink-0">
-          {metadata?.picture && <AvatarImage src={assetUrl(metadata.picture)} />}
-          <AvatarFallback>{npub.slice(4, 6).toUpperCase()}</AvatarFallback>
-        </Avatar>
+        <ProfileAvatar pubkey={event.pubkey} metadata={metadata} className="size-10 shrink-0" />
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-baseline gap-2">
             {href ? (
@@ -259,15 +327,10 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
                 </div>
               )}
 
-              {!embedded && images.length > 0 && (
-                <div className={`mt-1 gap-1 ${images.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
-                  {images.map((url) => (
-                    <img
-                      key={url}
-                      src={assetUrl(url)}
-                      alt={altText}
-                      className="max-h-96 w-full rounded-md object-cover"
-                    />
+              {!embedded && media.length > 0 && (
+                <div className={`mt-1 gap-1 ${media.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
+                  {media.map((url) => (
+                    <MediaItem key={url} url={url} alt={altText} />
                   ))}
                 </div>
               )}
@@ -277,23 +340,18 @@ export const Note = ({ event, foundOn }: { event: NostrEvent; foundOn?: string[]
             )}
           </div>
 
-          <div className="flex items-center gap-2">
-            {foundOn && foundOn.length > 0 && (
-              <span className="text-muted-foreground truncate text-xs">
-                via {foundOn.map(hostOf).join(', ')}
-              </span>
-            )}
-            {clampable && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-0 text-muted-foreground"
-                onClick={() => setExpanded(!expanded)}
-              >
-                {expanded ? 'show less' : 'read more'}
-              </Button>
-            )}
-          </div>
+          {clampable && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-0 text-muted-foreground"
+              onClick={() => setExpanded(!expanded)}
+            >
+              {expanded ? 'show less' : 'read more'}
+            </Button>
+          )}
+
+          <NoteMeta foundOn={foundOn} route={route} />
         </div>
       </CardContent>
 

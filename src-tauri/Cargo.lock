@@ -2939,6 +2939,7 @@ name = "nostr-black"
 version = "0.1.0"
 dependencies = [
  "arti-client",
+ "base64 0.22.1",
  "futures-util",
  "native-tls",
  "reqwest 0.12.28",

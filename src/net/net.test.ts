@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { isTor, httpEgress, egressLog, logEgress } from './net';
+import { isTor, egressLog, logEgress } from './net';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
@@ -38,14 +38,6 @@ describe('isTor', () => {
 });
 
 describe('egress log', () => {
-  it('httpEgress records the url it fetched', async () => {
-    mockFetch.mockResolvedValue({ ok: true });
-
-    await httpEgress('https://example.com/info');
-
-    expect(egressLog[0]).toMatchObject({ kind: 'http', url: 'https://example.com/info' });
-  });
-
   it('is a ring buffer capped at 200 entries', () => {
     for (let i = 0; i < 220; i++) {
       logEgress('ws', `wss://relay-${i}.example/`);

@@ -1,4 +1,5 @@
-import { useNostr } from '@nostrify/react';
+import { nip46Pool } from '@/net/nip46';
+import type { NPool } from '@nostrify/nostrify';
 import {
   NLogin,
   type NLoginType,
@@ -16,7 +17,7 @@ export type { NostrConnectParams, NostrConnectStatus };
 export { generateNostrConnectParams, generateNostrConnectURI } from '@nostrify/react/login';
 
 export function useLoginActions() {
-  const { nostr } = useNostr();
+
   const { logins, addLogin, setLogin, removeLogin } = useNostrLogin();
   const { config } = useAppContext();
 
@@ -33,7 +34,7 @@ export function useLoginActions() {
   return {
     // Login with a NIP-46 "bunker://" URI
     async bunker(uri: string): Promise<void> {
-      const login = await NLogin.fromBunker(uri, nostr);
+      const login = await NLogin.fromBunker(uri, nip46Pool as unknown as NPool);
       addAndActivate(login);
     },
     // Login with a NIP-07 browser extension
@@ -51,7 +52,7 @@ export function useLoginActions() {
       signal?: AbortSignal,
       onStatus?: (status: NostrConnectStatus) => void,
     ): Promise<void> {
-      const login = await NLogin.fromNostrConnect(params, nostr, { signal, onStatus });
+      const login = await NLogin.fromNostrConnect(params, nip46Pool as unknown as NPool, { signal, onStatus });
       addAndActivate(login);
     },
     // Get the relay URLs for NIP-46 nostrconnect communication

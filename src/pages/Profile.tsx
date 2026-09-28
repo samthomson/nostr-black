@@ -1,15 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { useSeoMeta } from '@unhead/react';
-import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
 import { Shell } from '@/components/Shell';
 import { Note } from '@/components/Note';
-import { queryRelay, queryRelays } from '@/net/relayClient';
-import { parseRelayList, buildAuthorRelayMap } from '@/lib/outbox';
-import { readRelays } from '@/lib/appRelays';
-import { useAppContext } from '@/hooks/useAppContext';
+import { useProfileRelays, useProfileMetadata, useProfileNotes } from '@/hooks/useProfile';
 import { npubOf } from '@/lib/format';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -21,64 +17,15 @@ const NOTES_LIMIT = 50;
  * their own declared relays (outbox model — we go where they publish).
  */
 const ProfileBody = ({ pubkey }: { pubkey: string }) => {
-  const { config } = useAppContext();
   const npub = npubOf(pubkey);
 
-  // Where this author publishes: their kind 10002, asked on our read relays.
-  const relayLists = useQuery({
-    queryKey: ['profile', 'relays', pubkey],
-    queryFn: async () => {
-      const events = await queryRelays(
-        readRelays(config),
-        [{ kinds: [10002], authors: [pubkey], limit: 1 }],
-      );
-      return buildAuthorRelayMap(events).get(pubkey) ?? parseRelayList(undefined);
-    },
-  });
+  const relayLists = useProfileRelays(pubkey);
 
   const writeRelays = relayLists.data?.write ?? [];
 
-  const metadata = useQuery({
-    queryKey: ['profile', 'metadata', pubkey],
-    queryFn: async () => {
-      // kind 0 lives on the author's relays; fall back to ours.
-      const own = writeRelays.length > 0
-        ? await queryRelays(writeRelays, [{ kinds: [0], authors: [pubkey], limit: 1 }])
-        : [];
-      const events = own.length > 0
-        ? own
-        : await queryRelays(readRelays(config), [{ kinds: [0], authors: [pubkey], limit: 1 }]);
-      const latest = events.sort((a, b) => b.created_at - a.created_at)[0];
-      if (!latest) return undefined;
-      try {
-        return JSON.parse(latest.content) as {
-          name?: string;
-          display_name?: string;
-          about?: string;
-          picture?: string;
-          nip05?: string;
-        };
-      } catch {
-        return undefined;
-      }
-    },
-    enabled: relayLists.isSuccess,
-  });
+  const metadata = useProfileMetadata(pubkey, writeRelays);
 
-  const notes = useQuery({
-    queryKey: ['profile', 'notes', pubkey, writeRelays.join(',')],
-    enabled: relayLists.isSuccess && writeRelays.length > 0,
-    queryFn: async () => {
-      const results = await Promise.all(
-        writeRelays.map((url) =>
-          queryRelay(url, [{ kinds: PROFILE_NOTE_KINDS, authors: [pubkey], limit: NOTES_LIMIT }]),
-        ),
-      );
-      return [...new Map(results.flat().map((e) => [e.id, e])).values()]
-        .sort((a, b) => b.created_at - a.created_at)
-        .slice(0, NOTES_LIMIT) as NostrEvent[];
-    },
-  });
+  const notes = useProfileNotes(pubkey, writeRelays, PROFILE_NOTE_KINDS, NOTES_LIMIT);
 
   const about = metadata.data;
   const displayName = about?.display_name || about?.name || `${npub.slice(0, 10)}…`;
@@ -88,10 +35,7 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
       <Card>
         <CardContent className="flex flex-col gap-3 p-4">
           <div className="flex items-center gap-3">
-            <Avatar className="size-14">
-              {about?.picture && <AvatarImage src={about.picture} />}
-              <AvatarFallback className="text-lg">{npub.slice(4, 6).toUpperCase()}</AvatarFallback>
-            </Avatar>
+            <ProfileAvatar pubkey={pubkey} metadata={about} className="size-14" />
             <div className="min-w-0">
               <p className="truncate font-semibold">{displayName}</p>
               {about?.nip05 && <p className="text-muted-foreground truncate text-sm">{about.nip05}</p>}

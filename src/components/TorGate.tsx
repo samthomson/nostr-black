@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { isTor } from '@/net/net';
+import { useState } from 'react';
+import { useIsTor } from '@/hooks/useEgress';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -7,26 +7,16 @@ import { Button } from '@/components/ui/button';
  * relays would learn the user's IP. Identical in dev and production, and
  * re-checked on every load — the override is per-page-view only, never
  * persisted (a settings toggle to skip the check may come later). The
- * desktop build is Tor-by-construction and will not mount this gate.
+ * desktop build is tor-by-construction (or explicitly toggled to direct)
+ * and never mounts this gate.
  */
 export const TorGate = ({ children }: { children: React.ReactNode }) => {
-  const [state, setState] = useState<'checking' | 'allowed' | 'blocked'>('checking');
+  const onTor = useIsTor();
+  const [override, setOverride] = useState(false);
 
-  useEffect(() => {
-    if (state !== 'checking') return;
-    let cancelled = false;
-    void isTor().then((onTor) => {
-      if (!cancelled) setState(onTor ? 'allowed' : 'blocked');
-    });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  if (override || onTor === true) return <>{children}</>;
 
-  if (state === 'allowed') return <>{children}</>;
-
-  if (state === 'checking') {
+  if (onTor === undefined) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-center">
         <h1 className="animate-pulse text-2xl font-bold tracking-tight">nostr.black</h1>
@@ -34,10 +24,6 @@ export const TorGate = ({ children }: { children: React.ReactNode }) => {
       </div>
     );
   }
-
-  const override = () => {
-    setState('allowed');
-  };
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-4 text-center">
@@ -52,7 +38,7 @@ export const TorGate = ({ children }: { children: React.ReactNode }) => {
             get tor browser
           </a>
         </Button>
-        <Button variant="ghost" onClick={override} className="rounded-full text-muted-foreground">
+        <Button variant="ghost" onClick={() => setOverride(true)} className="rounded-full text-muted-foreground">
           continue without tor (my ip, my choice)
         </Button>
         <p className="text-muted-foreground text-xs">desktop app with bundled tor — coming soon</p>

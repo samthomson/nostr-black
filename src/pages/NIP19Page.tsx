@@ -1,14 +1,13 @@
 import { nip19 } from 'nostr-tools';
-import type { NostrEvent } from '@nostrify/nostrify';
 import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { useAppContext } from '@/hooks/useAppContext';
-import { queryRelay } from '@/net/relayClient';
+import { useEventFetch } from '@/hooks/useProfile';
+import { readRelays } from '@/lib/appRelays';
 import { Note } from '@/components/Note';
 import { Shell } from '@/components/Shell';
 import { ProfilePage } from '@/pages/Profile';
 import type { DecodeResult } from '@/lib/format';
-import { readRelays } from '@/lib/appRelays';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import NotFound from './NotFound';
@@ -38,17 +37,7 @@ const EventPage = ({ identifier }: { identifier: string }) => {
     ? [...new Set([...pointer.relays, ...readRelays(config)])]
     : [];
 
-  const { data: event, isLoading } = useQuery({
-    queryKey: ['event', pointer?.id, relays.join(',')],
-    enabled: !!pointer,
-    queryFn: async () => {
-      for (const url of relays) {
-        const events = await queryRelay(url, [{ ids: [pointer!.id] }]);
-        if (events.length > 0) return events[0];
-      }
-      return null;
-    },
-  });
+  const { data: event, isLoading } = useEventFetch(pointer?.id, relays);
 
   if (isLoading) {
     return (

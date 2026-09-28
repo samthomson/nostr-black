@@ -18,6 +18,7 @@ reqwest = { version = "0.12", default-features = false, features = ["socks", "js
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
 tokio-native-tls = "0.3"
 native-tls = "0.2"
+base64 = "0.22"
 futures-util = "0.3"
 
 [profile.release]

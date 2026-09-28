@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
-import { queryRelay, queryRelays } from '@/net/relayClient';
+import { queryRelay, queryRelays } from '@/net/net';
 import { useAppContext } from '@/hooks/useAppContext';
 import { readRelays } from '@/lib/appRelays';
 import { buildAuthorRelayMap } from '@/lib/outbox';

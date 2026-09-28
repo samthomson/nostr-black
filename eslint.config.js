@@ -11,6 +11,26 @@ import customRules from "./eslint-rules/index.js";
 export default defineConfig(
   globalIgnores(["dist", ".agents", "src-tauri/target", "src-tauri/gen"]),
   {
+    name: "net-egress-boundary",
+    // src/net is the egress boundary: only hooks (and net itself) may call
+    // it. Components and pages go through hooks — one consumption layer.
+    files: ["src/{components,pages,contexts,auth}/**/*.{ts,tsx}", "src/App.tsx"],
+    ignores: ["**/*.test.*"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/net/*", "@/net"],
+              message: "Import the hook layer (src/hooks) instead — src/net is the egress boundary.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     name: "app/ts",
     files: ["**/*.{ts,tsx}"],
     extends: [

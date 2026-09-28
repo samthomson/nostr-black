@@ -1,34 +1,34 @@
-import { type NostrEvent, type NostrMetadata, NSchema as n } from '@nostrify/nostrify';
-import { useNostr } from '@nostrify/react';
 import { useQuery } from '@tanstack/react-query';
+import { nip19 } from 'nostr-tools';
+import type { NostrEvent } from '@nostrify/nostrify';
+import { queryRelays } from '@/net/net';
+import { readRelays } from '@/lib/appRelays';
+import { useAppContext } from '@/hooks/useAppContext';
 
+/** Fetches kind-0 metadata for a pubkey via the unified transport. */
 export function useAuthor(pubkey: string | undefined) {
-  const { nostr } = useNostr();
-
-  return useQuery<{ event?: NostrEvent; metadata?: NostrMetadata }>({
-    queryKey: ['nostr', 'author', pubkey ?? ''],
-    queryFn: async () => {
-      if (!pubkey) {
-        return {};
-      }
-
-      const [event] = await nostr.query(
-        [{ kinds: [0], authors: [pubkey!], limit: 1 }],
-        { signal: AbortSignal.timeout(1500) },
-      );
-
-      if (!event) {
-        throw new Error('No event found');
-      }
-
+  const { config } = useAppContext();
+  return useQuery({
+    queryKey: ['author', pubkey],
+    enabled: !!pubkey,
+    queryFn: async (c) => {
+      const events = await queryRelays(
+        readRelays(config),
+        [{ kinds: [0], authors: [pubkey!], limit: 3 }],
+      ).catch(() => [] as NostrEvent[]);
+      void c;
+      return events;
+    },
+    select: (events: NostrEvent[]) => {
+      const latest = events.sort((a, b) => b.created_at - a.created_at)[0];
+      if (!latest) return { metadata: undefined, event: undefined };
       try {
-        const metadata = n.json().pipe(n.metadata()).parse(event.content);
-        return { metadata, event };
+        return { metadata: JSON.parse(latest.content), event: latest };
       } catch {
-        return { event };
+        return { metadata: undefined, event: latest };
       }
     },
-    staleTime: 5 * 60 * 1000, // Keep cached data fresh for 5 minutes
-    retry: 3,
   });
 }
+
+void nip19;

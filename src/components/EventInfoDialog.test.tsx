@@ -96,7 +96,21 @@ describe('Note UI', () => {
       </TestApp>,
     );
 
-    expect(await screen.findByText(/via one\.example, two\.example/)).toBeTruthy();
+    expect(await screen.findByText('one.example')).toBeTruthy();
+    expect(await screen.findByText('two.example')).toBeTruthy();
+  });
+
+  it('renders @npub mentions as profile links with resolved names', async () => {
+    const mention = nip19.npubEncode(B);
+    const withMention = { ...event, content: `hey ${'@' + mention} look` };
+    render(
+      <TestApp>
+        <Note event={withMention} />
+      </TestApp>,
+    );
+
+    const mentionLink = await screen.findByRole('link', { name: `@${mention.slice(0, 10)}…` });
+    expect(mentionLink.getAttribute('href')).toBe(`/${mention}`);
   });
 
   it('renders a kind 6 repost with the embedded note', async () => {

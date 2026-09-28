@@ -4,13 +4,19 @@ import type { NostrEvent } from '@nostrify/nostrify';
 
 import { useCurrentUser } from './useCurrentUser';
 import { useAppContext } from './useAppContext';
-import { queryRelay, queryRelays } from '@/net/relayClient';
+import { queryRelay, queryRelays, getEventRoute, type TransportRoute } from '@/net/net';
 import { parseFollows, buildAuthorRelayMap, buildRelayGroups } from '@/lib/outbox';
 import { readRelays, writeRelays } from '@/lib/appRelays';
 
 
 /** Feed kinds: notes, reposts (6/16), pictures, video, files, long-form. */
 const FEED_KINDS = [1, 6, 16, 20, 21, 1063, 30023];
+
+interface FeedQueryResult {
+  notes: NostrEvent[];
+  foundOn: Record<string, string[]>;
+  foundRoute: Record<string, TransportRoute | undefined>;
+}
 /** Concurrency, not coverage: every declared relay is queried, in waves of
  * this many simultaneous connections. */
 const MAX_PARALLEL_RELAYS = 8;
@@ -19,7 +25,7 @@ const FEED_SIZE = 100;
 
 /**
  * Outbox-model feed (NIP-65). Three stages, all through the owned relay
- * client (src/net/relayClient):
+ * client (src/net/net):
  *   1. the user's own kind 0 + kind 3 (their write relays ∪ discovery set),
  *   2. where each followed author publishes (kind 10002),
  *   3. notes queried only on the relays their authors declared.
@@ -36,24 +42,33 @@ export const useOutboxFeed = () => {
   /** Ordered batches: newest wave first; each batch internally sorted. */
   const [batches, setBatches] = useState<NostrEvent[][]>([]);
   const [foundOn, setFoundOn] = useState<Record<string, string[]>>({});
+  const [foundRoute, setFoundRoute] = useState<Record<string, TransportRoute | undefined>>({});
   const seen = useRef(new Set<string>());
 
-  const prependBatch = useCallback((events: NostrEvent[], relays: Record<string, string[]>) => {
-    // Dedupe eagerly (before the state update) — later waves may arrive
-    // before React commits, and the updater itself must stay pure.
-    const byId = new Map(events.map((e) => [e.id, e]));
-    const fresh = [...byId.values()].filter((e) => !seen.current.has(e.id));
-    for (const e of fresh) seen.current.add(e.id);
-    if (fresh.length > 0) {
-      // The batch itself is sorted newest-first; it becomes the new head of
-      // the feed. Nothing already rendered ever moves.
-      const batch = [...fresh].sort((a, b) => b.created_at - a.created_at);
-      setBatches((prev) => [batch, ...prev]);
-    }
-    if (Object.keys(relays).length > 0) {
-      setFoundOn((prev) => ({ ...prev, ...relays }));
-    }
-  }, []);
+  const prependBatch = useCallback(
+    (events: NostrEvent[], relays: Record<string, string[]>) => {
+      // Dedupe eagerly (before the state update) — later waves may arrive
+      // before React commits, and the updater itself must stay pure.
+      const byId = new Map(events.map((e) => [e.id, e]));
+      const fresh = [...byId.values()].filter((e) => !seen.current.has(e.id));
+      for (const e of fresh) seen.current.add(e.id);
+      if (fresh.length > 0) {
+        // The batch itself is sorted newest-first; it becomes the new head of
+        // the feed. Nothing already rendered ever moves.
+        const batch = [...fresh].sort((a, b) => b.created_at - a.created_at);
+        setBatches((prev) => [batch, ...prev]);
+        setFoundRoute((prev) => {
+          const next = { ...prev };
+          for (const e of fresh) next[e.id] = getEventRoute(e);
+          return next;
+        });
+      }
+      if (Object.keys(relays).length > 0) {
+        setFoundOn((prev) => ({ ...prev, ...relays }));
+      }
+    },
+    [],
+  );
 
   // Boot query targets the user's own write relays ∪ discovery relays —
   // uncapped (the user chose these), and discovery is user-configurable.
@@ -116,6 +131,7 @@ export const useOutboxFeed = () => {
       const entries = [...groups.entries()];
       const allEvents: NostrEvent[] = [];
       const foundOnAll: Record<string, string[]> = {};
+      const foundRouteAll: Record<string, TransportRoute | undefined> = {};
       for (let i = 0; i < entries.length; i += MAX_PARALLEL_RELAYS) {
         if (allEvents.length >= FEED_SIZE) break;
         const wave = entries.slice(i, i + MAX_PARALLEL_RELAYS);
@@ -139,12 +155,13 @@ export const useOutboxFeed = () => {
           .filter((e) => allowed.has(e.pubkey))
           .slice(0, Math.max(0, FEED_SIZE - allEvents.length));
         const waveRelays = Object.assign({}, ...waveResults.map((r) => r.relays));
+        for (const e of waveEvents) foundRouteAll[e.id] = getEventRoute(e);
         allEvents.push(...waveEvents);
         Object.assign(foundOnAll, waveRelays);
         if (waveEvents.length > 0) prependBatch(waveEvents, waveRelays);
       }
 
-      return { notes: allEvents, foundOn: foundOnAll };
+      return { notes: allEvents, foundOn: foundOnAll, foundRoute: foundRouteAll };
     },
   });
 
@@ -153,7 +170,7 @@ export const useOutboxFeed = () => {
   // relays — the user sees loading, not a broken-looking feed.
   const discoverySettled = relaySyncedAt !== undefined;
   const settled = follows.isSuccess && discoverySettled;
-  const feedData = feed.data as { notes: NostrEvent[]; foundOn: Record<string, string[]> } | undefined;
+  const feedData = feed.data as FeedQueryResult | undefined;
 
   // Progressive batches when live; cached query result when remounting
   // (lock/unlock, navigation) — one derivation, no scattered conditionals.
@@ -162,6 +179,7 @@ export const useOutboxFeed = () => {
   return {
     notes,
     foundOn: batches.length > 0 ? foundOn : (feedData?.foundOn ?? {}),
+    foundRoute: batches.length > 0 ? foundRoute : (feedData?.foundRoute ?? {}),
     isLoading:
       (follows.isLoading || relayLists.isLoading || feed.isLoading) || (!discoverySettled && notes.length === 0),
     // Only claim "not following anyone" from an actual (empty) contact list.

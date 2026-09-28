@@ -27,6 +27,9 @@ const AppConfigSchema = z.object({
   theme: z.enum(['dark', 'light', 'system']),
   relayMetadata: RelayMetadataSchema,
   discoveryRelays: z.array(z.url()),
+  torEnabled: z.boolean(),
+  mediaEnabled: z.boolean(),
+  mediaCacheMaxMb: z.number(),
 }) satisfies z.ZodType<AppConfig>;
 
 export function AppProvider(props: AppProviderProps) {
@@ -67,10 +70,12 @@ export function AppProvider(props: AppProviderProps) {
   // Runtime, non-persisted: when the last NIP-65 discovery attempt finished.
   const [relaySyncedAt, setRelaySyncedAt] = useState<number | undefined>(undefined);
   const markRelaySynced = useCallback(() => setRelaySyncedAt(Date.now()), []);
+  const [relaySyncNonce, setRelaySyncNonce] = useState(0);
+  const bumpRelaySync = useCallback(() => setRelaySyncNonce((n) => n + 1), []);
 
   const appContextValue = useMemo(
-    () => ({ config, updateConfig, relaySyncedAt, markRelaySynced }),
-    [config, updateConfig, relaySyncedAt, markRelaySynced]
+    () => ({ config, updateConfig, relaySyncedAt, markRelaySynced, relaySyncNonce, bumpRelaySync }),
+    [config, updateConfig, relaySyncedAt, markRelaySynced, relaySyncNonce, bumpRelaySync]
   );
   // Apply theme effects to document
   useApplyTheme(config.theme);

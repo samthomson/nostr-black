@@ -1,5 +1,6 @@
 import { type NLoginType, NUser, useNostrLogin } from '@nostrify/react/login';
-import { useNostr } from '@nostrify/react';
+import { nip46Pool } from '@/net/nip46';
+import type { NPool } from '@nostrify/nostrify';
 import { useCallback, useMemo } from 'react';
 
 import { useAuthor } from './useAuthor.ts';
@@ -7,14 +8,14 @@ import { useKeystore } from '@/auth/useKeystore';
 import { keystoreUser } from '@/auth/keystoreUser';
 
 export function useCurrentUser() {
-  const { nostr } = useNostr();
+
   const { logins } = useNostrLogin();
   const keystore = useKeystore();
 
   const loginToUser = useCallback((login: NLoginType): NUser  => {
     switch (login.type) {
       case 'bunker': // Nostr login with NIP-46 "bunker://" URI
-        return NUser.fromBunkerLogin(login, nostr);
+        return NUser.fromBunkerLogin(login, nip46Pool as unknown as NPool);
       case 'extension': // Nostr login with NIP-07 browser extension
         return NUser.fromExtensionLogin(login);
       // Persisted nsec logins are deliberately unsupported — the memory-only
@@ -22,7 +23,7 @@ export function useCurrentUser() {
       default:
         throw new Error(`Unsupported login type: ${login.type}`);
     }
-  }, [nostr]);
+  }, []);
 
   const persistedUsers = useMemo(() => {
     const users: NUser[] = [];

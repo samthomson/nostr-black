@@ -2,8 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createHead, UnheadProvider } from '@unhead/react/client';
 import { BrowserRouter } from 'react-router-dom';
 import { NostrLoginProvider } from '@nostrify/react/login';
-import NostrProvider from '@/components/NostrProvider';
-import { NostrSync } from '@/components/NostrSync';
+import { useNostrSync } from '@/hooks/useNostrSync';
 import { AppProvider } from '@/components/AppProvider';
 import { KeystoreProvider } from '@/auth/KeystoreProvider';
 import { AppConfig } from '@/contexts/AppContext';
@@ -27,6 +26,9 @@ export function TestApp({ children }: TestAppProps) {
     theme: 'dark',
     relayMetadata: { relays: [], updatedAt: 0 },
     discoveryRelays: DEFAULT_DISCOVERY_RELAYS,
+    torEnabled: true,
+    mediaEnabled: true,
+    mediaCacheMaxMb: 1024,
   };
 
   return (
@@ -35,12 +37,9 @@ export function TestApp({ children }: TestAppProps) {
         <KeystoreProvider>
         <QueryClientProvider client={queryClient}>
           <NostrLoginProvider storageKey='test-login'>
-            <NostrProvider>
               <BrowserRouter>
-                <NostrSync />
-                {children}
+                <TestAppRoot>{children}</TestAppRoot>
               </BrowserRouter>
-            </NostrProvider>
           </NostrLoginProvider>
         </QueryClientProvider>
         </KeystoreProvider>
@@ -48,5 +47,11 @@ export function TestApp({ children }: TestAppProps) {
     </UnheadProvider>
   );
 }
+
+/** Runs the global sync hook inside the provider tree, then renders the test subject. */
+const TestAppRoot = ({ children }: { children: React.ReactNode }) => {
+  useNostrSync();
+  return <>{children}</>;
+};
 
 export default TestApp;

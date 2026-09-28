@@ -18,7 +18,7 @@
             }
         ],
         "security": {
-            "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' torasset: https: data: blob:; media-src 'self' torasset: https:"
+            "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' https: data: blob:; media-src 'self' https: blob:"
         }
     },
     "plugins": {

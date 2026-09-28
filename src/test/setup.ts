@@ -38,3 +38,12 @@ global.ResizeObserver = vi.fn().mockImplementation((_callback) => ({
   unobserve: vi.fn(),
   disconnect: vi.fn(),
 }));
+// jsdom lacks blob URL support — media tests rely on it.
+if (!('createObjectURL' in URL) || !URL.createObjectURL) {
+  let n = 0;
+  Object.defineProperty(URL, 'createObjectURL', {
+    value: () => `blob:mock-${++n}`,
+    configurable: true,
+  });
+  (URL as { revokeObjectURL?: unknown }).revokeObjectURL = () => {};
+}

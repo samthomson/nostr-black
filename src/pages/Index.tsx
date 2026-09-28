@@ -7,6 +7,7 @@ import { Shell } from '@/components/Shell';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useOutboxFeed } from '@/hooks/useOutboxFeed';
 import { Card, CardContent } from '@/components/ui/card';
+import { Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 
 /** Logged-out brand page. Placeholder only — no network activity happens logged out. */
@@ -31,7 +32,7 @@ const Landing = () => (
 );
 
 const Feed = () => {
-  const { notes, foundOn, isLoading, noFollows, followsNotFound } = useOutboxFeed();
+  const { notes, foundOn, foundRoute, isLoading, noFollows, followsNotFound } = useOutboxFeed();
   const emptyCard = (text: string) => (
     <Card className="border-dashed">
       <CardContent className="px-8 py-12 text-center">
@@ -42,9 +43,26 @@ const Feed = () => {
 
   return (
     <div className="space-y-3">
-      {isLoading ? (
-        Array.from({ length: 5 }, (_, i) => (
-          <Card key={i}>
+      {isLoading && (
+        <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-xs text-muted-foreground backdrop-blur">
+          <Loader2 className="size-3.5 animate-spin" />
+          fetching events{notes.length > 0 ? ` — ${notes.length} so far` : '…'}
+        </div>
+      )}
+      {!isLoading && notes.length > 0 && (
+        <p className="px-1 text-xs text-muted-foreground">{notes.length} notes</p>
+      )}
+      {notes.map((event) => (
+        <Note
+          key={event.id}
+          event={event}
+          foundOn={foundOn[event.id]}
+          route={foundRoute[event.id]}
+        />
+      ))}
+      {isLoading &&
+        Array.from({ length: notes.length > 0 ? 2 : 5 }, (_, i) => (
+          <Card key={`s${i}`}>
             <CardContent className="flex gap-3 p-4">
               <Skeleton className="size-10 shrink-0 rounded-full" />
               <div className="w-full space-y-2">
@@ -54,16 +72,12 @@ const Feed = () => {
               </div>
             </CardContent>
           </Card>
-        ))
-      ) : noFollows ? (
-        emptyCard('not following anyone yet')
-      ) : followsNotFound ? (
-        emptyCard("couldn't find your follow list — it may not be on your relays")
-      ) : notes.length === 0 ? (
-        emptyCard('no notes found from the people you follow')
-      ) : (
-        notes.map((event) => <Note key={event.id} event={event} foundOn={foundOn[event.id]} />)
-      )}
+        ))}
+      {!isLoading && noFollows && emptyCard('not following anyone yet')}
+      {!isLoading && followsNotFound &&
+        emptyCard("couldn't find your follow list — it may not be on your relays")}
+      {!isLoading && notes.length === 0 && !noFollows && !followsNotFound &&
+        emptyCard('no notes found from the people you follow')}
     </div>
   );
 };

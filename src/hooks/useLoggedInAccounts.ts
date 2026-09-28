@@ -1,7 +1,10 @@
-import { useNostr } from '@nostrify/react';
-import { useNostrLogin } from '@nostrify/react/login';
 import { useQuery } from '@tanstack/react-query';
-import { NSchema as n, NostrEvent, NostrMetadata } from '@nostrify/nostrify';
+import { NSchema as n } from '@nostrify/nostrify';
+import type { NostrEvent, NostrMetadata } from '@nostrify/nostrify';
+import { useNostrLogin } from '@nostrify/react/login';
+import { readRelays } from '@/lib/appRelays';
+import { useAppContext } from '@/hooks/useAppContext';
+import { queryRelays } from '@/net/net';
 
 export interface Account {
   id: string;
@@ -11,16 +14,17 @@ export interface Account {
 }
 
 export function useLoggedInAccounts() {
-  const { nostr } = useNostr();
   const { logins, setLogin, removeLogin } = useNostrLogin();
+  const { config } = useAppContext();
 
   const { data: authors = [], isLoading } = useQuery({
-    enabled: logins.length > 0,
     queryKey: ['nostr', 'logins', logins.map((l) => l.id).join(';')],
-    queryFn: async () => {
-      const events = await nostr.query(
+    enabled: logins.length > 0,
+    queryFn: async (c) => {
+      const events = await queryRelays(
+        readRelays(config),
         [{ kinds: [0], authors: logins.map((l) => l.pubkey) }],
-        { signal: AbortSignal.timeout(1500) },
+        { signal: c.signal },
       );
 
       return logins.map(({ id, pubkey }): Account => {

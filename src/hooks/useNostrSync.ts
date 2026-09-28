@@ -1,19 +1,35 @@
 import { useEffect } from 'react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
-import { queryRelays } from '@/net/relayClient';
+import { queryRelays, setAuthSigner } from '@/net/net';
 import { writeRelays } from '@/lib/appRelays';
 
 /**
- * NostrSync - Syncs user's Nostr data
- *
- * This component runs globally to sync various Nostr data when the user logs in.
- * Currently syncs:
- * - NIP-65 relay list (kind 10002), via the owned relay client
+ * Global sync: the user's NIP-65 relay list (kind 10002), plus wiring the
+ * NIP-42 auth signer from the current login.
  */
-export function NostrSync() {
+export function useNostrSync() {
   const { user } = useCurrentUser();
-  const { config, updateConfig, markRelaySynced } = useAppContext();
+  const { config, updateConfig, markRelaySynced, relaySyncNonce } = useAppContext();
+
+  // NIP-42: relays that challenge us get a signed kind 22242 from the
+  // current user's signer. Unset when logged out.
+  useEffect(() => {
+    setAuthSigner(
+      user?.signer
+        ? (challenge, relay) =>
+            user.signer!.signEvent({
+              kind: 22242,
+              content: '',
+              tags: [
+                ['relay', relay],
+                ['challenge', challenge],
+              ],
+              created_at: Math.floor(Date.now() / 1000),
+            })
+        : undefined,
+    );
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -69,7 +85,5 @@ export function NostrSync() {
     // Deps keyed to updatedAt: re-sync when a newer 10002 lands, not on
     // every relay-array identity change (which this sync itself causes).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, config.relayMetadata.updatedAt, updateConfig, markRelaySynced]);
-
-  return null;
+  }, [user, config.relayMetadata.updatedAt, updateConfig, markRelaySynced, relaySyncNonce]);
 }

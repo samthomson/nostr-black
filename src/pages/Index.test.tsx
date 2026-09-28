@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
-import * as RelayClient from '@/net/relayClient';
+import * as RelayClient from '@/net/net';
 
 import Index from './Index';
 import { TestApp } from '@/test/TestApp';
@@ -32,52 +32,56 @@ let discoverySettled = false;
 
 const relayCalls: { url: string; filters: NostrFilter[] }[] = [];
 
-vi.mock('@/net/relayClient', () => ({
-  queryRelay: vi.fn(async (url: string, filters: NostrFilter[]) => {
-    relayCalls.push({ url, filters });
-    const kinds = filters[0].kinds ?? [];
-    if (kinds.includes(3)) {
-      return kind3Result.length ? kind3Result : follows.length
-        ? [event(3, USER, '', follows.map((p) => ['p', p]))]
-        : [];
-    }
-    if (kinds.includes(10002)) {
-      return [
-        event(10002, A, '', [['r', 'wss://one.example']], 1700000600),
-        event(10002, B, '', [['r', 'wss://two.example']], 1700000600),
-      ].filter((e) => (filters[0].authors ?? []).includes(e.pubkey));
-    }
-    return notesByRelay[url] ?? [];
-  }),
-  queryRelays: vi.fn(async (urls: string[], filters: NostrFilter[]) => {
-    const kinds = filters[0].kinds ?? [];
-    const authors = filters[0].authors ?? [];
-    // NostrSync's discovery query for the user's own 10002: mark settled.
-    if (kinds.includes(10002) && authors.includes(USER)) {
-      discoverySettled = true;
-      return [];
-    }
-    // Stage 2: authors' 10002 relay lists.
-    if (kinds.includes(10002)) {
-      return [
-        event(10002, A, '', [['r', 'wss://one.example']], 1700000600),
-        event(10002, B, '', [['r', 'wss://two.example']], 1700000600),
-      ].filter((e) => authors.includes(e.pubkey));
-    }
-    const results = await Promise.all(
-      urls.map(async (url) => {
-        relayCalls.push({ url, filters });
-        if (kinds.includes(3)) {
-          return kind3Result.length ? kind3Result : follows.length
-            ? [event(3, USER, '', follows.map((p) => ['p', p]))]
-            : [];
-        }
+vi.mock('@/net/net', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/net/net')>();
+  return {
+    ...actual,
+    queryRelay: vi.fn(async (url: string, filters: NostrFilter[]) => {
+      relayCalls.push({ url, filters });
+      const kinds = filters[0].kinds ?? [];
+      if (kinds.includes(3)) {
+        return kind3Result.length ? kind3Result : follows.length
+          ? [event(3, USER, '', follows.map((p) => ['p', p]))]
+          : [];
+      }
+      if (kinds.includes(10002)) {
+        return [
+          event(10002, A, '', [['r', 'wss://one.example']], 1700000600),
+          event(10002, B, '', [['r', 'wss://two.example']], 1700000600),
+        ].filter((e) => (filters[0].authors ?? []).includes(e.pubkey));
+      }
+      return notesByRelay[url] ?? [];
+    }),
+    queryRelays: vi.fn(async (urls: string[], filters: NostrFilter[]) => {
+      const kinds = filters[0].kinds ?? [];
+      const authors = filters[0].authors ?? [];
+      // NostrSync's discovery query for the user's own 10002: mark settled.
+      if (kinds.includes(10002) && authors.includes(USER)) {
+        discoverySettled = true;
         return [];
-      }),
-    );
-    return results.flat();
-  }),
-}));
+      }
+      // Stage 2: authors' 10002 relay lists.
+      if (kinds.includes(10002)) {
+        return [
+          event(10002, A, '', [['r', 'wss://one.example']], 1700000600),
+          event(10002, B, '', [['r', 'wss://two.example']], 1700000600),
+        ].filter((e) => authors.includes(e.pubkey));
+      }
+      const results = await Promise.all(
+        urls.map(async (url) => {
+          relayCalls.push({ url, filters });
+          if (kinds.includes(3)) {
+            return kind3Result.length ? kind3Result : follows.length
+              ? [event(3, USER, '', follows.map((p) => ['p', p]))]
+              : [];
+          }
+          return [];
+        }),
+      );
+      return results.flat();
+    }),
+  };
+});
 
 vi.mock('@/hooks/useCurrentUser', () => ({
   useCurrentUser: () => ({ user: mockUser }),
