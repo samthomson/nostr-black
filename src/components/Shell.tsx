@@ -1,19 +1,17 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bug, House, Menu, Settings, X } from 'lucide-react';
+import { Bug, House, Menu, Settings, User, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { LoginArea } from '@/components/auth/LoginArea';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { BrandMark } from '@/components/BrandMark';
 import { Input } from '@/components/ui/input';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { profileHref } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-const NAV: { to: string; label: string; Icon: LucideIcon }[] = [
-  { to: '/', label: 'feed', Icon: House },
-  { to: '/settings', label: 'settings', Icon: Settings },
-  { to: '/debug', label: 'debug', Icon: Bug },
-];
+type NavItem = { to: string; label: string; Icon: LucideIcon };
 
 /**
  * App chrome. Desktop (md+): centred rail + feed. Mobile: header with
@@ -22,6 +20,7 @@ const NAV: { to: string; label: string; Icon: LucideIcon }[] = [
  */
 export const Shell = ({ children }: { children: React.ReactNode }) => {
   const { pathname } = useLocation();
+  const { user } = useCurrentUser();
   const onFeed = pathname === '/';
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPath, setMenuPath] = useState(pathname);
@@ -29,6 +28,14 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
     setMenuPath(pathname);
     setMenuOpen(false);
   }
+
+  const profileTo = user ? profileHref(user.pubkey) : undefined;
+  const nav: NavItem[] = [
+    { to: '/', label: 'feed', Icon: House },
+    ...(profileTo ? [{ to: profileTo, label: 'profile', Icon: User }] : []),
+    { to: '/settings', label: 'settings', Icon: Settings },
+    { to: '/debug', label: 'debug', Icon: Bug },
+  ];
 
   // Lock body scroll while the drawer is open.
   useEffect(() => {
@@ -59,6 +66,19 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
       </Link>
     );
   };
+
+  const navBlock = (onNavigate?: () => void) => (
+    <div className="flex flex-col gap-0.5">
+      {nav.map(({ to, label, Icon }) => navLink(to, label, Icon, onNavigate))}
+      <Input
+        type="search"
+        placeholder="search"
+        aria-label="search"
+        disabled
+        className="mt-3 h-8 w-full rounded-sm text-sm"
+      />
+    </div>
+  );
 
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-background">
@@ -111,18 +131,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
                 <X className="size-4" />
               </button>
             </div>
-            <div className="flex flex-col gap-0.5">
-              {NAV.map(({ to, label, Icon }) =>
-                navLink(to, label, Icon, () => setMenuOpen(false)),
-              )}
-              <Input
-                type="search"
-                placeholder="search"
-                aria-label="search"
-                disabled
-                className="mt-3 h-8 w-full rounded-sm text-sm"
-              />
-            </div>
+            {navBlock(() => setMenuOpen(false))}
           </nav>
         </div>
       )}
@@ -138,16 +147,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
             <BrandMark />
           </Link>
 
-          <div className="flex flex-col gap-0.5">
-            {NAV.map(({ to, label, Icon }) => navLink(to, label, Icon))}
-            <Input
-              type="search"
-              placeholder="search"
-              aria-label="search"
-              disabled
-              className="mt-3 h-8 w-full rounded-sm text-sm"
-            />
-          </div>
+          {navBlock()}
 
           <div className="mt-auto pt-4">
             <LoginArea className="w-full justify-start" />
