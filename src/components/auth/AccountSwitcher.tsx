@@ -8,7 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu.tsx';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar.tsx';
+import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
 import { useKeystore } from '@/auth/useKeystore';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -23,10 +23,10 @@ interface AccountSwitcherProps {
  * the persisted account list and add-account. One UX, two login sources.
  */
 export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
-  const { user: activeUser } = useCurrentUser();
+  const { user: activeUser, metadata } = useCurrentUser();
   const { otherUsers, setLogin, removeLogin } = useLoggedInAccounts();
   const { unlocked: keystoreActive, pubkey: keystorePubkey, logout: lockKeystore } = useKeystore();
-  
+
   if (!activeUser) return null;
 
   const isKeystore = keystoreActive && keystorePubkey === activeUser.pubkey;
@@ -36,10 +36,8 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <button className='flex items-center gap-2 h-10 p-1 pr-2.5 rounded-full hover:bg-accent transition-all text-foreground'>
-          <Avatar className='w-8 h-8'>
-            <AvatarFallback>{npub.slice(4, 6).toUpperCase()}</AvatarFallback>
-          </Avatar>
+        <button className='flex items-center gap-2 h-10 p-1 pr-2.5 rounded-sm hover:bg-accent transition-all text-foreground'>
+          <ProfileAvatar pubkey={activeUser.pubkey} metadata={metadata} className="size-8" />
           {isKeystore && (
             <span className='text-muted-foreground text-xs font-mono'>key</span>
           )}
@@ -49,11 +47,9 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
       <DropdownMenuContent className='w-56 p-2 animate-scale-in'>
         <DropdownMenuItem asChild className='flex items-center gap-2 cursor-pointer p-2 rounded-md'>
           <Link to={`/${npub}`}>
-            <Avatar className='w-8 h-8'>
-              <AvatarFallback>{npub.slice(4, 6).toUpperCase()}</AvatarFallback>
-            </Avatar>
+            <ProfileAvatar pubkey={activeUser.pubkey} metadata={metadata} className="size-8" />
             <div className='flex-1 truncate'>
-              <p className='text-sm font-medium'>{displayNpub}</p>
+              <p className='text-sm font-medium'>{metadata?.name ?? displayNpub}</p>
             </div>
           </Link>
         </DropdownMenuItem>
@@ -76,9 +72,7 @@ export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
                 onClick={() => setLogin(user.id)}
                 className='flex items-center gap-2 cursor-pointer p-2 rounded-md'
               >
-                <Avatar className='w-8 h-8'>
-                  <AvatarFallback>{user.pubkey.slice(4, 6).toUpperCase()}</AvatarFallback>
-                </Avatar>
+                <ProfileAvatar pubkey={user.pubkey} metadata={user.metadata} className="size-8" />
                 <div className='flex-1 truncate'>
                   <p className='text-sm font-medium'>
                     {user.metadata.name ?? `${nip19.npubEncode(user.pubkey).slice(0, 10)}…`}

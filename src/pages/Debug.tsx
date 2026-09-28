@@ -263,7 +263,7 @@ const DebugBody = () => {
           <button
             type="button"
             id="test-query-run"
-            className="rounded-full border px-3 py-1 text-xs font-medium hover:bg-accent"
+            className="rounded-sm border px-3 py-1 text-xs font-medium hover:bg-accent"
             onClick={() => void runTestQuery()}
           >
             run

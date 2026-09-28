@@ -30,14 +30,15 @@ global.IntersectionObserver = vi.fn().mockImplementation((_callback) => ({
   root: null,
   rootMargin: '',
   thresholds: [],
-}));
+})) as unknown as typeof IntersectionObserver;
 
-// Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation((_callback) => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+// Mock ResizeObserver as a real constructor — layout hooks call `new`.
+global.ResizeObserver = class {
+  constructor(_callback: ResizeObserverCallback) {}
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+} as unknown as typeof ResizeObserver;
 // jsdom lacks blob URL support — media tests rely on it.
 if (!('createObjectURL' in URL) || !URL.createObjectURL) {
   let n = 0;

@@ -66,7 +66,7 @@ export function QuickLoginDialog({
         <div className="flex flex-col items-center gap-3 py-4">
           {author.isLoading ? (
             <>
-              <Skeleton className="size-20 rounded-full" />
+              <Skeleton className="size-20 rounded-sm" />
               <Skeleton className="h-5 w-32" />
             </>
           ) : (
@@ -85,7 +85,7 @@ export function QuickLoginDialog({
 
         <div className="flex flex-col items-center gap-2">
           <Button
-            className="w-full rounded-full"
+            className="w-full rounded-sm"
             onClick={handleLogin}
             disabled={isLoggingIn}
           >

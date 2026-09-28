@@ -160,7 +160,7 @@ const SettingsBody = () => {
           <button
             type="button"
             onClick={addRelay}
-            className="rounded-full border px-3 py-1.5 text-xs font-medium hover:bg-accent"
+            className="rounded-sm border px-3 py-1.5 text-xs font-medium hover:bg-accent"
           >
             add
           </button>
@@ -171,7 +171,7 @@ const SettingsBody = () => {
             type="button"
             onClick={publishList}
             disabled={!user || !dirty || publishState === 'publishing'}
-            className="rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40"
+            className="rounded-sm bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40"
           >
             {publishState === 'publishing' ? 'publishing…' : 'publish list'}
           </button>
@@ -181,7 +181,7 @@ const SettingsBody = () => {
               setRelays(userState.relayMetadata.relays);
               bumpRelaySync();
             }}
-            className="text-muted-foreground flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium hover:bg-accent"
+            className="text-muted-foreground flex items-center gap-1 rounded-sm px-3 py-1.5 text-xs font-medium hover:bg-accent"
           >
             <RefreshCw className="size-3" />
             resync
@@ -190,7 +190,7 @@ const SettingsBody = () => {
             <button
               type="button"
               onClick={() => setRelays(userState.relayMetadata.relays)}
-              className="text-muted-foreground rounded-full px-3 py-1.5 text-xs font-medium hover:bg-accent"
+              className="text-muted-foreground rounded-sm px-3 py-1.5 text-xs font-medium hover:bg-accent"
             >
               discard
             </button>
@@ -218,14 +218,14 @@ const SettingsBody = () => {
             <button
               type="button"
               onClick={saveDiscovery}
-              className="rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground"
+              className="rounded-sm bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground"
             >
               save
             </button>
             <button
               type="button"
               onClick={() => setDraft(null)}
-              className="text-muted-foreground rounded-full px-4 py-1.5 text-sm font-medium hover:bg-accent"
+              className="text-muted-foreground rounded-sm px-4 py-1.5 text-sm font-medium hover:bg-accent"
             >
               cancel
             </button>
@@ -265,7 +265,7 @@ const SettingsBody = () => {
               <button
                 type="button"
                 onClick={clearCache}
-                className="text-muted-foreground rounded-full px-3 py-1 text-xs font-medium hover:bg-accent"
+                className="text-muted-foreground rounded-sm px-3 py-1 text-xs font-medium hover:bg-accent"
               >
                 clear cache
               </button>

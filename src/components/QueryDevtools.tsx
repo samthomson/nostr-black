@@ -1,11 +1,12 @@
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 
 /**
- * React Query devtools — dev builds only (import.meta.env.DEV is statically
- * replaced, so this renders nothing and the package is tree-shaken out of
- * production builds). Keeps App.tsx a pure provider stack.
+ * React Query devtools — dev builds only. Button bottom-right, above the
+ * ConnectionStatus bar, so it stays clear of the centred app column.
  */
 export const QueryDevtools = () =>
   import.meta.env.DEV ? (
-    <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
+    <div className="fixed right-3 bottom-10 z-[100000]">
+      <ReactQueryDevtools initialIsOpen={false} buttonPosition="relative" />
+    </div>
   ) : null;

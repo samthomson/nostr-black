@@ -38,6 +38,7 @@ vi.mock('@/net/net', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/net/net')>();
   return {
     ...actual,
+    isTor: async () => true,
     queryRelay: vi.fn(async (url: string, filters: NostrFilter[]) => {
       relayCalls.push({ url, filters });
       const kinds = filters[0].kinds ?? [];
@@ -124,8 +125,10 @@ describe('Index logged out', () => {
       </TestApp>,
     );
 
-    expect(await screen.findByText('nostr.black')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /log in/i })).toBeTruthy();
+    // The brand renders redacted: real text 'nostr black', visually hidden.
+    expect(await screen.findByText('nostr')).toBeTruthy();
+    expect(await screen.findByText('black')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^start$/i })).toBeTruthy();
     expect(relayCalls).toHaveLength(0);
   });
 });

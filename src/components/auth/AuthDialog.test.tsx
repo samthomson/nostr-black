@@ -39,31 +39,29 @@ beforeEach(() => {
 });
 
 describe('AuthDialog', () => {
-  it('offers signer logins only: extension, bunker, signer app', async () => {
+  it('offers method tabs: extension, signer, nsec', async () => {
     renderDialog();
 
-    expect(
-      await screen.findByRole('button', { name: /log in with browser extension/i }),
-    ).toBeTruthy();
-    expect(screen.getByRole('button', { name: /log in with bunker/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /open signer app/i })).toBeTruthy();
+    expect(await screen.findByRole('tab', { name: /extension/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /^signer$/i })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: /^nsec$/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /log in with extension/i })).toBeTruthy();
   });
+
   it('the nsec option is memory-only: input present, nothing persisted', async () => {
+    const user = userEvent.setup();
     renderDialog();
-    await screen.findByRole('button', { name: /log in with bunker/i });
+    await user.click(await screen.findByRole('tab', { name: /^nsec$/i }));
 
-    // The privacy contract now: exactly two inputs (bunker URI + session-only
-    // nsec), and the nsec path must state its memory-only nature.
-    const inputs = document.body.querySelectorAll('input');
-    expect(inputs).toHaveLength(2);
-    const placeholders = Array.from(inputs).map((i) => (i as HTMLInputElement).placeholder);
-    expect(placeholders).toContain('bunker://…');
-    expect(placeholders.find((p) => p.includes('session only'))).toBeTruthy();
+    const input = screen.getByLabelText(/secret key/i) as HTMLInputElement;
+    expect(input.placeholder).toMatch(/session only/i);
   });
+
   it('refuses an nsec pasted into the bunker field', async () => {
     const user = userEvent.setup();
     renderDialog();
 
+    await user.click(await screen.findByRole('tab', { name: /^signer$/i }));
     const field = await screen.findByRole('textbox', { name: /bunker uri/i });
     const nsec = nip19.nsecEncode(generateSecretKey());
     await user.type(field, nsec);
@@ -80,7 +78,7 @@ describe('AuthDialog', () => {
     renderDialog(onClose);
 
     await user.click(
-      await screen.findByRole('button', { name: /log in with browser extension/i }),
+      await screen.findByRole('button', { name: /log in with extension/i }),
     );
 
     await waitFor(() => expect(mockExtension).toHaveBeenCalledTimes(1));
@@ -93,6 +91,7 @@ describe('AuthDialog', () => {
     mockBunker.mockResolvedValue(undefined);
     renderDialog(onClose);
 
+    await user.click(await screen.findByRole('tab', { name: /^signer$/i }));
     const field = await screen.findByRole('textbox', { name: /bunker uri/i });
     await user.type(field, 'bunker://abc@relay.example');
     await user.click(screen.getByRole('button', { name: /log in with bunker/i }));
@@ -101,5 +100,12 @@ describe('AuthDialog', () => {
       expect(mockBunker).toHaveBeenCalledWith('bunker://abc@relay.example'),
     );
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('signer tab exposes open signer app', async () => {
+    const user = userEvent.setup();
+    renderDialog();
+    await user.click(await screen.findByRole('tab', { name: /^signer$/i }));
+    expect(screen.getByRole('button', { name: /open signer app/i })).toBeTruthy();
   });
 });

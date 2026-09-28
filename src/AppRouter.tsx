@@ -1,5 +1,6 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { ScrollToTop } from "./components/ScrollToTop";
+import { AuthGate } from "./components/AuthGate";
 
 import Index from "./pages/Index";
 import { NIP19Page } from "./pages/NIP19Page";
@@ -13,11 +14,11 @@ export function AppRouter() {
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Index />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/debug" element={<DebugPage />} />
+        <Route path="/settings" element={<AuthGate><SettingsPage /></AuthGate>} />
+        <Route path="/debug" element={<AuthGate><DebugPage /></AuthGate>} />
         <Route path="/crash" element={<CrashPage />} />
         {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}
-        <Route path="/:nip19" element={<NIP19Page />} />
+        <Route path="/:nip19" element={<AuthGate network><NIP19Page /></AuthGate>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>

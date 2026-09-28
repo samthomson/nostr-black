@@ -45,11 +45,11 @@ const EventPage = ({ identifier }: { identifier: string }) => {
     return (
       <Card>
         <CardContent className="flex gap-3 p-4">
-          <Skeleton className="size-10 shrink-0 rounded-full" />
-          <div className="w-full space-y-2">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-4 w-3/5" />
+          <Skeleton className="size-8 shrink-0 rounded-sm" />
+          <div className="w-full space-y-1.5">
+            <Skeleton className="h-2.5 w-20" />
+            <Skeleton className="h-2.5 w-full" />
+            <Skeleton className="h-2.5 w-3/5" />
           </div>
         </CardContent>
       </Card>

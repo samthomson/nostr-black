@@ -39,7 +39,7 @@ const Throwers = () => {
           key={label}
           type="button"
           onClick={() => setErrorFactory(fn)}
-          className="w-full rounded-full border px-4 py-2 text-sm font-medium hover:bg-accent"
+          className="w-full rounded-sm border px-4 py-2 text-sm font-medium hover:bg-accent"
         >
           throw: {label}
         </button>

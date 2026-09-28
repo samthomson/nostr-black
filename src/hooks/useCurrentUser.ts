@@ -59,6 +59,7 @@ export function useCurrentUser() {
   return {
     user,
     users,
-    ...author.data,
+    metadata: author.data?.metadata,
+    event: author.data?.event,
   };
 }

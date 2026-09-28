@@ -1,20 +1,58 @@
 import { useState } from 'react';
 import { useIsTor } from '@/hooks/useEgress';
 import { Button } from '@/components/ui/button';
+import { hasClearnetConsent } from '@/lib/torConsent';
+import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
+import { cn } from '@/lib/utils';
+
+/** The tor warning content: reused by the full-page gate (logged-in app)
+ * and inline on the landing (logged-out) — one copy, two surfaces. */
+export const GateNotice = ({ onOverride }: { onOverride: () => void }) => (
+  <div className="flex flex-col items-center gap-3">
+    <p className="text-muted-foreground max-w-md">
+      can't confirm you're on tor. nostr.black protects your ip from relays
+      by routing everything through tor.
+    </p>
+    <div className="flex flex-col items-center gap-2">
+      <Button
+        variant="privacy"
+        onClick={onOverride}
+        className={cn(
+          PRIVACY_BUTTON,
+          'h-auto flex-col gap-0.5 py-1.5',
+          PRIVACY.public.className,
+        )}
+      >
+        <span>continue without tor</span>
+        <span className="text-[10px] font-normal leading-none opacity-70">
+          (my ip, my choice)
+        </span>
+      </Button>
+      <a
+        href="https://www.torproject.org/download/"
+        rel="noopener noreferrer"
+        target="_blank"
+        className="text-muted-foreground text-xs underline underline-offset-4"
+      >
+        get tor browser
+      </a>
+    </div>
+  </div>
+);
 
 /**
- * Web-build network gate. nostr.black warns when it can't confirm Tor:
- * relays would learn the user's IP. Identical in dev and production, and
- * re-checked on every load — the override is per-page-view only, never
- * persisted (a settings toggle to skip the check may come later). The
- * desktop build is tor-by-construction (or explicitly toggled to direct)
- * and never mounts this gate.
+ * Web-build network gate for the authenticated app. nostr.black warns when
+ * it can't confirm Tor: relays would learn the user's IP. Identical in dev
+ * and production, re-checked on every load — the override is per-page-view
+ * only, never persisted. The desktop build is tor-by-construction (or
+ * explicitly toggled to clearnet) and never mounts this gate. The
+ * logged-out landing embeds GateNotice instead — no double homepage.
  */
 export const TorGate = ({ children }: { children: React.ReactNode }) => {
   const onTor = useIsTor();
   const [override, setOverride] = useState(false);
 
-  if (override || onTor === true) return <>{children}</>;
+  if (override || onTor === true || hasClearnetConsent()) return <>{children}</>;
 
   if (onTor === undefined) {
     return (
@@ -28,21 +66,7 @@ export const TorGate = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-4 text-center">
       <h1 className="text-4xl font-bold tracking-tight">nostr.black</h1>
-      <p className="text-muted-foreground max-w-md">
-        can't confirm you're on tor. nostr.black protects your ip from relays
-        by routing everything through tor.
-      </p>
-      <div className="flex flex-col items-center gap-3">
-        <Button asChild className="rounded-full">
-          <a href="https://www.torproject.org/download/" rel="noopener noreferrer" target="_blank">
-            get tor browser
-          </a>
-        </Button>
-        <Button variant="ghost" onClick={() => setOverride(true)} className="rounded-full text-muted-foreground">
-          continue without tor (my ip, my choice)
-        </Button>
-        <p className="text-muted-foreground text-xs">desktop app with bundled tor — coming soon</p>
-      </div>
+      <GateNotice onOverride={() => setOverride(true)} />
     </div>
   );
 };

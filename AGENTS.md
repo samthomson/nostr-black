@@ -34,6 +34,9 @@ Plan of record: `README.md`.
 - const arrow functions; async/await, no `.then()` ladders
 - lowercase UI copy (labels, buttons, status)
 - shadcn/ui components (`src/components/ui`), Tailwind, `cn()` merge; skeletons for loading, spinners only for buttons
+- buttons / chips / tags are near-square — use `rounded-sm` only (token is ~2px). never `rounded-md`/`rounded-lg`/`rounded-xl`/`rounded-full`/pills for chrome
+- privacy is colour: private=black, public=white, greys between (low/medium/high). all privacy-coloured buttons/pills/labels use the consts in `src/lib/privacy.ts` (text is the inversion) — never ad-hoc colours
+- `PrivacyTag` and similar inline labels inherit font-size from their parent — never hardcode `text-[Npx]` / `text-xs` on them
 - read `App.tsx`, `AppRouter.tsx`, `NostrProvider` before touching them
 - json is always formatted with 4-space indentation
 - one concern per file: e.g. AppRouter is just routes, templates live in their own component
