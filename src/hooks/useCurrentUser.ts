@@ -3,7 +3,6 @@ import { nip46Pool } from '@/net/nip46';
 import type { NPool } from '@nostrify/nostrify';
 import { useCallback, useMemo } from 'react';
 
-import { useAuthor } from './useAuthor.ts';
 import { useKeystore } from '@/auth/useKeystore';
 import { keystoreUser } from '@/auth/keystoreUser';
 
@@ -54,12 +53,8 @@ export function useCurrentUser() {
   );
 
   const user = users[0] as NUser | undefined;
-  const author = useAuthor(user?.pubkey);
 
-  return {
-    user,
-    users,
-    metadata: author.data?.metadata,
-    event: author.data?.event,
-  };
+  // Identity only. Whoever needs the current user's kind 0 asks the store
+  // for it with `useProfile` — the same entity everyone else reads.
+  return { user, users };
 }

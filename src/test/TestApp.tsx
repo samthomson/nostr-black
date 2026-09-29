@@ -1,14 +1,26 @@
+import { afterEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createHead, UnheadProvider } from '@unhead/react/client';
 import { BrowserRouter } from 'react-router-dom';
 import { NostrLoginProvider } from '@nostrify/react/login';
-import { useNostrSync } from '@/hooks/useNostrSync';
 import { AppProvider } from '@/components/AppProvider';
 import { KeystoreProvider } from '@/auth/KeystoreProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { UserState } from '@/contexts/UserStateContext';
 import { UserStateProvider } from '@/components/UserStateProvider';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
+import { DataProvider } from '@/data/DataProvider';
+import { store } from '@/data/store';
+import { scheduler } from '@/data/scheduler';
+import { clearFeeds } from '@/data/feed/registry';
+import { resetPersist } from '@/data/persist/persist';
+
+afterEach(async () => {
+  store.clear();
+  scheduler.reset();
+  clearFeeds();
+  await resetPersist();
+});
 
 interface TestAppProps {
   children: React.ReactNode;
@@ -41,9 +53,11 @@ export function TestApp({ children, userState }: TestAppProps) {
         <KeystoreProvider>
         <QueryClientProvider client={queryClient}>
           <NostrLoginProvider storageKey='test-login'>
+            <DataProvider>
               <BrowserRouter>
-                <TestAppRoot>{children}</TestAppRoot>
+                {children}
               </BrowserRouter>
+            </DataProvider>
           </NostrLoginProvider>
         </QueryClientProvider>
         </KeystoreProvider>
@@ -52,11 +66,5 @@ export function TestApp({ children, userState }: TestAppProps) {
     </UnheadProvider>
   );
 }
-
-/** Runs the global sync hook inside the provider tree, then renders the test subject. */
-const TestAppRoot = ({ children }: { children: React.ReactNode }) => {
-  useNostrSync();
-  return <>{children}</>;
-};
 
 export default TestApp;

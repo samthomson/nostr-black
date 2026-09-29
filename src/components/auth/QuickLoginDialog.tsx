@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuthor } from '@/hooks/useAuthor';
+import { useProfile } from '@/data/hooks/useProfile';
 import { useLoginActions } from '@/hooks/useLoginActions';
 
 interface QuickLoginDialogProps {
@@ -35,12 +35,11 @@ export function QuickLoginDialog({
   onClose,
   onOtherLogin,
 }: QuickLoginDialogProps) {
-  const author = useAuthor(pubkey);
+  const { metadata, pending } = useProfile(pubkey);
   const login = useLoginActions();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState('');
 
-  const metadata = author.data?.metadata;
   const displayName =
     metadata?.display_name || metadata?.name || genericName(pubkey);
 
@@ -64,7 +63,7 @@ export function QuickLoginDialog({
         </DialogHeader>
 
         <div className="flex flex-col items-center gap-3 py-4">
-          {author.isLoading ? (
+          {pending ? (
             <>
               <Skeleton className="size-20 rounded-sm" />
               <Skeleton className="h-5 w-32" />

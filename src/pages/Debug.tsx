@@ -1,5 +1,4 @@
 import { useSeoMeta } from '@unhead/react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { Shell } from '@/components/Shell';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -7,6 +6,7 @@ import { useUserState } from '@/hooks/useUserState';
 import { useEgress, useIsTor } from '@/hooks/useEgress';
 import type { EgressEntry } from '@/hooks/useEgress';
 import { useMediaCache } from '@/hooks/useMediaCache';
+import { useStoreSummary } from '@/data/hooks/useStoreSummary';
 import { hostOf } from '@/lib/format';
 
 /** Per-relay view: all queries to one relay grouped into one row. */
@@ -62,44 +62,18 @@ const groupByRelay = (entries: EgressEntry[]): RelayGroup[] => {
   );
 };
 
-/** Tree node for the data section: domain → queries → data summaries. */
+/** Tree node for the data section: domain → count. */
 interface DataNode {
   label: string;
   count?: string;
   children?: DataNode[];
 }
 
-/** Short, human label for a key segment: hex/bech32 ids become #abc123. */
-const leafLabel = (raw: string): string =>
-  raw.length > 16 && /^[a-z0-9]+$/i.test(raw) ? `#${raw.slice(0, 6)}` : raw;
-
-const dataTree = (entries: { queryKey: readonly unknown[]; state: { status: string; data: unknown } }[]): DataNode[] => {
-  const domains = new Map<string, { label: string; count: number; byName: Map<string, number> }>();
-  for (const q of entries) {
-    const key = q.queryKey.map((k) => (typeof k === 'string' ? k : '')).filter(Boolean);
-    const domain = key[0] === 'outbox' ? 'feed pipeline' : key[0] === 'profile' ? 'profiles' : key[0] === 'nostr' ? 'accounts' : (key[0] ?? 'other');
-    const leaf = leafLabel(
-      key[0] === 'outbox' || key[0] === 'profile' || key[0] === 'nostr' ? (key[1] ?? key[0]) : (key[1] ?? '…'),
-    );
-    const d = domains.get(domain) ?? { label: domain, count: 0, byName: new Map() };
-    const data = q.state.data;
-    const n = Array.isArray(data)
-      ? data.length
-      : data && typeof data === 'object' && 'notes' in (data as Record<string, unknown>)
-        ? (data as { notes: unknown[] }).notes.length
-        : data === undefined
-          ? 0
-          : 1;
-    d.count += n;
-    d.byName.set(leaf, (d.byName.get(leaf) ?? 0) + n);
-    domains.set(domain, d);
-  }
-  return [...domains.values()].map((d) => ({
-    label: d.label,
-    count: `${d.count} items`,
-    children: [...d.byName.entries()].map(([label, n]) => ({ label, count: String(n) })),
-  }));
-};
+const dataTree = (summary: { events: number; replaceable: number; addressable: number }): DataNode[] => [
+  { label: 'events', count: `${summary.events} items` },
+  { label: 'replaceable', count: `${summary.replaceable} items` },
+  { label: 'addressable', count: `${summary.addressable} items` },
+];
 
 const runTestQuery = async () => {
   const result = document.getElementById('test-query-result')!;
@@ -116,8 +90,7 @@ const DebugBody = () => {
   const { state: userState } = useUserState();
   const entries = useEgress();
   const onTor = useIsTor();
-  const queryClient = useQueryClient();
-  const cache = queryClient.getQueryCache().getAll();
+  const held = useStoreSummary();
   const media = useMediaCache();
 
   const relayGroups = groupByRelay(entries);
@@ -228,7 +201,7 @@ const DebugBody = () => {
           </span>
         </p>
         <ul className="space-y-1 font-mono text-xs">
-          {dataTree(cache).map((node) => (
+          {dataTree(held).map((node) => (
             <li key={node.label}>
               <details>
                 <summary className="cursor-pointer">

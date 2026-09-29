@@ -3,100 +3,43 @@
  * Nothing outside `src/net` may call `fetch`, construct a `WebSocket`, or
  * `invoke` a network command (see AGENTS.md, privacy doctrine).
  *
- * Runtime detection lives in runtime.ts (imported, never inlined).
- * The transport is picked once at module init:
- *   - web: direct browser connections behind the Tor gate
- *   - desktop: Rust/arti over invoke (Tor by construction)
+ * Internals are split by concern: `egress.ts` records what happened,
+ * `io.ts` owns the two raw transports (Tauri bridge on desktop, WebSocket
+ * on web), and `pool.ts` keeps connections warm and multiplexes many
+ * requests over each one. This file is the protocol layer and the public
+ * surface everything else imports.
  */
 
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { verifyEvent as nostrVerifyEvent } from 'nostr-tools';
-import { invoke } from '@tauri-apps/api/core';
 import { isDesktop } from './runtime';
+import { leaseRelay, logPublish, type Frame, type LeaseHandlers } from './pool';
+import {
+  logQuery,
+  logQueryDone,
+  setEventRoute,
+  setTransportRoute,
+  type EgressEntry,
+  type TransportRoute,
+} from './egress';
 
-// ─── Egress log (debug page) ─────────────────────────────────────────────
-
-export type TransportRoute = 'tor' | 'direct';
-
-/** Current desktop transport route. Synced from the toggle (ConnectionStatus)
- * so every query log entry and note-provenance stamp reflects reality. */
-let transportRoute: TransportRoute | undefined = isDesktop() ? 'tor' : undefined;
-export const setTransportRoute = (route: TransportRoute): void => {
-  transportRoute = route;
-};
-export const getTransportRoute = (): TransportRoute | undefined => transportRoute;
-
-/** Flip the desktop route: Rust picks it up for every new connection; the
- * optimistic JS stamp is corrected by the next query's reported route. */
-export const setRoutePreference = async (tor: boolean): Promise<void> => {
-  setTransportRoute(tor ? 'tor' : 'direct');
-  if (isDesktop()) {
-    const { invoke: inv } = await import('@tauri-apps/api/core');
-    await inv('set_tor_enabled', { enabled: tor });
-  }
-};
-
-/** Per-event provenance: the route of the exact query that returned the
- * event — not the current toggle state. Set by the desktop transport from
- * what Rust reports; browser fetches leave it unset (web shows no pill). */
-const eventRoutes = new WeakMap<NostrEvent, TransportRoute>();
-export const getEventRoute = (event: NostrEvent): TransportRoute | undefined =>
-  eventRoutes.get(event);
-
-/** NIP-42: signs kind 22242 auth events when a relay challenges us.
- * Wired from the current user's signer (NostrSync); unset when logged out —
- * auth-gated relays then show status "auth" instead of serving silently. */
-export type AuthSigner = (challenge: string, relay: string) => Promise<NostrEvent>;
-let authSigner: AuthSigner | undefined;
-export const setAuthSigner = (signer: AuthSigner | undefined): void => {
-  authSigner = signer;
-};
-
-export interface EgressEntry {
-  kind: 'ws' | 'http' | 'query';
-  url: string;
-  ts: number;
-  kinds?: string;
-  authors?: number;
-  events?: number;
-  ms?: number;
-  status?: 'ok' | 'empty' | 'error' | 'auth';
-  /** CLOSED reason or failure text — surfaced on the debug page. */
-  reason?: string;
-  route?: TransportRoute;
-}
-
-/** Ring buffer of recent egress, rendered by the debug page. */
-export const egressLog: EgressEntry[] = [];
-
-export const logEgress = (kind: EgressEntry['kind'], url: string): void => {
-  egressLog.unshift({ kind, url, ts: Date.now() });
-  if (egressLog.length > 200) egressLog.pop();
-};
-
-export const logQuery = (url: string, kinds: number[], authors?: number): EgressEntry => {
-  const entry: EgressEntry = {
-    kind: 'query',
-    url,
-    ts: Date.now(),
-    kinds: kinds.join(','),
-    authors,
-    status: 'ok',
-    route: transportRoute,
-  };
-  egressLog.unshift(entry);
-  if (egressLog.length > 200) egressLog.pop();
-  return entry;
-};
-
-export const logQueryDone = (entry: EgressEntry, events: number, ms: number): void => {
-  entry.events = events;
-  entry.ms = ms;
-  // 'auth'/'error' set during the run are the diagnosis — keep them.
-  if (entry.status !== 'auth' && entry.status !== 'error') {
-    entry.status = events > 0 ? 'ok' : 'empty';
-  }
-};
+export {
+  egressLog,
+  egressSession,
+  resetEgressSession,
+  getEventRoute,
+  getTransportRoute,
+  logEgress,
+  logQuery,
+  logQueryDone,
+  setAuthSigner,
+  setRoutePreference,
+  setTransportRoute,
+  type AuthSigner,
+  type EgressEntry,
+  type TransportRoute,
+} from './egress';
+export { closeAllConnections, poolStatus, setMaxConnections, getMaxConnections } from './pool';
 
 // ─── Tor check ────────────────────────────────────────────────────────────
 
@@ -124,174 +67,53 @@ export const isTor = async (): Promise<boolean> => {
   }
 };
 
-// ─── Relay query transport ────────────────────────────────────────────────
+// ─── NIP-01 REQ loop ─────────────────────────────────────────────────────
 
 export interface RelayQueryOpts {
   timeoutMs?: number;
   signal?: AbortSignal;
 }
 
-// ─── Relay IO adapters ────────────────────────────────────────────────────
-// One protocol loop (runQuery) over two transports: the Tauri streaming
-// bridge on desktop, a browser WebSocket on web.
-
-export interface RelayIo {
-  send: (text: string) => void;
-  frames: AsyncGenerator<string>;
-  close: () => void;
-}
-
-type BridgeEvent = { type: 'Frame'; data: string } | { type: 'Closed'; reason?: string };
-
-export const openBridge = async (url: string): Promise<{ io: RelayIo; route: TransportRoute }> => {
-  const { invoke: inv } = await import('@tauri-apps/api/core');
-  const { listen } = await import('@tauri-apps/api/event');
-  const { id, route } = await inv<{ id: number; route: TransportRoute }>('relay_stream_start', { url });
-
-  const queue: string[] = [];
-  let resolveNext: (() => void) | null = null;
-  let closed = false;
-  const unlistenP = listen<BridgeEvent>(`relay://${id}`, (e) => {
-    if (e.payload.type === 'Frame') queue.push(e.payload.data);
-    else closed = true;
-    resolveNext?.();
-  });
-
-  async function* frameGen(): AsyncGenerator<string> {
-    await unlistenP; // don't miss frames before the listener attaches
-    while (true) {
-      if (queue.length > 0) {
-        yield queue.shift()!;
-        continue;
-      }
-      if (closed) return;
-      await new Promise<void>((r) => {
-        resolveNext = r;
-      });
-      resolveNext = null;
-    }
-  }
-
-  const io: RelayIo = {
-    send: (text) => {
-      void inv('relay_stream_send', { id, message: text }).catch(() => {/* socket gone */});
-    },
-    frames: frameGen(),
-    close: () => {
-      closed = true;
-      resolveNext?.();
-      void inv('relay_stream_stop', { id }).catch(() => {/* already gone */});
-      void unlistenP.then((un) => un());
-    },
-  };
-  return { io, route };
-};
-
-const openBrowser = (url: string): RelayIo => {
-  logEgress('ws', url);
-  const ws = new WebSocket(url);
-  const queue: string[] = [];
-  const pendingSends: string[] = []; // buffered until the socket opens
-  let resolveNext: (() => void) | null = null;
-  let closed = false;
-
-  async function* frameGen(): AsyncGenerator<string> {
-    while (true) {
-      if (queue.length > 0) {
-        yield queue.shift()!;
-        continue;
-      }
-      if (closed) return;
-      await new Promise<void>((r) => {
-        resolveNext = r;
-      });
-      resolveNext = null;
-    }
-  }
-
-  ws.onopen = () => {
-    for (const text of pendingSends.splice(0)) ws.send(text);
-  };
-  ws.onmessage = (m) => {
-    queue.push(m.data as string);
-    resolveNext?.();
-  };
-  ws.onclose = () => {
-    closed = true;
-    resolveNext?.();
-  };
-  ws.onerror = () => {
-    closed = true;
-    resolveNext?.();
-  };
-
-  return {
-    send: (text) => {
-      if (ws.readyState === WebSocket.CONNECTING) pendingSends.push(text);
-      else ws.send(text);
-    },
-    frames: frameGen(),
-    close: () => {
-      try {
-        ws.close();
-      } catch {
-        // already closed
-      }
-    },
-  };
-};
-
-// ─── NIP-01 REQ loop with NIP-42 AUTH ────────────────────────────────────
+const QUERY_TIMEOUT_MS = 10_000;
+const PUBLISH_TIMEOUT_MS = 5_000;
 
 let subSeq = 0;
 
-/** Protocol loop shared by both transports: REQ → EVENT* → EOSE|CLOSED,
- * answering AUTH challenges (kind 22242 via the module auth signer) and
- * re-sending the REQ once authenticated. */
+/**
+ * One REQ over a warm connection: REQ → EVENT* → EOSE|CLOSED, then CLOSE so
+ * the relay stops streaming. The socket itself stays open for the next
+ * caller. NIP-42 is answered by the pool; we only re-send on `onAuthed`.
+ */
 const runQuery = async (
   url: string,
   filters: NostrFilter[],
   opts: RelayQueryOpts,
   entry: EgressEntry,
-  io: RelayIo,
-): Promise<NostrEvent[]> => {
+): Promise<{ events: NostrEvent[]; route: TransportRoute | undefined; eose: boolean }> => {
   const subId = `q${++subSeq}`;
   const events: NostrEvent[] = [];
   const seen = new Set<string>();
-  let finished = false;
-  let authed = false;
 
-  const timer = setTimeout(() => {
-    finished = true;
-    resolveFrame?.();
-  }, opts.timeoutMs ?? 10000);
-  opts.signal?.addEventListener('abort', () => {
-    finished = true;
-    resolveFrame?.();
-  }, { once: true });
+  // Whether the relay said "that is all I have" or we simply stopped
+  // waiting. The feed's completeness watermark cannot be computed without
+  // telling those two apart.
+  let eose = false;
 
-  let resolveFrame: (() => void) | null = null;
-  const sendReq = () => io.send(JSON.stringify(['REQ', subId, ...filters]));
+  let settle: () => void = () => {};
+  const done = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
 
-  sendReq();
+  // Wired once the lease exists; the handlers below are needed to create it.
+  let sendReq: () => void = () => {};
 
-  const frames = io.frames[Symbol.asyncIterator]();
-  while (!finished) {
-    const next = await Promise.race([frames.next(), new Promise<never>((r) => {
-      resolveFrame = () => r(undefined as never);
-    })]);
-    if (finished || next?.done) break;
-    let frame: unknown;
-    try {
-      frame = JSON.parse(next.value);
-    } catch {
-      continue;
-    }
-    const [type, a, b] = frame as [string, string, unknown];
+  const handlers: LeaseHandlers = {
+    onFrame(frame: Frame) {
+      const [type, a, b] = frame as [string, string, unknown];
 
-    if (type === 'EVENT' && a === subId) {
-      const event = b as NostrEvent;
-      if (!seen.has(event.id)) {
+      if (type === 'EVENT' && a === subId) {
+        const event = b as NostrEvent;
+        if (seen.has(event.id)) return;
         try {
           if (nostrVerifyEvent(event)) {
             seen.add(event.id);
@@ -300,138 +122,107 @@ const runQuery = async (
         } catch {
           // invalid event — skip
         }
+        return;
       }
-    } else if (type === 'EOSE' && a === subId) {
-      finished = true;
-    } else if (type === 'CLOSED' && a === subId) {
-      const reason = typeof b === 'string' ? b : '';
-      if (reason) entry.reason = reason.slice(0, 120);
-      if (reason.includes('auth')) entry.status = 'auth';
-      finished = true;
-    } else if (type === 'NOTICE' && typeof a === 'string') {
-      // Relays explain refusals via NOTICE (e.g. "auth-required") — capture
-      // it so "empty" can be told apart from "refused".
-      if (a) entry.reason = a.slice(0, 120);
-      if (a.includes('auth') && entry.status !== 'auth') {
-        entry.status = 'auth';
-        finished = true;
+      if (type === 'EOSE' && a === subId) {
+        eose = true;
+        settle();
+        return;
       }
-    } else if (type === 'AUTH') {
-      // NIP-42 challenge: sign kind 22242, answer, re-send the REQ.
-      if (authSigner && !authed) {
-        authed = true;
-        try {
-          const authEvent = await authSigner(a, url);
-          io.send(JSON.stringify(['AUTH', authEvent]));
-          sendReq();
-        } catch {
+      if (type === 'CLOSED' && a === subId) {
+        const reason = typeof b === 'string' ? b : '';
+        if (reason) entry.reason = reason.slice(0, 120);
+        if (reason.includes('auth')) entry.status = 'auth';
+        settle();
+        return;
+      }
+      if (type === 'NOTICE' && typeof a === 'string' && a) {
+        // Relays explain refusals via NOTICE (e.g. "auth-required") — capture
+        // it so "empty" can be told apart from "refused".
+        entry.reason = a.slice(0, 120);
+        if (a.includes('auth')) {
           entry.status = 'auth';
-          entry.reason = 'auth signing failed';
-          finished = true;
+          settle();
         }
-      } else if (!authSigner) {
-        entry.status = 'auth';
-        entry.reason = 'relay requires auth (not logged in)';
-        finished = true;
       }
-    }
+    },
+    onAuthed: () => sendReq(),
+    onAuthUnavailable(reason) {
+      entry.status = 'auth';
+      entry.reason = reason;
+      settle();
+    },
+    onDisconnect(reason) {
+      if (!entry.reason) entry.reason = reason;
+      settle();
+    },
+  };
+
+  const lease = await leaseRelay(url, subId, handlers);
+  sendReq = () => lease.send(JSON.stringify(['REQ', subId, ...filters]));
+
+  const timer = setTimeout(settle, opts.timeoutMs ?? QUERY_TIMEOUT_MS);
+  const onAbort = () => settle();
+  opts.signal?.addEventListener('abort', onAbort, { once: true });
+
+  try {
+    sendReq();
+    await done;
+  } finally {
+    clearTimeout(timer);
+    opts.signal?.removeEventListener('abort', onAbort);
+    lease.send(JSON.stringify(['CLOSE', subId]));
+    lease.release();
   }
 
-  clearTimeout(timer);
-  io.close();
-  return events;
+  return { events, route: lease.route, eose };
+};
+
+/** One relay's answer, with enough detail to judge how complete it is. */
+export interface RelayResult {
+  url: string;
+  events: NostrEvent[];
+  /** The relay sent EOSE. False means we stopped waiting — a coverage gap. */
+  eose: boolean;
+}
+
+export const queryRelayResult = async (
+  url: string,
+  filters: NostrFilter[],
+  opts: RelayQueryOpts = {},
+): Promise<RelayResult> => {
+  const entry = logQuery(url, filters[0]?.kinds ?? [], filters[0]?.authors?.length);
+  const startedAt = Date.now();
+
+  let events: NostrEvent[] = [];
+  let route: TransportRoute | undefined;
+  let eose = false;
+  try {
+    const result = await runQuery(url, filters, opts, entry);
+    events = result.events;
+    route = result.route;
+    eose = result.eose;
+  } catch (e) {
+    console.error(`[net] query failed for ${url}:`, e);
+    entry.status = 'error';
+    entry.reason = String(e).slice(0, 120);
+  }
+
+  // Rust reports the route actually used — source of truth for provenance.
+  if (route) {
+    entry.route = route;
+    setTransportRoute(route);
+  }
+  for (const e of events) setEventRoute(e, route ?? 'direct');
+  logQueryDone(entry, events.length, Date.now() - startedAt);
+  return { url, events, eose };
 };
 
 export const queryRelay = async (
   url: string,
   filters: NostrFilter[],
   opts: RelayQueryOpts = {},
-): Promise<NostrEvent[]> => {
-  const entry = logQuery(url, filters[0]?.kinds ?? [], filters[0]?.authors?.length);
-  const startedAt = Date.now();
-
-  let io: RelayIo;
-  let route: TransportRoute | undefined;
-  try {
-    if (isDesktop()) {
-      const bridge = await openBridge(url);
-      io = bridge.io;
-      route = bridge.route;
-    } else {
-      io = openBrowser(url);
-    }
-  } catch (e) {
-    console.error(`[net] connect failed for ${url}:`, e);
-    entry.status = 'error';
-    entry.reason = String(e).slice(0, 120);
-    logQueryDone(entry, 0, Date.now() - startedAt);
-    return [];
-  }
-
-  // Rust reports the route actually used — source of truth for provenance.
-  entry.route = route;
-  if (route) transportRoute = route;
-
-  let events: NostrEvent[] = [];
-  try {
-    events = await runQuery(url, filters, opts, entry, io);
-  } catch (e) {
-    entry.status = 'error';
-    entry.reason = String(e).slice(0, 120);
-  }
-  for (const e of events) eventRoutes.set(e, route ?? 'direct');
-  logQueryDone(entry, events.length, Date.now() - startedAt);
-  return events;
-};
-
-// Web: open a socket, push one EVENT, read the OK, close.
-const publishRelayBrowser = (url: string, event: NostrEvent): Promise<void> =>
-  new Promise((resolve) => {
-    logEgress('http', url);
-    let settled = false;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      try {
-        ws.close();
-      } catch {
-        // already closed
-      }
-      resolve();
-    };
-    const timer = setTimeout(finish, 5000);
-    const ws = new WebSocket(url);
-    ws.onopen = () => ws.send(JSON.stringify(['EVENT', event]));
-    ws.onmessage = (m) => {
-      try {
-        const msg = JSON.parse(m.data as string);
-        if (msg[0] === 'OK' && msg[1] === event.id) {
-          clearTimeout(timer);
-          finish();
-        }
-      } catch {
-        // malformed frame — wait for timer
-      }
-    };
-    ws.onerror = () => {
-      clearTimeout(timer);
-      finish();
-    };
-    ws.onclose = () => {
-      clearTimeout(timer);
-      finish();
-    };
-  });
-
-/** Push one signed event to every relay. Fire-and-forget per relay:
- * one relay being down never blocks the others. */
-export const publish = async (event: NostrEvent, relays: string[]): Promise<void> => {
-  const push = (url: string) =>
-    isDesktop()
-      ? invoke<void>('relay_publish', { url, event })
-      : publishRelayBrowser(url, event);
-  await Promise.allSettled(relays.map(push));
-};
+): Promise<NostrEvent[]> => (await queryRelayResult(url, filters, opts)).events;
 
 /** Fan-out to many relays, merge + dedupe. */
 export const queryRelays = async (
@@ -441,4 +232,48 @@ export const queryRelays = async (
 ): Promise<NostrEvent[]> => {
   const results = await Promise.all(urls.map((url) => queryRelay(url, filters, opts)));
   return [...new Map(results.flat().map((e) => [e.id, e])).values()];
+};
+
+// ─── Publish ─────────────────────────────────────────────────────────────
+
+/** One EVENT over the warm connection, waiting for its OK. */
+const publishToRelay = async (url: string, event: NostrEvent): Promise<void> => {
+  logPublish(url);
+  const subId = `p${++subSeq}`;
+
+  let settle: () => void = () => {};
+  const done = new Promise<void>((resolve) => {
+    settle = resolve;
+  });
+
+  // Wired once the lease exists; the handlers below are needed to create it.
+  let sendEvent: () => void = () => {};
+
+  const handlers: LeaseHandlers = {
+    onFrame(frame: Frame) {
+      const [type, id] = frame as [string, string];
+      if (type === 'OK' && id === event.id) settle();
+    },
+    onAuthed: () => sendEvent(),
+    onAuthUnavailable: () => settle(),
+    onDisconnect: () => settle(),
+  };
+
+  const lease = await leaseRelay(url, subId, handlers);
+  sendEvent = () => lease.send(JSON.stringify(['EVENT', event]));
+
+  const timer = setTimeout(settle, PUBLISH_TIMEOUT_MS);
+  try {
+    sendEvent();
+    await done;
+  } finally {
+    clearTimeout(timer);
+    lease.release();
+  }
+};
+
+/** Push one signed event to every relay. Fire-and-forget per relay:
+ * one relay being down never blocks the others. */
+export const publish = async (event: NostrEvent, relays: string[]): Promise<void> => {
+  await Promise.allSettled(relays.map((url) => publishToRelay(url, event)));
 };

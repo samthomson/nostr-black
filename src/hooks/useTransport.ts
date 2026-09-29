@@ -1,11 +1,12 @@
 import { useCallback, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
-import { publish, setRoutePreference } from '@/net/net';
+import { publish, setRoutePreference, getMaxConnections } from '@/net/net';
 import { isDesktop } from '@/net/runtime';
 import { useAppContext } from './useAppContext';
 import { useUserState } from './useUserState';
 import { useCurrentUser } from './useCurrentUser';
+import { relayPlan, flattenPlan } from '@/data/routing';
 
 /** Publish the user's NIP-65 relay list as a fresh kind 10002: signs with
  * the current signer, pushes to the relays the list itself names ∪
@@ -27,11 +28,12 @@ export function usePublishRelayList() {
         created_at: Math.floor(Date.now() / 1000),
       });
 
-      const targets = [...new Set([
-        ...relays.filter((r) => r.write).map((r) => r.url),
-        ...config.discoveryRelays,
-      ])];
-      await publish(event, targets);
+      // Routed against the *draft* list, not the synced one: this event is
+      // what changes where we write, so it has to reach the relays it names.
+      await publish(event, flattenPlan(relayPlan(
+        { kind: 'publish', event },
+        { myRelays: relays, discovery: config.discoveryRelays, authorRelays: new Map() },
+      )));
 
       updateUser((current) => ({
         ...current,
@@ -61,4 +63,9 @@ export function useRoutePreference() {
 /** The runtime check as a hook — components never import src/net directly. */
 export function useIsDesktop(): boolean {
   return isDesktop();
+}
+
+/** The pool's circuit budget. Static per runtime until settings can set it. */
+export function useMaxConnections(): number {
+  return getMaxConnections();
 }

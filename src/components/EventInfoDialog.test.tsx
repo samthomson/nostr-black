@@ -147,6 +147,61 @@ describe('Note UI', () => {
     expect(link.getAttribute('href')).not.toBe(`/${nip19.npubEncode(OP)}`);
   });
 
+  it('always shows reply, repost, like and zap controls', async () => {
+    render(
+      <TestApp>
+        <Note event={event} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByTestId('note-counts')).toBeTruthy();
+    expect(screen.getByLabelText('replies')).toBeTruthy();
+    expect(screen.getByLabelText('reposts')).toBeTruthy();
+    expect(screen.getByLabelText('likes')).toBeTruthy();
+    expect(screen.getByLabelText('zaps')).toBeTruthy();
+  });
+
+  it('shows reaction and repost counts from the store', async () => {
+    const parent = { ...event, id: '1'.repeat(64), tags: [] };
+    const { store } = await import('@/data/store');
+    store.ingest([
+      parent,
+      { ...event, id: '2'.repeat(64), kind: 7, pubkey: B, tags: [['e', parent.id]], content: '+' },
+      { ...event, id: '3'.repeat(64), kind: 6, pubkey: B, tags: [['e', parent.id]], content: '' },
+    ], 'wss://a/');
+
+    render(
+      <TestApp>
+        <Note event={parent} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByLabelText('likes')).toHaveTextContent('1');
+    expect(screen.getByLabelText('reposts')).toHaveTextContent('1');
+  });
+
+  it('links the reply count to the note so the thread can open', async () => {
+    const parent = { ...event, id: '1'.repeat(64), tags: [] };
+    const reply = {
+      ...event,
+      id: '2'.repeat(64),
+      tags: [['e', parent.id, '', 'reply']],
+      content: 'a reply',
+    };
+    const { store } = await import('@/data/store');
+    store.ingest([parent, reply], 'wss://a/');
+
+    render(
+      <TestApp>
+        <Note event={parent} />
+      </TestApp>,
+    );
+
+    const link = await screen.findByRole('link', { name: 'replies' });
+    expect(link).toHaveTextContent('1');
+    expect(link.getAttribute('href')).toContain('nevent1');
+  });
+
   it('renders @npub mentions as profile links with resolved names', async () => {
     const mention = nip19.npubEncode(B);
     const withMention = { ...event, content: `hey ${'@' + mention} look` };

@@ -6,7 +6,7 @@ import { Shell } from '@/components/Shell';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useUserState } from '@/hooks/useUserState';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { usePublishRelayList } from '@/hooks/useTransport';
+import { usePublishRelayList, useMaxConnections } from '@/hooks/useTransport';
 import { useMediaCache } from '@/hooks/useMediaCache';
 import { Link } from 'react-router-dom';
 
@@ -73,6 +73,7 @@ const SettingsBody = () => {
   const [newRelay, setNewRelay] = useState('');
   const [publishState, setPublishState] = useState<'idle' | 'publishing' | 'done' | 'error'>('idle');
   const mediaCache = useMediaCache();
+  const maxConnections = useMaxConnections();
   const [maxMb, setMaxMbInput] = useState(String(config.mediaCacheMaxMb));
 
   // Local working copy of the relay list; "publish" writes it to nostr as a
@@ -231,6 +232,24 @@ const SettingsBody = () => {
             </button>
           </div>
         )}
+      </Section>
+
+      <Section title="connections" hint="how many relays this app talks to at once">
+        {/* TODO: make this editable — it should drive setMaxConnections() from
+            src/net/pool.ts, and drop automatically when tor is on, since a
+            circuit costs far more than a socket. read-only until then. */}
+        <div className="flex items-center gap-2">
+          <input
+            className="w-20 rounded-md border bg-transparent px-2 py-1 font-mono text-xs disabled:opacity-40"
+            value={maxConnections}
+            disabled
+            readOnly
+            aria-label="max simultaneous relay connections"
+          />
+          <span className="text-muted-foreground text-xs">
+            simultaneous relay connections — not editable yet
+          </span>
+        </div>
       </Section>
 
       <Section title="media" hint="fetched through the same route as relay traffic">

@@ -14,7 +14,7 @@ import { UserStateProvider } from '@/components/UserStateProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { QueryDevtools } from '@/components/QueryDevtools';
-import { useNostrSync } from '@/hooks/useNostrSync';
+import { DataProvider } from '@/data/DataProvider';
 import AppRouter from './AppRouter';
 
 const head = createHead({
@@ -49,7 +49,9 @@ export function App() {
         <KeystoreProvider>
         <QueryClientProvider client={queryClient}>
           <NostrLoginProvider storageKey='nostr:login'>
+            <DataProvider>
               <AppRoot />
+            </DataProvider>
           </NostrLoginProvider>
           <QueryDevtools />
         </QueryClientProvider>
@@ -66,7 +68,6 @@ export function App() {
  * below it. Replaces the old null-rendering NostrSync mount slot.
  */
 const AppRoot = () => {
-  useNostrSync();
   return (
     <TooltipProvider>
       <Toaster />

@@ -7,8 +7,7 @@ import {
   type NostrConnectStatus,
   useNostrLogin,
 } from '@nostrify/react/login';
-import { useUserState } from '@/hooks/useUserState';
-import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
+import { useRouting } from '@/data/hooks/useRouting';
 
 // NOTE: This file should not be edited except for adding new login methods.
 // nostr.black supports signers only — there is intentionally no nsec method.
@@ -19,7 +18,7 @@ export { generateNostrConnectParams, generateNostrConnectURI } from '@nostrify/r
 export function useLoginActions() {
 
   const { logins, addLogin, setLogin, removeLogin } = useNostrLogin();
-  const { state: userState } = useUserState();
+  const { myWrite } = useRouting();
 
   // Add a login and promote it to be the current user. Without the
   // setLogin call the new login is appended to the end of the array,
@@ -55,16 +54,11 @@ export function useLoginActions() {
       const login = await NLogin.fromNostrConnect(params, nip46Pool as unknown as NPool, { signal, onStatus });
       addAndActivate(login);
     },
-    // Get the relay URLs for NIP-46 nostrconnect communication
+    // Get the relay URLs for NIP-46 nostrconnect communication. Our write
+    // relays, falling back to discovery so the remote signer has several
+    // connection options during the handshake.
     getRelayUrls(): string[] {
-      const relays = userState.relayMetadata.relays
-        .filter((r) => r.write)
-        .map((r) => r.url);
-      // Fall back to the app default relays if the user has none configured,
-      // so the remote signer has multiple connection options during handshake.
-      return relays.length > 0
-        ? relays
-        : DEFAULT_DISCOVERY_RELAYS;
+      return myWrite;
     },
     // Log out the current user
     async logout(): Promise<void> {

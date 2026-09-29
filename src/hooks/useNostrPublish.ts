@@ -2,9 +2,7 @@ import { publish as publishEvent } from "@/net/net";
 import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 
 import { useCurrentUser } from "./useCurrentUser";
-import { useAppContext } from "./useAppContext";
-import { useUserState } from './useUserState';
-import { writeRelays } from "@/lib/appRelays";
+import { useRouting } from '@/data/hooks/useRouting';
 
 import type { NostrEvent } from "@nostrify/nostrify";
 
@@ -17,8 +15,7 @@ export function useNostrPublish(): UseMutationResult<
   EventTemplate
 > {
   const { user } = useCurrentUser();
-  const { config } = useAppContext();
-  const { state: userState } = useUserState();
+  const { relays } = useRouting();
 
   return useMutation({
     mutationFn: async (t: EventTemplate) => {
@@ -37,7 +34,7 @@ export function useNostrPublish(): UseMutationResult<
           created_at: t.created_at ?? Math.floor(Date.now() / 1000),
         });
 
-        await publishEvent(event, writeRelays(userState, config));
+        await publishEvent(event, relays({ kind: 'publish', event }));
         return event;
       } else {
         throw new Error("User is not logged in");

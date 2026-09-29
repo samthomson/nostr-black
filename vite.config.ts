@@ -23,6 +23,8 @@ export default defineConfig(() => ({
       '**/dist/**',
       '**/{vite,eslint}.config.*',
       '.agents/**',
+      // Live-network checks are opt-in: `npm run test:live`.
+      '**/*.live.test.ts',
     ],
     onConsoleLog(log) {
       return !log.includes("React Router Future Flag Warning");

@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip10, nip19 } from 'nostr-tools';
-import { CornerDownRight, Info, Loader2, Repeat2 } from 'lucide-react';
+import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Repeat2, Zap } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
-import { useAuthor } from '@/hooks/useAuthor';
-import { useEventById } from '@/hooks/useEventById';
+import { useProfile } from '@/data/hooks/useProfile';
+import { useEvent } from '@/data/hooks/useEvent';
+import { useEngagement } from '@/data/hooks/useEngagement';
+import type { Engagement } from '@/data/engagement';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,8 +27,7 @@ const NostrRef = ({ bech32 }: { bech32: string }) => {
     decoded.type === 'npub' ? decoded.data
     : decoded.type === 'nprofile' ? decoded.data.pubkey
     : undefined;
-  const author = useAuthor(pubkey);
-  const metadata = author.data?.metadata;
+  const { metadata } = useProfile(pubkey);
 
   let label = `${bech32.slice(0, 10)}…`;
   if (decoded.type === 'npub' || decoded.type === 'nprofile') {
@@ -163,8 +164,7 @@ const repostedEvent = (event: NostrEvent): NostrEvent | null => {
 
 /** Author block: name linking to the profile route. */
 const AuthorLink = ({ pubkey }: { pubkey: string }) => {
-  const author = useAuthor(pubkey);
-  const metadata = author.data?.metadata;
+  const { metadata } = useProfile(pubkey);
   const displayName = metadata?.display_name || metadata?.name;
   const npub = npubOf(pubkey);
   const href = profileHref(pubkey);
@@ -215,8 +215,8 @@ const ReplyContext = ({
   settled: boolean;
   loaded: boolean;
 }) => {
-  const author = useAuthor(parentPubkey);
-  const name = author.data?.metadata?.display_name || author.data?.metadata?.name;
+  const { metadata } = useProfile(parentPubkey);
+  const name = metadata?.display_name || metadata?.name;
   const href = parentPubkey ? profileHref(parentPubkey) : undefined;
   const shortNpub = parentPubkey ? `${npubOf(parentPubkey).slice(0, 10)}…` : '';
   return (
@@ -242,6 +242,60 @@ const ReplyContext = ({
  * Separate from content (below read-more) and visually distinct: muted relay
  * pills vs a colored route pill.
  */
+const fmt = (n: number, capped: boolean): string => `${n}${capped ? '+' : ''}`;
+
+const NoteCounts = ({
+  event,
+  engagement,
+  linkReplies,
+  onReplies,
+}: {
+  event: NostrEvent;
+  engagement: Engagement;
+  linkReplies: boolean;
+  onReplies?: () => void;
+}) => {
+  const { replies, reactions, downvotes, reposts, zaps, capped } = engagement;
+  const href = linkReplies ? eventHref(event.id, event.pubkey) : undefined;
+    const count = (n: number) => (n > 0 ? fmt(n, capped) : null);
+
+  const replyInner = (
+    <>
+      <MessageCircle className="size-4" />
+      {count(replies)}
+    </>
+  );
+
+  return (
+    <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
+      {onReplies ? (
+        <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={onReplies} aria-label="replies">
+          {replyInner}
+        </button>
+      ) : href ? (
+        <Link to={href} className="inline-flex items-center gap-1 hover:text-foreground" aria-label="replies">
+          {replyInner}
+        </Link>
+      ) : (
+        <span className="inline-flex items-center gap-1" aria-label="replies">{replyInner}</span>
+      )}
+      <span className="inline-flex items-center gap-1" aria-label="reposts">
+        <Repeat2 className="size-4" />
+        {count(reposts)}
+      </span>
+      <span className="inline-flex items-center gap-1" aria-label="likes" data-testid="count-likes">
+        <Heart className="size-4" />
+        {count(reactions)}
+        {downvotes > 0 && <span>{fmt(downvotes, capped)}</span>}
+      </span>
+      <span className="inline-flex items-center gap-1" aria-label="zaps">
+        <Zap className="size-4" />
+        {count(zaps)}
+      </span>
+    </div>
+  );
+};
+
 const NoteMeta = ({
   foundOn,
   route,
@@ -281,13 +335,12 @@ const NoteMeta = ({
     </div>
   );
 };
-export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: string[]; route?: 'tor' | 'direct' }) => {
+export const Note = ({ event, foundOn, route, linkReplies = true, onReplies }: { event: NostrEvent; foundOn?: string[]; route?: 'tor' | 'direct'; linkReplies?: boolean; onReplies?: () => void }) => {
   const { config } = useAppContext();
   const showMedia = config.mediaEnabled;
-  const author = useAuthor(event.pubkey);
+  const { metadata, pending: authorPending } = useProfile(event.pubkey);
   const [expanded, setExpanded] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
-  const metadata = author.data?.metadata;
   const displayName = metadata?.display_name || metadata?.name;
   const npub = npubOf(event.pubkey);
   const href = profileHref(event.pubkey);
@@ -319,10 +372,11 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
     ...(nip10Ref?.reply?.relays ?? nip10Ref?.root?.relays ?? []),
     ...(foundOn ?? []),
   ];
-  const parent = useEventById(parentId, taggedAuthor, parentHints);
+  const parent = useEvent(parentId, { author: taggedAuthor, hints: parentHints });
+  const engagement = useEngagement(event.id);
   // Prefer the fetched parent's pubkey; fall back to NIP-10 e-tag author or
   // a lone p tag. Never profiles.at(-1).
-  const parentPubkey = parent.data?.pubkey ?? taggedAuthor;
+  const parentPubkey = parent.event?.pubkey ?? taggedAuthor;
   const clientTag = event.tags.find(([n]) => n === 'client')?.[1];
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
 
@@ -332,7 +386,7 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
         <ProfileAvatar
           pubkey={event.pubkey}
           metadata={metadata}
-          waitingMetadata={author.isPending && !metadata}
+          waitingMetadata={authorPending}
           className="size-10 shrink-0"
         />
         <div className="min-w-0 flex-1 space-y-1">
@@ -368,12 +422,12 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
           {parentId && (
             <ReplyContext
               parentPubkey={parentPubkey}
-              settled={!parent.isPending}
-              loaded={!!parent.data}
+              settled={!parent.pending}
+              loaded={!!parent.event}
             />
           )}
-          {parentId && parent.data && (
-            <EmbeddedNote event={parent.data} />
+          {parentId && parent.event && (
+            <EmbeddedNote event={parent.event} />
           )}
 
           {/* Body: hard max-height with a bottom fade when collapsed — no
@@ -419,6 +473,7 @@ export const Note = ({ event, foundOn, route }: { event: NostrEvent; foundOn?: s
             </Button>
           )}
 
+          <NoteCounts event={event} engagement={engagement} linkReplies={linkReplies} onReplies={onReplies} />
           <NoteMeta foundOn={foundOn} route={route} client={clientTag} />
         </div>
       </CardContent>

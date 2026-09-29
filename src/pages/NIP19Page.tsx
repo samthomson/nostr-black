@@ -1,11 +1,8 @@
 import { nip19 } from 'nostr-tools';
 import { useParams } from 'react-router-dom';
-import type { NostrEvent } from '@nostrify/nostrify';
-import { useAppContext } from '@/hooks/useAppContext';
-import { useUserState } from '@/hooks/useUserState';
-import { useEventFetch } from '@/hooks/useProfile';
-import { readRelays } from '@/lib/appRelays';
+import { useEvent } from '@/data/hooks/useEvent';
 import { Note } from '@/components/Note';
+import { Thread } from '@/components/Thread';
 import { Shell } from '@/components/Shell';
 import { ProfilePage } from '@/pages/Profile';
 import type { DecodeResult } from '@/lib/format';
@@ -30,16 +27,13 @@ const pointerOf = (
  * same Note component the feed uses.
  */
 const EventPage = ({ identifier }: { identifier: string }) => {
-  const { config } = useAppContext();
-  const { state: userState } = useUserState();
-
   const decoded = nip19.decode(identifier);
   const pointer = pointerOf(decoded);
-  const relays = pointer
-    ? [...new Set([...pointer.relays, ...readRelays(userState, config)])]
-    : [];
-
-  const { data: event, isLoading } = useEventFetch(pointer?.id, relays);
+  const author = decoded.type === 'nevent' ? decoded.data.author : undefined;
+  const { event, pending: isLoading } = useEvent(pointer?.id, {
+    author,
+    hints: pointer?.relays,
+  });
 
   if (isLoading) {
     return (
@@ -68,7 +62,12 @@ const EventPage = ({ identifier }: { identifier: string }) => {
     );
   }
 
-  return <Note event={event as NostrEvent} />;
+  return (
+    <div className="space-y-3">
+      <Note event={event} linkReplies={false} />
+      <Thread parent={event.id} author={event.pubkey} />
+    </div>
+  );
 };
 
 export function NIP19Page() {

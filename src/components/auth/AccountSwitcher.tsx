@@ -12,6 +12,7 @@ import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useLoggedInAccounts, type Account } from '@/hooks/useLoggedInAccounts';
 import { useKeystore } from '@/auth/useKeystore';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useProfile } from '@/data/hooks/useProfile';
 
 interface AccountSwitcherProps {
   onAddAccountClick: () => void;
@@ -23,7 +24,8 @@ interface AccountSwitcherProps {
  * the persisted account list and add-account. One UX, two login sources.
  */
 export function AccountSwitcher({ onAddAccountClick }: AccountSwitcherProps) {
-  const { user: activeUser, metadata } = useCurrentUser();
+  const { user: activeUser } = useCurrentUser();
+  const { metadata } = useProfile(activeUser?.pubkey);
   const { otherUsers, setLogin, removeLogin } = useLoggedInAccounts();
   const { unlocked: keystoreActive, pubkey: keystorePubkey, logout: lockKeystore } = useKeystore();
 

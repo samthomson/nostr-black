@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { egressLog, isTor as probeTor, type EgressEntry } from '@/net/net';
+import { egressLog, egressSession, isTor as probeTor, type EgressEntry } from '@/net/net';
 
 export type { EgressEntry };
 
@@ -20,10 +20,20 @@ export function useIsTor(): boolean | undefined {
 
 /** Live snapshot of the egress ring buffer, polled. Debug/status surfaces. */
 export function useEgress(intervalMs = 500): EgressEntry[] {
-  const [entries, setEntries] = useState<EgressEntry[]>([...egressLog]);
+  const [entries, setEntries] = useState<EgressEntry[]>(() => [...egressLog]);
   useEffect(() => {
     const timer = setInterval(() => setEntries([...egressLog]), intervalMs);
     return () => clearInterval(timer);
   }, [intervalMs]);
   return entries;
 }
+
+/** Session totals that only increase — the status bar, not the ring buffer. */
+export const useEgressSession = (intervalMs = 500): { relays: number; events: number } => {
+  const [session, setSession] = useState(egressSession);
+  useEffect(() => {
+    const timer = setInterval(() => setSession(egressSession()), intervalMs);
+    return () => clearInterval(timer);
+  }, [intervalMs]);
+  return session;
+};

@@ -1,6 +1,6 @@
 import type { NostrEvent, NostrFilter, NostrRelayMsg } from '@nostrify/types';
 import { isDesktop } from './runtime';
-import { openBridge, type RelayIo } from './net';
+import { openBridge, type RelayIo } from './io';
 
 /**
  * Minimal NIP-46 relay adapter: implements exactly the two methods

@@ -1,25 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
 import { useSeoMeta } from '@unhead/react';
-import { nip19 } from 'nostr-tools';
 import { Shell } from '@/components/Shell';
 import { Note } from '@/components/Note';
-import {
-  useProfileRelays,
-  useProfileMetadata,
-  useProfileNotes,
-  useProfileFollows,
-  useProfileFollowerSample,
-} from '@/hooks/useProfile';
+import { useAuthorNotes } from '@/data/hooks/useAuthorNotes';
+import { useFollowers } from '@/data/hooks/useFollowers';
+import { useFollowList, useProfile, useRelayList } from '@/data/hooks/useProfile';
 import { npubOf } from '@/lib/format';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
-import { useAuthor } from '@/hooks/useAuthor';
 import { useAsset } from '@/hooks/useAsset';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Loader2 } from 'lucide-react';
-
-const PROFILE_NOTE_KINDS = [1, 6, 16, 20, 21, 1063, 30023];
-const NOTES_LIMIT = 50;
 
 /** Banner image through the same media path as avatars. */
 const ProfileBanner = ({ url }: { url: string | undefined }) => {
@@ -48,6 +38,11 @@ const ProfileBanner = ({ url }: { url: string | undefined }) => {
   );
 };
 
+const countLabel = (n: number, pending: boolean, capped = false): string => {
+  if (pending) return '—';
+  return `${n}${capped ? '+' : ''}`;
+};
+
 /**
  * Profile page: banner + avatar + identity + counts, then their notes from
  * their own declared relays (outbox model).
@@ -55,24 +50,18 @@ const ProfileBanner = ({ url }: { url: string | undefined }) => {
 const ProfileBody = ({ pubkey }: { pubkey: string }) => {
   const npub = npubOf(pubkey);
 
-  const relayLists = useProfileRelays(pubkey);
-  const writeRelays = relayLists.data?.write ?? [];
-  // Seed from useAuthor (same cache as account chip / feed) so the picture
-  // is not blank while the outbox-aware profile metadata query catches up.
-  const author = useAuthor(pubkey);
-  const metadata = useProfileMetadata(pubkey, writeRelays);
-  const notes = useProfileNotes(pubkey, writeRelays, PROFILE_NOTE_KINDS, NOTES_LIMIT);
-  const follows = useProfileFollows(pubkey, writeRelays);
-  const followers = useProfileFollowerSample(pubkey, writeRelays);
+  // The same entities the feed and the account chip already resolved: one
+  // kind 0 and one kind 10002 in the store, whoever asked for them first.
+  const { metadata: about, pending: waitingMetadata } = useProfile(pubkey);
+  const relayList = useRelayList(pubkey);
+  const writeRelays = relayList.list.write;
 
-  const about = metadata.data ?? author.data?.metadata;
-  const waitingMetadata = !about && (metadata.isPending || author.isPending);
+  const notes = useAuthorNotes(pubkey);
+  const follows = useFollowList(pubkey);
+  const followers = useFollowers(pubkey);
+
   const displayName = about?.display_name || about?.name || `${npub.slice(0, 10)}…`;
-  const relayCount = (relayLists.data?.write.length ?? 0) + (relayLists.data?.read.length ?? 0);
-  // write∪read may double-count; prefer unique from the map if available
-  const uniqueRelays = relayLists.data
-    ? new Set([...relayLists.data.write, ...relayLists.data.read]).size
-    : 0;
+  const uniqueRelays = new Set([...relayList.list.write, ...relayList.list.read]).size;
 
   return (
     <div className="space-y-3">
@@ -112,24 +101,36 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
 
           <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <span>
-              <span className="text-foreground font-medium">{follows.data ?? '—'}</span>
+              <span className="text-foreground font-medium">{countLabel(follows.count, follows.pending)}</span>
               {' '}following
             </span>
             <span>
-              <span className="text-foreground font-medium">{followers.data ?? '—'}</span>
+              <span className="text-foreground font-medium">{countLabel(followers.count, followers.pending, followers.capped)}</span>
               {' '}followers
             </span>
             <span>
-              <span className="text-foreground font-medium">{uniqueRelays || relayCount || '—'}</span>
+              <span className="text-foreground font-medium">{uniqueRelays || '—'}</span>
               {' '}relays
             </span>
           </div>
         </div>
       </div>
 
-      {notes.isLoading || relayLists.isLoading ? (
-        Array.from({ length: 3 }, (_, i) => (
-          <Card key={i}>
+      {notes.pending && (
+        <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 rounded-sm border bg-background/95 px-3 py-2 text-xs text-muted-foreground backdrop-blur">
+          <Loader2 className="size-3.5 animate-spin" />
+          fetching events{notes.notes.length > 0 ? ` — ${notes.notes.length} so far` : '…'}
+        </div>
+      )}
+      {!notes.pending && notes.notes.length > 0 && (
+        <p className="px-1 text-xs text-muted-foreground">{notes.notes.length} notes</p>
+      )}
+
+      {notes.notes.map((event) => <Note key={event.id} event={event} />)}
+
+      {notes.pending &&
+        Array.from({ length: notes.notes.length > 0 ? 2 : 3 }, (_, i) => (
+          <Card key={`s${i}`}>
             <CardContent className="flex gap-3 p-4">
               <Skeleton className="size-8 shrink-0 rounded-sm" />
               <div className="w-full space-y-1.5">
@@ -138,8 +139,9 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
               </div>
             </CardContent>
           </Card>
-        ))
-      ) : (notes.data ?? []).length === 0 ? (
+        ))}
+
+      {!notes.pending && notes.notes.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="px-8 py-12 text-center">
             <p className="text-muted-foreground mx-auto max-w-sm">
@@ -149,28 +151,13 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
             </p>
           </CardContent>
         </Card>
-      ) : (
-        (notes.data ?? []).map((event) => <Note key={event.id} event={event} />)
       )}
     </div>
   );
 };
 
 export const ProfilePage = ({ pubkey }: { pubkey: string }) => {
-  const meta = useQuery({
-    queryKey: ['profile', 'title', pubkey],
-    queryFn: async () => {
-      try {
-        return `${npubOf(pubkey).slice(0, 16)}… — nostr.black`;
-      } catch {
-        return 'profile — nostr.black';
-      }
-    },
-    initialData: `${npubOf(pubkey).slice(0, 16)}… — nostr.black`,
-    staleTime: Infinity,
-  });
-  void nip19;
-  useSeoMeta({ title: meta.data });
+  useSeoMeta({ title: `${npubOf(pubkey).slice(0, 16)}… — nostr.black` });
 
   return (
     <Shell>

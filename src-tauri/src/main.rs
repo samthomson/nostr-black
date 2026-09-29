@@ -114,62 +114,6 @@ async fn fetch_asset(url: String) -> Result<MediaPayload, String> {
     })
 }
 
-/// Push one signed event: open TLS over the current route, send EVENT, wait
-/// for OK/CLOSED (or 5s), close. Mirrors the browser publish path.
-#[tauri::command]
-async fn relay_publish(url: String, event: serde_json::Value) -> Result<bool, String> {
-    let host_port = url
-        .trim_start_matches("wss://")
-        .trim_end_matches('/')
-        .to_string();
-    let (host, port) = parse_host_port(&host_port);
-
-    let stream = connect_stream(&host, port).await?;
-    let ws_url = format!("wss://{host_port}/");
-    let (mut ws, _resp) = tokio_tungstenite::client_async_tls_with_config(
-        ws_url,
-        stream,
-        None,
-        None,
-    )
-    .await
-    .map_err(|e| format!("ws handshake: {e}"))?;
-
-    ws.send(Message::Text(
-        serde_json::json!(["EVENT", event]).to_string().into(),
-    ))
-    .await
-    .map_err(|e| e.to_string())?;
-
-    let deadline = tokio::time::sleep(std::time::Duration::from_secs(5));
-    tokio::pin!(deadline);
-    loop {
-        tokio::select! {
-            _ = &mut deadline => break,
-            msg = ws.next() => match msg {
-                Some(Ok(Message::Text(text))) => {
-                    let frame: serde_json::Value =
-                        serde_json::from_str(&text).unwrap_or(serde_json::Value::Null);
-                    match frame.get(0).and_then(|v| v.as_str()) {
-                        Some("OK") => {
-                            let ok = frame.get(2).and_then(|v| v.as_bool()).unwrap_or(false);
-                            let _ = ws.close(None).await;
-                            return Ok(ok);
-                        }
-                        Some("CLOSED") => break,
-                        _ => {}
-                    }
-                }
-                Some(Ok(_)) => {}
-                Some(Err(e)) => return Err(format!("ws: {e}")),
-                None => break,
-            }
-        }
-    }
-    let _ = ws.close(None).await;
-    Ok(false)
-}
-
 /// Streaming relay bridge: JS owns the protocol (REQ/AUTH/EVENT/CLOSE, and
 /// NIP-46) over a long-lived socket; Rust owns the bytes. One bridge instead
 /// of per-feature commands — the same stream serves queries (with NIP-42
@@ -533,8 +477,7 @@ fn main() {
             fetch_asset,
             relay_stream_start,
             relay_stream_send,
-            relay_stream_stop,
-            relay_publish
+            relay_stream_stop
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

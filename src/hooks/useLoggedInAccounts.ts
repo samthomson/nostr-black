@@ -1,11 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-import { NSchema as n } from '@nostrify/nostrify';
 import type { NostrEvent, NostrMetadata } from '@nostrify/nostrify';
 import { useNostrLogin } from '@nostrify/react/login';
-import { readRelays } from '@/lib/appRelays';
-import { useAppContext } from '@/hooks/useAppContext';
-import { useUserState } from '@/hooks/useUserState';
-import { queryRelays } from '@/net/net';
+import { useProfiles } from '@/data/hooks/useProfile';
 
 export interface Account {
   id: string;
@@ -14,50 +9,25 @@ export interface Account {
   metadata: NostrMetadata;
 }
 
+/**
+ * The persisted logins, each with their kind 0. The metadata comes from the
+ * store, so switching accounts shows a profile the feed or a note already
+ * resolved rather than refetching it under a different cache key.
+ */
 export function useLoggedInAccounts() {
   const { logins, setLogin, removeLogin } = useNostrLogin();
-  const { config } = useAppContext();
-  const { state: userState } = useUserState();
+  const profiles = useProfiles(logins.map((l) => l.pubkey));
 
-  const { data: authors = [], isLoading } = useQuery({
-    queryKey: ['nostr', 'logins', logins.map((l) => l.id).join(';')],
-    enabled: logins.length > 0,
-    queryFn: async (c) => {
-      const events = await queryRelays(
-        readRelays(userState, config),
-        [{ kinds: [0], authors: logins.map((l) => l.pubkey) }],
-        { signal: c.signal },
-      );
-
-      return logins.map(({ id, pubkey }): Account => {
-        const event = events.find((e) => e.pubkey === pubkey);
-        try {
-          const metadata = n.json().pipe(n.metadata()).parse(event?.content);
-          return { id, pubkey, metadata, event };
-        } catch {
-          return { id, pubkey, metadata: {}, event };
-        }
-      });
-    },
-    retry: 3,
+  const authors: Account[] = logins.map(({ id, pubkey }) => {
+    const profile = profiles.get(pubkey);
+    return { id, pubkey, event: profile?.event, metadata: profile?.metadata ?? {} };
   });
-
-  // Current user is the first login
-  const currentUser: Account | undefined = (() => {
-    const login = logins[0];
-    if (!login) return undefined;
-    const author = authors.find((a) => a.id === login.id);
-    return { metadata: {}, ...author, id: login.id, pubkey: login.pubkey };
-  })();
-
-  // Other users are all logins except the current one
-  const otherUsers = (authors || []).slice(1) as Account[];
 
   return {
     authors,
-    currentUser,
-    otherUsers,
-    isLoading,
+    currentUser: authors[0],
+    otherUsers: authors.slice(1),
+    isLoading: [...profiles.values()].some((p) => p.pending),
     setLogin,
     removeLogin,
   };
