@@ -1,0 +1,231 @@
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import { nip19 } from 'nostr-tools';
+
+import { EventInfoDialog } from './EventInfoDialog';
+import { Note } from './Note';
+import { TestApp } from '@/test/TestApp';
+
+const A = 'a'.repeat(64);
+const B = 'b'.repeat(64);
+const EVENT_ID = 'e'.repeat(64);
+
+const event = {
+  id: EVENT_ID,
+  pubkey: A,
+  created_at: 1700000600,
+  kind: 1,
+  tags: [
+    ['p', B],
+    ['e', 'f'.repeat(64)],
+    ['t', 'nostr'],
+  ],
+  content: 'hello',
+  sig: 'd'.repeat(128),
+};
+
+const renderDialog = () =>
+  render(
+    <TestApp>
+      <EventInfoDialog event={event} open onOpenChange={vi.fn()} />
+    </TestApp>,
+  );
+
+describe('EventInfoDialog', () => {
+  it('links the author profile and the event id', async () => {
+    renderDialog();
+
+    const authorLink = await screen.findByRole('link', { name: new RegExp(nip19.npubEncode(A)) });
+    expect(authorLink.getAttribute('href')).toBe(`/${nip19.npubEncode(A)}`);
+
+    const idLink = screen.getByRole('link', { name: EVENT_ID });
+    expect(idLink.getAttribute('href')).toContain('nevent1');
+  });
+
+  it('parses p and e tags into profile/event links', async () => {
+    renderDialog();
+
+    const tagLinks = await screen.findAllByRole('link');
+    expect(
+      tagLinks.some((a) => a.getAttribute('href') === `/${nip19.npubEncode(B)}`),
+    ).toBe(true);
+    expect(tagLinks.some((a) => (a.getAttribute('href') ?? '').includes('nevent1'))).toBe(true);
+    expect(screen.getByText('[t]')).toBeTruthy();
+  });
+
+  it('shows the raw event json', async () => {
+    renderDialog();
+
+    expect(await screen.findByText(/"kind": 1/)).toBeTruthy();
+    expect(screen.getByText(/"content": "hello"/)).toBeTruthy();
+  });
+
+  it('never crashes on malformed ids — falls back to plain text', async () => {
+    render(
+      <TestApp>
+        <EventInfoDialog
+          event={{ ...event, id: 'not-hex!', tags: [['e', 'also-not-hex']] }}
+          open
+          onOpenChange={vi.fn()}
+        />
+      </TestApp>,
+    );
+
+    expect(await screen.findByText('not-hex!')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: 'not-hex!' })).toBeNull();
+  });
+});
+
+describe('Note UI', () => {
+  it('links the author name to their profile route', async () => {
+    render(
+      <TestApp>
+        <Note event={event} />
+      </TestApp>,
+    );
+
+    // npub fallback name until metadata resolves — still a profile link.
+    const link = await screen.findByRole('link', { name: /^npub1/ });
+    expect(link.getAttribute('href')).toBe(`/${nip19.npubEncode(A)}`);
+  });
+
+  it('shows which relays the note was found on', async () => {
+    render(
+      <TestApp>
+        <Note event={event} foundOn={['wss://one.example/', 'wss://two.example/']} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByText('one.example')).toBeTruthy();
+    expect(await screen.findByText('two.example')).toBeTruthy();
+  });
+
+  it('shows reply context for legacy positional e tags (no NIP-10 markers)', async () => {
+    const legacyReply = {
+      ...event,
+      id: 'e'.repeat(64),
+      tags: [
+        ['e', '1'.repeat(64)], // root, positional
+        ['e', '2'.repeat(64)], // reply target, positional (last e)
+        ['p', B],
+      ],
+      content: 'agreed, same here',
+    };
+    render(
+      <TestApp>
+        <Note event={legacyReply} />
+      </TestApp>,
+    );
+
+    // Lone p tag names the replied-to author before the parent loads.
+    expect(await screen.findByText(/replying to/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: new RegExp(nip19.npubEncode(B).slice(0, 10)) })).toBeTruthy();
+  });
+
+  it('names the reply-target author, not the thread OP, when both are tagged', async () => {
+    const OP = 'c'.repeat(64);
+    const replyToReply = {
+      ...event,
+      id: 'e'.repeat(64),
+      tags: [
+        ['e', '1'.repeat(64), '', 'root', OP],
+        ['e', '2'.repeat(64), '', 'reply', B],
+        ['p', OP],
+        ['p', B],
+      ],
+      content: 'replying to the reply',
+    };
+    render(
+      <TestApp>
+        <Note event={replyToReply} />
+      </TestApp>,
+    );
+
+    // Must link B (reply e-tag author), never OP just because they're also a p.
+    const link = await screen.findByRole('link', { name: /replying to/ });
+    expect(link.getAttribute('href')).toBe(`/${nip19.npubEncode(B)}`);
+    expect(link.getAttribute('href')).not.toBe(`/${nip19.npubEncode(OP)}`);
+  });
+
+  it('always shows reply, repost, like and zap controls', async () => {
+    render(
+      <TestApp>
+        <Note event={event} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByTestId('note-counts')).toBeTruthy();
+    expect(screen.getByLabelText('replies')).toBeTruthy();
+    expect(screen.getByLabelText('reposts')).toBeTruthy();
+    expect(screen.getByLabelText('likes')).toBeTruthy();
+    expect(screen.getByLabelText('zaps')).toBeTruthy();
+  });
+
+  it('shows reaction and repost counts from the store', async () => {
+    const parent = { ...event, id: '1'.repeat(64), tags: [] };
+    const { store } = await import('@/data/store');
+    store.ingest([
+      parent,
+      { ...event, id: '2'.repeat(64), kind: 7, pubkey: B, tags: [['e', parent.id]], content: '+' },
+      { ...event, id: '3'.repeat(64), kind: 6, pubkey: B, tags: [['e', parent.id]], content: '' },
+    ], 'wss://a/');
+
+    render(
+      <TestApp>
+        <Note event={parent} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByLabelText('likes')).toHaveTextContent('1');
+    expect(screen.getByLabelText('reposts')).toHaveTextContent('1');
+  });
+
+  it('links the reply count to the note so the thread can open', async () => {
+    const parent = { ...event, id: '1'.repeat(64), tags: [] };
+    const reply = {
+      ...event,
+      id: '2'.repeat(64),
+      tags: [['e', parent.id, '', 'reply']],
+      content: 'a reply',
+    };
+    const { store } = await import('@/data/store');
+    store.ingest([parent, reply], 'wss://a/');
+
+    render(
+      <TestApp>
+        <Note event={parent} />
+      </TestApp>,
+    );
+
+    const link = await screen.findByRole('link', { name: 'replies' });
+    expect(link).toHaveTextContent('1');
+    expect(link.getAttribute('href')).toContain('nevent1');
+  });
+
+  it('renders @npub mentions as profile links with resolved names', async () => {
+    const mention = nip19.npubEncode(B);
+    const withMention = { ...event, content: `hey ${'@' + mention} look` };
+    render(
+      <TestApp>
+        <Note event={withMention} />
+      </TestApp>,
+    );
+
+    const mentionLink = await screen.findByRole('link', { name: `@${mention.slice(0, 10)}…` });
+    expect(mentionLink.getAttribute('href')).toBe(`/${mention}`);
+  });
+
+  it('renders a kind 6 repost with the embedded note', async () => {
+    const inner = { ...event, id: 'f'.repeat(64), content: 'the reposted words' };
+    const repost = { ...event, kind: 6, content: JSON.stringify(inner) };
+
+    render(
+      <TestApp>
+        <Note event={repost} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByText('the reposted words')).toBeTruthy();
+    expect(screen.getAllByText(/repost/).length).toBeGreaterThan(0);
+  });
+});

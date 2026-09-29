@@ -1,0 +1,37 @@
+{
+    "productName": "nostr.black",
+    "version": "0.1.0",
+    "identifier": "st.nostr.black",
+    "build": {
+        "beforeDevCommand": "npm run dev",
+        "devUrl": "http://localhost:8080",
+        "beforeBuildCommand": "npm run build",
+        "frontendDist": "../dist"
+    },
+    "app": {
+        "windows": [
+            {
+                "title": "nostr.black",
+                "width": 1100,
+                "height": 750,
+                "backgroundColor": "#000000"
+            }
+        ],
+        "security": {
+            "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' https: data: blob:; media-src 'self' https: blob:"
+        }
+    },
+    "plugins": {
+        "updater": {
+            "active": true,
+            "dialog": false,
+            "pubkey": "REPLACE_WITH_MINISIGN_PUBKEY",
+            "endpoints": ["https://nostr.black/updates/{{target}}/{{current_version}}"]
+        }
+    },
+    "bundle": {
+        "active": true,
+        "targets": "all",
+        "icon": ["icons/icon.png"]
+    }
+}

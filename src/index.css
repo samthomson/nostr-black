@@ -1,0 +1,132 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Minimal single dark theme. One set of tokens on :root — no light variant,
+ * no switching. Replace wholesale when a real brand theme exists.
+ */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-maroon: var(--maroon);
+  --color-privacy-private: var(--privacy-private);
+  --color-privacy-high: var(--privacy-high);
+  --color-privacy-medium: var(--privacy-medium);
+  --color-privacy-low: var(--privacy-low);
+  --color-privacy-public: var(--privacy-public);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-maroon-foreground: var(--maroon-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+:root {
+  /* Near-square corners: 4px base so rounded-sm ≈ 2px. Never pill. */
+  --radius: 0.25rem;
+
+  /* Off-black base: pure black is reserved for redaction marks so they
+     contrast against the app. Palette: white, off-black, greys, maroon. */
+  --background: hsl(240 5% 12%);
+  --foreground: hsl(0 0% 98%);
+
+  --card: hsl(240 5% 16%);
+  --card-foreground: hsl(0 0% 98%);
+
+  --popover: hsl(240 5% 18%);
+  --popover-foreground: hsl(0 0% 98%);
+
+  --primary: hsl(0 0% 98%);
+  --primary-foreground: hsl(240 6% 7%);
+
+  --secondary: hsl(240 5% 20%);
+  --secondary-foreground: hsl(0 0% 98%);
+
+  --muted: hsl(240 5% 17%);
+  --muted-foreground: hsl(0 0% 62%);
+
+  /* Quiet hover surface — grey, not maroon. Maroon is reserved for
+     deliberate accent moments via --maroon. */
+  --accent: hsl(240 5% 22%);
+  --accent-foreground: hsl(0 0% 98%);
+
+  /* Privacy grades — the colour semantics: private is black, public is
+     white, greys between. Text on a grade is the inversion (see
+     src/lib/privacy.ts). */
+  --privacy-private: hsl(240 6% 4%);
+  --privacy-high: hsl(240 5% 22%);
+  --privacy-medium: hsl(240 5% 42%);
+  --privacy-low: hsl(240 5% 68%);
+  --privacy-public: hsl(0 0% 98%);
+
+  /* Maroon: the one accent, used sparingly. */
+  --maroon: hsl(0 60% 42%);
+  --maroon-foreground: hsl(0 0% 98%);
+
+  --destructive: hsl(0 72% 45%);
+  --destructive-foreground: hsl(0 0% 98%);
+
+  --border: hsl(240 5% 24%);
+  --input: hsl(240 5% 24%);
+  --ring: hsl(240 5% 40%);
+}
+
+/* The redacted brand: blacked out until selected — then inverted. */
+.brand-mark {
+  background: #000;
+  color: transparent;
+  /* WebKit (WKWebView/Tauri) text-fill can override color — pin it. */
+  -webkit-text-fill-color: transparent;
+  border-radius: 0.125rem;
+  /* No horizontal padding — padding made the black bar wider than the
+     glyphs (selection looked like trailing spaces). */
+  padding: 0;
+  user-select: text;
+}
+.brand-mark::selection {
+  background: #fff;
+  color: #000;
+}
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentcolor);
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: "Fragment Mono", ui-monospace, monospace;
+  }
+}
