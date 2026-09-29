@@ -51,10 +51,11 @@ const ONION_PROBES = [
 ] as const;
 const PROBE_TIMEOUT_MS = 25000;
 
-/** Desktop is Tor by construction; the web build probes https onions. */
-export const isTor = async (): Promise<boolean> => {
-  if (isDesktop()) return true;
+let torKnown: boolean | undefined;
+let torInflight: Promise<boolean> | undefined;
 
+const probeOnions = async (): Promise<boolean> => {
+  if (isDesktop()) return true;
   try {
     await Promise.any(
       ONION_PROBES.map((url) =>
@@ -65,6 +66,22 @@ export const isTor = async (): Promise<boolean> => {
   } catch {
     return false;
   }
+};
+
+/** Tests only — each case must see a fresh probe. */
+export const resetTorProbe = (): void => {
+  torKnown = undefined;
+  torInflight = undefined;
+};
+
+/** Desktop is Tor by construction; the web build probes https onions. */
+export const isTor = async (): Promise<boolean> => {
+  if (torKnown !== undefined) return torKnown;
+  torInflight ??= probeOnions().then((result) => {
+    torKnown = result;
+    return result;
+  });
+  return torInflight;
 };
 
 // ─── NIP-01 REQ loop ─────────────────────────────────────────────────────

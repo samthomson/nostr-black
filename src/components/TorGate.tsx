@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useIsTor } from '@/hooks/useEgress';
 import { Button } from '@/components/ui/button';
-import { hasClearnetConsent } from '@/lib/torConsent';
+import { grantClearnetConsent, hasClearnetConsent } from '@/lib/torConsent';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
 
@@ -14,9 +14,12 @@ export const GateNotice = ({ onOverride }: { onOverride: () => void }) => (
       by routing everything through tor.
     </p>
     <div className="flex flex-col items-center gap-2">
-      <Button
-        variant="privacy"
-        onClick={onOverride}
+        <Button
+          variant="privacy"
+          onClick={() => {
+            grantClearnetConsent();
+            onOverride();
+          }}
         className={cn(
           PRIVACY_BUTTON,
           'h-auto flex-col gap-0.5 py-1.5',
@@ -43,10 +46,11 @@ export const GateNotice = ({ onOverride }: { onOverride: () => void }) => (
 /**
  * Web-build network gate for the authenticated app. nostr.black warns when
  * it can't confirm Tor: relays would learn the user's IP. Identical in dev
- * and production, re-checked on every load — the override is per-page-view
- * only, never persisted. The desktop build is tor-by-construction (or
- * explicitly toggled to clearnet) and never mounts this gate. The
- * logged-out landing embeds GateNotice instead — no double homepage.
+ * and production. The probe is once per tab; clearnet override is session
+ * storage so feed ↔ profile does not re-show this splash. A new tab re-asks.
+ * The desktop build is tor-by-construction (or explicitly toggled to
+ * clearnet) and never mounts this gate. The logged-out landing embeds
+ * GateNotice instead — no double homepage.
  */
 export const TorGate = ({ children }: { children: React.ReactNode }) => {
   const onTor = useIsTor();

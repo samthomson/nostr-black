@@ -3,12 +3,21 @@ import { egressLog, egressSession, isTor as probeTor, type EgressEntry } from '@
 
 export type { EgressEntry };
 
+/** Survives TorGate remounts (feed ↔ profile). Cleared in tests. */
+let lastTor: boolean | undefined;
+
+/** Tests only. */
+export const resetUseIsTor = (): void => {
+  lastTor = undefined;
+};
+
 /** Result of the web Tor probe (desktop is tor-by-construction: true). */
 export function useIsTor(): boolean | undefined {
-  const [onTor, setOnTor] = useState<boolean | undefined>(undefined);
+  const [onTor, setOnTor] = useState<boolean | undefined>(lastTor);
   useEffect(() => {
     let cancelled = false;
     void probeTor().then((result) => {
+      lastTor = result;
       if (!cancelled) setOnTor(result);
     });
     return () => {

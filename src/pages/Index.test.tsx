@@ -6,6 +6,7 @@ import { scheduler } from '@/data/scheduler';
 import { clearFeeds } from '@/data/feed/registry';
 import { createPersister } from '@/data/persist/persist';
 import { closeDatabase, deleteDatabase } from '@/data/persist/db';
+import { resetUseIsTor } from '@/hooks/useEgress';
 
 import Index from './Index';
 import { TestApp } from '@/test/TestApp';
@@ -99,6 +100,8 @@ beforeEach(() => {
   releaseFeed = undefined;
   holdFeed = undefined;
   window.localStorage.clear();
+  window.sessionStorage.clear();
+  resetUseIsTor();
   store.clear();
   scheduler.reset();
   clearFeeds();

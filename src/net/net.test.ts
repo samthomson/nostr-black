@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { isTor, egressLog, logEgress } from './net';
+import { isTor, egressLog, logEgress, resetTorProbe } from './net';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 beforeEach(() => {
   egressLog.length = 0;
+  resetTorProbe();
+  mockFetch.mockReset();
 });
 
 afterEach(() => {
@@ -34,6 +36,14 @@ describe('isTor', () => {
     mockFetch.mockRejectedValue(new DOMException('aborted', 'TimeoutError'));
 
     expect(await isTor()).toBe(false);
+  });
+
+  it('does not re-probe after the first answer', async () => {
+    mockFetch.mockResolvedValue({ ok: true, type: 'opaque' });
+    expect(await isTor()).toBe(true);
+    mockFetch.mockClear();
+    expect(await isTor()).toBe(true);
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });
 

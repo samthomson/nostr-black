@@ -14,11 +14,13 @@ import { store } from '@/data/store';
 import { scheduler } from '@/data/scheduler';
 import { clearFeeds } from '@/data/feed/registry';
 import { resetPersist } from '@/data/persist/persist';
+import { resetUseIsTor } from '@/hooks/useEgress';
 
 afterEach(async () => {
   store.clear();
   scheduler.reset();
   clearFeeds();
+  resetUseIsTor();
   await resetPersist();
 });
 

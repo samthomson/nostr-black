@@ -1,17 +1,29 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import { TorGate } from './TorGate';
 import { isTor } from '@/net/net';
+import { resetUseIsTor } from '@/hooks/useEgress';
 
 vi.mock('@/net/net', () => ({ isTor: vi.fn() }));
 const mockIsTor = vi.mocked(isTor);
 
 beforeEach(() => {
   mockIsTor.mockReset();
+  resetUseIsTor();
   window.sessionStorage.clear();
   window.localStorage.clear();
+});
+
+afterEach(() => {
+  resetUseIsTor();
+  window.sessionStorage.clear();
+});
+
+afterEach(() => {
+  resetUseIsTor();
+  window.sessionStorage.clear();
 });
 
 describe('TorGate', () => {
@@ -41,7 +53,7 @@ describe('TorGate', () => {
     expect(await screen.findByText('the app')).toBeTruthy();
   });
 
-  it('never locks the user out, and the override never persists across loads', async () => {
+  it('keeps the app on remount after continue without tor — feed/profile must not re-gate', async () => {
     mockIsTor.mockResolvedValue(false);
 
     const user = userEvent.setup();
@@ -54,14 +66,9 @@ describe('TorGate', () => {
     await user.click(await screen.findByRole('button', { name: /continue without tor/i }));
     expect(screen.getByText('the app')).toBeTruthy();
 
-    // The override was written nowhere: every storage a reload would keep
-    // is still empty after clicking through.
-    expect(window.sessionStorage.length).toBe(0);
     expect(window.localStorage.length).toBe(0);
     expect(document.cookie).toBe('');
 
-    // And the next mount (same document — storages survive it, as they
-    // would a reload) probes again instead of remembering.
     unmount();
     mockIsTor.mockClear();
     mockIsTor.mockResolvedValue(false);
@@ -70,7 +77,27 @@ describe('TorGate', () => {
         <p>the app</p>
       </TorGate>,
     );
-    expect(await screen.findByText(/can't confirm you're on tor/i)).toBeTruthy();
-    expect(mockIsTor).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('the app')).toBeTruthy();
+    expect(screen.queryByText(/can't confirm you're on tor/i)).toBeNull();
+  });
+
+  it('does not flash connecting after tor is already known', async () => {
+    mockIsTor.mockResolvedValue(true);
+
+    const { unmount } = render(
+      <TorGate>
+        <p>the app</p>
+      </TorGate>,
+    );
+    expect(await screen.findByText('the app')).toBeTruthy();
+    unmount();
+
+    render(
+      <TorGate>
+        <p>the app</p>
+      </TorGate>,
+    );
+    expect(screen.getByText('the app')).toBeTruthy();
+    expect(screen.queryByText('connecting…')).toBeNull();
   });
 });
