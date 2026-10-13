@@ -410,6 +410,118 @@ describe('followers wants', () => {
   });
 });
 
+describe('private feed wants', () => {
+  const GRAPH = 'aa'.repeat(32);
+  const ALIAS = 'ff'.repeat(32);
+  const D = 'dd'.repeat(32);
+  const NOTE = 'nn'.repeat(32);
+
+  it('asks my read relays for connections by graph id, not an outbox', async () => {
+    const { scheduler, lists } = build();
+    lists.set(ALICE, { read: [], write: ['wss://alice/'] });
+
+    scheduler.want({ type: 'connections', derivedIdentityId: GRAPH }, 'interactive');
+    await scheduler.flush();
+
+    expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://mine/']);
+    expect(queryRelay.mock.calls[0][1][0]).toMatchObject({
+      kinds: [30378],
+      '#c': [GRAPH],
+    });
+  });
+
+  it('looks up a connection offer by d tag on my read relays', async () => {
+    const { scheduler } = build();
+    scheduler.want({ type: 'connectionOffer', d: D, offerer: ALICE }, 'interactive');
+    await scheduler.flush();
+
+    expect(queryRelay.mock.calls[0][1][0]).toMatchObject({
+      kinds: [30378],
+      '#d': [D],
+    });
+    expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://mine/']);
+  });
+
+  it('asks my read relays for private notes by alias', async () => {
+    const { scheduler } = build();
+    scheduler.want({ type: 'privateNotes', aliases: [ALIAS], peers: [] }, 'interactive');
+    await scheduler.flush();
+
+    expect(queryRelay.mock.calls[0][1][0]).toMatchObject({
+      kinds: [1370],
+      '#f': [ALIAS],
+    });
+    expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://mine/']);
+  });
+
+  it('does not send a private-note filter with no aliases', async () => {
+    const { scheduler } = build();
+    scheduler.want({ type: 'privateNotes', aliases: [], peers: [] }, 'interactive');
+    await scheduler.flush();
+    expect(queryRelay).not.toHaveBeenCalled();
+  });
+
+  it('asks my read relays for replies by note id', async () => {
+    const { scheduler } = build();
+    scheduler.want({ type: 'privateReplies', noteIds: [NOTE], peers: [] }, 'interactive');
+    await scheduler.flush();
+
+    expect(queryRelay.mock.calls[0][1][0]).toMatchObject({
+      kinds: [1470],
+      '#n': [NOTE],
+    });
+  });
+
+  it('parks a private want on the discovery fallback until our relays sync, then reroutes', async () => {
+    const { scheduler, store, ctx } = build({ myRelays: [] });
+    const entity = wantEntity({ type: 'privateNotes', aliases: [ALIAS], peers: [] })!;
+
+    scheduler.want({ type: 'privateNotes', aliases: [ALIAS], peers: [] }, 'interactive');
+    await scheduler.flush();
+
+    // Ran on the discovery fallback, and did not settle: a miss there is
+    // not a verdict.
+    expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://discovery/']);
+    expect(store.get(entity).settledAt).toBeUndefined();
+
+    // Our relay list lands; reroute re-runs the want where it belongs.
+    ctx.myRelays = [{ url: 'wss://mine/', read: true, write: true }];
+    scheduler.reroute();
+    await scheduler.flush();
+
+    expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://discovery/', 'wss://mine/']);
+    expect(store.get(entity).settledAt).toBeDefined();
+  });
+
+  it('settles a parked want once the own relay list settles empty', async () => {
+    const { scheduler, store } = build({ myRelays: [] });
+    const entity = wantEntity({ type: 'privateNotes', aliases: [ALIAS], peers: [] })!;
+
+    scheduler.want({ type: 'privateNotes', aliases: [ALIAS], peers: [] }, 'interactive');
+    // The user's own relay-list want resolves empty in the same breath.
+    scheduler.want({ type: 'relayList', pubkey: ME }, 'interactive');
+    await scheduler.flush();
+    await scheduler.flush();
+
+    // The fallback is authoritative now: the want settles instead of parking forever.
+    expect(store.get(entity).settledAt).toBeDefined();
+  });
+  it('fans private notes out to connected peers write relays', async () => {
+    const { scheduler, lists } = build();
+    lists.set(ALICE, { read: [], write: ['wss://alice/'] });
+
+    scheduler.want({ type: 'privateNotes', aliases: [ALIAS], peers: [ALICE, BOB] }, 'interactive');
+    await scheduler.flush();
+    await scheduler.flush();
+
+    const calls = queryRelay.mock.calls.filter(([, filters]) => filters[0].kinds?.includes(1370));
+    expect(calls.map(([url]) => url).sort()).toEqual(['wss://alice/', 'wss://mine/']);
+    // BOB has no relay list yet: asked for on ours, plus a background lookup.
+    const lookups = queryRelay.mock.calls.filter(([, filters]) => filters[0].kinds?.includes(10002));
+    expect(lookups.some(([, filters]) => filters[0].authors?.includes(BOB))).toBe(true);
+  });
+});
+
 describe('debounce', () => {
   it('batches wants that arrive within the window into one request', async () => {
     vi.useFakeTimers();

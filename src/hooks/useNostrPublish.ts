@@ -4,6 +4,7 @@ import { useMutation, type UseMutationResult } from "@tanstack/react-query";
 import { useCurrentUser } from "./useCurrentUser";
 import { useRouting } from '@/data/hooks/useRouting';
 
+import { clientTag } from "@/lib/clientTag";
 import type { NostrEvent } from "@nostrify/nostrify";
 
 type EventTemplate = Pick<NostrEvent, 'kind' | 'content'> &
@@ -22,9 +23,10 @@ export function useNostrPublish(): UseMutationResult<
       if (user) {
         const tags = t.tags ?? [];
 
-        // Add the client tag if it doesn't exist
-        if (location.protocol === "https:" && !tags.some(([name]) => name === "client")) {
-          tags.push(["client", location.hostname]);
+        // Add the client tag when the app is configured to send one.
+        const tag = clientTag();
+        if (tag && !tags.some(([name]) => name === "client")) {
+          tags.push(["client", tag]);
         }
 
         const event = await user.signer.signEvent({

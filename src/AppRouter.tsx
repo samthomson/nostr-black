@@ -7,6 +7,8 @@ import { NIP19Page } from "./pages/NIP19Page";
 import DebugPage from "./pages/Debug";
 import CrashPage from "./pages/Crash";
 import SettingsPage from "./pages/Settings";
+import ConnectionsPage from "./pages/Connections";
+import PrivateFeedPage from "./pages/PrivateFeed";
 import NotFound from "./pages/NotFound";
 export function AppRouter() {
   return (
@@ -17,6 +19,8 @@ export function AppRouter() {
         <Route path="/settings" element={<AuthGate><SettingsPage /></AuthGate>} />
         <Route path="/debug" element={<AuthGate><DebugPage /></AuthGate>} />
         <Route path="/crash" element={<CrashPage />} />
+        <Route path="/connections" element={<AuthGate network><ConnectionsPage /></AuthGate>} />
+        <Route path="/private" element={<AuthGate network><PrivateFeedPage /></AuthGate>} />
         {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}
         <Route path="/:nip19" element={<AuthGate network><NIP19Page /></AuthGate>} />
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

@@ -25,6 +25,20 @@ export const eventHref = (id: string, author: string): string | undefined => {
   }
 };
 
+/** Hex pubkey from npub / nprofile / 64-hex. Undefined if the input is garbage. */
+export const parsePubkey = (input: string): string | undefined => {
+  const trimmed = input.trim();
+  if (/^[0-9a-f]{64}$/i.test(trimmed)) return trimmed.toLowerCase();
+  try {
+    const decoded = nip19.decode(trimmed);
+    if (decoded.type === 'npub') return decoded.data;
+    if (decoded.type === 'nprofile') return decoded.data.pubkey;
+  } catch {
+    return undefined;
+  }
+  return undefined;
+};
+
 /** npub for a pubkey, or the raw input if unencodable. */
 export const npubOf = (pubkey: string): string => {
   try {

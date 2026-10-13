@@ -106,4 +106,14 @@ describe('extractWants', () => {
     const keys = types(wants);
     expect(keys).toEqual([...new Set(keys)]);
   });
+
+  it('does not follow burner pubkeys on private envelopes', () => {
+    expect(extractWants(event({ kind: 1370, pubkey: BOB }))).toEqual([]);
+    expect(extractWants(event({ kind: 1470, pubkey: BOB }))).toEqual([]);
+    expect(extractWants(event({ kind: 30378, pubkey: BOB }))).toEqual([]);
+  });
+
+  it('follows nothing from a deletion event', () => {
+    expect(extractWants(event({ kind: 5, tags: [['e', NOTE]] }))).toEqual([]);
+  });
 });

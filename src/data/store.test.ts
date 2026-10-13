@@ -382,3 +382,54 @@ describe('watch', () => {
     expect(watcher.onIngest).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('NIP-09 deletion', () => {
+  it('hides an event deleted by its own key', () => {
+    const store = createStore();
+    const note = event({ id: '1'.repeat(64), kind: 1 });
+    store.ingest([note], 'wss://r/');
+    expect(store.getEvent(note.id)).toBeDefined();
+
+    store.ingest([event({ id: '2'.repeat(64), kind: 5, tags: [['e', note.id]] })], 'wss://r/');
+
+    expect(store.getEvent(note.id)).toBeUndefined();
+    expect(store.queryByKind(1)).toEqual([]);
+    expect(store.queryByAuthors([note.pubkey], [1])).toEqual([]);
+    // Direct entity reads hide it too — an embedded parent of a reply.
+    expect(store.get(eventKey(note.id)).event).toBeUndefined();
+  });
+
+  it('a settle cannot resurrect a deleted row', () => {
+    const store = createStore();
+    const note = event({ id: '1'.repeat(64), kind: 1 });
+    store.ingest([note], 'wss://r/');
+    store.ingest([event({ id: '2'.repeat(64), kind: 5, tags: [['e', note.id]] })], 'wss://r/');
+
+    store.settle([eventKey(note.id)], Date.now());
+
+    expect(store.get(eventKey(note.id)).event).toBeUndefined();
+  });
+
+  it('ignores a deletion from a different key', () => {
+    const store = createStore();
+    const note = event({ id: '1'.repeat(64), kind: 1 });
+    store.ingest([note], 'wss://r/');
+
+    store.ingest(
+      [event({ id: '2'.repeat(64), pubkey: 'd'.repeat(64), kind: 5, tags: [['e', note.id]] })],
+      'wss://r/',
+    );
+
+    expect(store.getEvent(note.id)).toBeDefined();
+  });
+  it('a relay answer after deletion restores the event', () => {
+    const store = createStore();
+    const note = event({ id: '1'.repeat(64), kind: 1 });
+    store.ingest([note], 'wss://r/');
+    store.ingest([event({ id: '2'.repeat(64), kind: 5, tags: [['e', note.id]] })], 'wss://r/');
+
+    // Relays are the source of truth: no tombstone keeps it hidden.
+    store.ingest([note], 'wss://r/');
+    expect(store.getEvent(note.id)).toBeDefined();
+  });
+});

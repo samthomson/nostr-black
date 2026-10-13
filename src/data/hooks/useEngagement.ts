@@ -13,17 +13,20 @@ const same = (a: Engagement, b: Engagement): boolean =>
 
 /**
  * Live counts for one note, from the ref index. Declares an engagement
- * want so the relays that served the note are asked about it.
+ * want so the relays that served the note are asked about it. No id
+ * (private items): no counts and no want — a rumor id is unresolvable on
+ * relays and asking about one leaks the query.
  */
-export const useEngagement = (id: string, lane: Lane = 'interactive'): Engagement => {
+export const useEngagement = (id: string | undefined, lane: Lane = 'interactive'): Engagement => {
   const cache = useRef<Engagement>(EMPTY_ENGAGEMENT);
 
   const subscribe = useCallback(
-    (onChange: () => void) => store.subscribe(eventKey(id), onChange),
+    (onChange: () => void) => store.subscribe(eventKey(id ?? ''), onChange),
     [id],
   );
 
   const snapshot = useCallback((): Engagement => {
+    if (!id) return EMPTY_ENGAGEMENT;
     const next = engagementOf(store, id);
     if (same(cache.current, next)) return cache.current;
     cache.current = next;
@@ -31,6 +34,7 @@ export const useEngagement = (id: string, lane: Lane = 'interactive'): Engagemen
   }, [id]);
 
   useEffect(() => {
+    if (!id) return;
     scheduler.want({ type: 'engagement', target: id }, lane);
     return () => scheduler.drop({ type: 'engagement', target: id });
   }, [id, lane]);

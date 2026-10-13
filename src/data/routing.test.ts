@@ -249,6 +249,13 @@ describe('publish', () => {
     }
   });
 
+  it('keeps private envelopes off discovery', () => {
+    for (const kind of [1370, 1470, 30378, 124]) {
+      const plan = relayPlan({ kind: 'publish', event: event(kind) }, self);
+      expect(flattenPlan(plan)).toEqual(['wss://mine/']);
+    }
+  });
+
   it('does not broadcast an encrypted list to discovery', () => {
     // kind 10000 (mute list) carries encrypted content; the ciphertext is
     // safe but the publish timing is not.

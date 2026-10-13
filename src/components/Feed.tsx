@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { ArrowUp, Loader2 } from 'lucide-react';
 import { Note } from '@/components/Note';
 import { Card, CardContent } from '@/components/ui/card';
@@ -121,7 +122,7 @@ export const Feed = () => {
 };
 
 /** One note, with the provenance the store recorded when it arrived. */
-const FeedNote = ({ event }: { event: React.ComponentProps<typeof Note>['event'] }) => {
+const FeedNote = ({ event }: { event: NostrEvent }) => {
   const { foundOn, route } = useProvenance(event.id);
   const visible = useVisibility(event);
   return (

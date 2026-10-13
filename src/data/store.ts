@@ -125,6 +125,22 @@ export const createStore = (): EventStore => {
   const watchers = new Set<StoreWatcher>();
   /** target id → ids of events referencing it. */
   const refs = new Map<string, Set<string>>();
+  /** A kind 5 removes its targets from the store — we published the
+   * deletion request, so we drop our copy. Relays are the source of
+   * truth: if a later query serves the event again, it re-enters the
+   * store and shows. No tombstone, no second source of truth. */
+  const applyDeletion = (event: NostrEvent, changed: Set<EntityKey>): void => {
+    if (event.kind !== 5) return;
+    for (const [name, target] of event.tags) {
+      if (name !== 'e' || !target) continue;
+      const victim = entities.get(eventKey(target))?.event;
+      if (victim && victim.pubkey === event.pubkey) {
+        entities.delete(eventKey(target));
+        changed.add(eventKey(target));
+      }
+    }
+  };
+
 
   const notify = (keys: Iterable<EntityKey>): void => {
     for (const key of keys) {
@@ -158,7 +174,6 @@ export const createStore = (): EventStore => {
     current: EntityState | undefined,
   ): { key: EntityKey; refs: EntityKey[] } | undefined => {
     const key = keyForEvent(event);
-
     if (current?.event && !supersedes(event, current.event)) {
       if (current.event.id === event.id) {
         const merged = [...new Set([...(current.foundOn ?? []), ...foundOn])];
@@ -191,6 +206,7 @@ export const createStore = (): EventStore => {
       if (!result) continue;
       changed.add(result.key);
       for (const ref of result.refs) refTargets.add(ref);
+      applyDeletion(event, changed);
     }
 
     notify(changed);
@@ -209,6 +225,7 @@ export const createStore = (): EventStore => {
       if (!result) continue;
       changed.add(result.key);
       for (const ref of result.refs) refTargets.add(ref);
+      applyDeletion(event, changed);
     }
 
     notify(changed);

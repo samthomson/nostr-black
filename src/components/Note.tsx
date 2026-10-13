@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { nip10, nip19 } from 'nostr-tools';
-import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Repeat2, Zap } from 'lucide-react';
+import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat2, Trash2, Zap } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
+import type { Rumor } from '@/lib/fe';
 import { useProfile } from '@/data/hooks/useProfile';
 import { useEvent } from '@/data/hooks/useEvent';
 import { useEngagement } from '@/data/hooks/useEngagement';
@@ -11,9 +12,13 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EventInfoDialog } from '@/components/EventInfoDialog';
+import { NoteEditor } from '@/components/NoteEditor';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useAsset } from '@/hooks/useAsset';
 import { profileHref, eventHref, hostOf, npubOf, formatTimestamp } from '@/lib/format';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useDeleteEvent } from '@/hooks/useDeleteEvent';
+
 
 /** Content/image budget past which a note is collapsed with a fade. */
 const CLAMP_THRESHOLD = 420;
@@ -93,8 +98,7 @@ const renderContent = (content: string) =>
 const VIDEO_URL = /\.(mp4|webm|mov)(\?[^#\s]*)?$/i;
 const MEDIA_URL = /\.(jpe?g|png|gif|webp|avif|mp4|webm|mov)(\?[^#\s]*)?$/i;
 
-/** All media urls for an event: imeta/url tags plus media urls in content. */
-const mediaUrls = (event: NostrEvent): string[] => {
+const mediaUrls = (event: NostrEvent | Rumor): string[] => {
   const urls: string[] = [];
   for (const [name, value, ...rest] of event.tags) {
     if (name === 'url' && value && MEDIA_URL.test(value)) urls.push(value);
@@ -153,7 +157,7 @@ const KIND_LABELS: Record<number, string> = {
 };
 
 /** Embedded event of a kind 6 repost, if parseable. */
-const repostedEvent = (event: NostrEvent): NostrEvent | null => {
+const repostedEvent = (event: NostrEvent | Rumor): NostrEvent | null => {
   if (event.kind !== 6) return null;
   try {
     return JSON.parse(event.content) as NostrEvent;
@@ -250,7 +254,7 @@ const NoteCounts = ({
   linkReplies,
   onReplies,
 }: {
-  event: NostrEvent;
+  event: NostrEvent | Rumor;
   engagement: Engagement;
   linkReplies: boolean;
   onReplies?: () => void;
@@ -335,12 +339,75 @@ const NoteMeta = ({
     </div>
   );
 };
-export const Note = ({ event, foundOn, route, linkReplies = true, onReplies }: { event: NostrEvent; foundOn?: string[]; route?: 'tor' | 'direct'; linkReplies?: boolean; onReplies?: () => void }) => {
+/**
+ * The one feed-item component. Public items take the signed event. Private
+ * items take the decrypted rumor plus its wrapper — the relay-stored event,
+ * which is what the info dialog shows; engagement counts and e-tag parent
+ * resolution are public-only (a rumor id is unresolvable on relays, and
+ * asking about one leaks the query).
+ */
+export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onReplies, onEdit, onDelete }: {
+  event: NostrEvent | Rumor;
+  /** Present when the item is private: the kind 1370/1470 wrapper. */
+  wrapper?: NostrEvent;
+  foundOn?: string[];
+  route?: 'tor' | 'direct';
+  linkReplies?: boolean;
+  onReplies?: () => void;
+  /** Present when the item is editable (private notes): publish a
+   * revision with this content. */
+  onEdit?: (content: string) => Promise<void>;
+  /** Present when the parent owns deletion (a private note deletes its
+   * whole conversation). Falls back to a single-event NIP-09. */
+  onDelete?: () => Promise<void>;
+}) => {
   const { config } = useAppContext();
   const showMedia = config.mediaEnabled;
   const { metadata, pending: authorPending } = useProfile(event.pubkey);
   const [expanded, setExpanded] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const isPrivate = wrapper !== undefined;
+  const { user } = useCurrentUser();
+  const mine = !!user && event.pubkey === user.pubkey;
+  const del = useDeleteEvent();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | undefined>();
+
+  const startEdit = () => {
+    setDraft(event.content);
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    const content = draft.trim();
+    if (!content || busy || !onEdit) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      await onEdit(content);
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (busy) return;
+    setBusy(true);
+    setError(undefined);
+    try {
+      if (onDelete) await onDelete();
+      else await del(wrapper ?? (event as NostrEvent));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const displayName = metadata?.display_name || metadata?.name;
   const npub = npubOf(event.pubkey);
   const href = profileHref(event.pubkey);
@@ -363,7 +430,7 @@ export const Note = ({ event, foundOn, route, linkReplies = true, onReplies }: {
   // markers (and legacy positional tags). The replied-to *person* is the
   // author of the reply-target event — never "last p tag" (p tags are
   // unordered; reverse-iteration often puts the thread OP last).
-  const nip10Ref = !embedded && !quotedViaTag ? nip10.parse(event) : undefined;
+  const nip10Ref = !embedded && !quotedViaTag && !isPrivate ? nip10.parse(event) : undefined;
   const parentId = nip10Ref?.reply?.id ?? nip10Ref?.root?.id;
   const taggedAuthor =
     nip10Ref?.reply?.author
@@ -373,7 +440,7 @@ export const Note = ({ event, foundOn, route, linkReplies = true, onReplies }: {
     ...(foundOn ?? []),
   ];
   const parent = useEvent(parentId, { author: taggedAuthor, hints: parentHints });
-  const engagement = useEngagement(event.id);
+  const engagement = useEngagement(isPrivate ? undefined : event.id);
   // Prefer the fetched parent's pubkey; fall back to NIP-10 e-tag author or
   // a lone p tag. Never profiles.at(-1).
   const parentPubkey = parent.event?.pubkey ?? taggedAuthor;
@@ -418,7 +485,40 @@ export const Note = ({ event, foundOn, route, linkReplies = true, onReplies }: {
             >
               <Info className="size-3.5" />
             </Button>
+            {onEdit && mine && !editing && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0 text-muted-foreground"
+                onClick={startEdit}
+                aria-label="edit note"
+              >
+                <Pencil className="size-3.5" />
+              </Button>
+            )}
+            {mine && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 shrink-0 text-muted-foreground"
+                onClick={() => void remove()}
+                aria-label="delete note"
+              >
+                {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+              </Button>
+            )}
           </div>
+          {editing ? (
+            <NoteEditor
+              draft={draft}
+              onDraft={setDraft}
+              busy={busy}
+              error={error}
+              onSave={() => void saveEdit()}
+              onCancel={() => setEditing(false)}
+            />
+          ) : (
+          <>
           {parentId && (
             <ReplyContext
               parentPubkey={parentPubkey}
@@ -472,13 +572,19 @@ export const Note = ({ event, foundOn, route, linkReplies = true, onReplies }: {
               {expanded ? 'show less' : 'read more'}
             </Button>
           )}
+          {error && <p className="text-destructive text-xs">{error}</p>}
+          </>
+          )}
 
-          <NoteCounts event={event} engagement={engagement} linkReplies={linkReplies} onReplies={onReplies} />
+          {!isPrivate && (
+            <NoteCounts event={event} engagement={engagement} linkReplies={linkReplies} onReplies={onReplies} />
+          )}
           <NoteMeta foundOn={foundOn} route={route} client={clientTag} />
         </div>
       </CardContent>
 
-      <EventInfoDialog event={event} foundOn={foundOn} open={infoOpen} onOpenChange={setInfoOpen} />
+      {/* No wrapper means the item is public, so event is signed. */}
+      <EventInfoDialog event={wrapper ?? (event as NostrEvent)} foundOn={foundOn} open={infoOpen} onOpenChange={setInfoOpen} />
     </Card>
   );
 };

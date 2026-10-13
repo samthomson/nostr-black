@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bug, House, Menu, Settings, User, X } from 'lucide-react';
+import { Bug, House, Lock, Menu, Settings, User, Users, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { LoginArea } from '@/components/auth/LoginArea';
@@ -32,6 +32,8 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   const profileTo = user ? profileHref(user.pubkey) : undefined;
   const nav: NavItem[] = [
     { to: '/', label: 'feed', Icon: House },
+    { to: '/private', label: 'private', Icon: Lock },
+    { to: '/connections', label: 'connections', Icon: Users },
     ...(profileTo ? [{ to: profileTo, label: 'profile', Icon: User }] : []),
     { to: '/settings', label: 'settings', Icon: Settings },
     { to: '/debug', label: 'debug', Icon: Bug },

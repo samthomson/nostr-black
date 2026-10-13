@@ -14,6 +14,7 @@ import { createSlotLimiter, LANES, rank, type Lane, type SlotLimiter } from './s
 import { ENGAGEMENT_KINDS, REACTION_CAP } from './engagement';
 import { THREAD_KINDS, THREAD_LIMIT } from './thread';
 import { FEED_KINDS } from './feed/spec';
+import { KIND_CONNECTION, KIND_PRIVATE_NOTE, KIND_PRIVATE_REPLY } from '@/lib/fe';
 
 /**
  * The scheduler.
@@ -34,7 +35,11 @@ export type Want =
   | { type: 'engagement'; target: string }
   | { type: 'thread'; parent: string; author?: string }
   | { type: 'authorNotes'; pubkey: string }
-  | { type: 'followers'; pubkey: string };
+  | { type: 'followers'; pubkey: string }
+  | { type: 'connections'; derivedIdentityId: string } // our whole graph: kind 30378 by #c = derived_identity_id = H(my_sk ‖ label), known only to us
+  | { type: 'connectionOffer'; d: string; offerer: string } // one pair's records: kind 30378 by #d = conn_addr(me, peer); `offerer` outboxes the query to their write relays
+  | { type: 'privateNotes'; aliases: readonly string[]; peers: readonly string[] } // kind 1370 by #f = alias(peer, me); `peers` fans the query out to their write relays
+  | { type: 'privateReplies'; noteIds: readonly string[]; peers: readonly string[] } // kind 1470 by #n = note_id(reply CEK); `peers` fans the query out
 
 export type { Lane };
 
@@ -57,6 +62,10 @@ const STALE_MS: Record<Want['type'], number> = {
   thread: 2 * 60_000,
   authorNotes: 5 * 60_000,
   followers: 15 * 60_000,
+  connections: 2 * 60_000,
+  connectionOffer: 2 * 60_000,
+  privateNotes: 2 * 60_000,
+  privateReplies: 2 * 60_000,
 };
 
 /** Pending wants accumulate this long, so a scrolling feed sends one batch. */
@@ -66,6 +75,22 @@ const DEBOUNCE_MS = 80;
 const MAX_AUTHORS = 200;
 export const AUTHOR_NOTES_LIMIT = 50;
 export const FOLLOWER_CAP = 200;
+export const CONNECTION_CAP = 200;
+export const PRIVATE_NOTES_LIMIT = 50;
+export const PRIVATE_REPLY_LIMIT = 200;
+
+/**
+ * Wants that route by the user's own read relays. Until the user's kind
+ * 10002 has synced, myReadRelays falls back to discovery — relays that
+ * do not host private kinds — so a miss there is not a verdict. These
+ * park instead of settling, and re-run once routing resolves.
+ */
+const SELF_ROUTED: ReadonlySet<Want['type']> = new Set([
+  'connections',
+  'connectionOffer',
+  'privateNotes',
+  'privateReplies',
+]);
 
 export const wantKey = (want: Want): string => {
   switch (want.type) {
@@ -85,6 +110,14 @@ export const wantKey = (want: Want): string => {
       return `authorNotes:${want.pubkey}`;
     case 'followers':
       return `followers:${want.pubkey}`;
+    case 'connections':
+      return `connections:${want.derivedIdentityId}`;
+    case 'connectionOffer':
+      return `offer:${want.d}`;
+    case 'privateNotes':
+      return `pn:${[...want.aliases].sort().join(',')}`;
+    case 'privateReplies':
+      return `pr:${[...want.noteIds].sort().join(',')}`;
   }
 };
 
@@ -107,6 +140,14 @@ export const wantEntity = (want: Want): EntityKey | undefined => {
       return `n:${want.pubkey}`;
     case 'followers':
       return `f:${want.pubkey}`;
+    case 'connections':
+      return `cn:${want.derivedIdentityId}`;
+    case 'connectionOffer':
+      return `co:${want.d}`;
+    case 'privateNotes':
+      return `pn:${[...want.aliases].sort().join(',')}`;
+    case 'privateReplies':
+      return `pr:${[...want.noteIds].sort().join(',')}`;
   }
 };
 
@@ -119,6 +160,8 @@ export interface Scheduler {
   want(want: Want, lane: Lane): void;
   promote(want: Want, lane: Lane): void;
   drop(want: Want): void;
+  /** Re-run wants parked while our own routing was unresolved. */
+  reroute(): void;
   /** Run the pending batch now instead of waiting out the debounce. */
   flush(): Promise<void>;
   /**
@@ -153,8 +196,12 @@ export const createScheduler = (
   limiter: SlotLimiter = createSlotLimiter(),
 ): Scheduler => {
   const pending = new Map<string, Queued>();
-  const inflight = new Set<string>();
   const satisfiedAt = new Map<string, number>();
+  /** Wants that ran on the discovery fallback and await real routing. */
+  const rerouteQueue = new Map<string, Queued>();
+  /** The pubkey whose own relay list settled empty — fallback is then authoritative. */
+  let selfResolvedFor: string | undefined;
+  const inflight = new Set<string>();
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running: Promise<void> | undefined;
@@ -299,6 +346,18 @@ export const createScheduler = (
     const followers = batch
       .map((q) => q.want)
       .filter((w): w is Extract<Want, { type: 'followers' }> => w.type === 'followers');
+    const connections = batch
+      .map((q) => q.want)
+      .filter((w): w is Extract<Want, { type: 'connections' }> => w.type === 'connections');
+    const offers = batch
+      .map((q) => q.want)
+      .filter((w): w is Extract<Want, { type: 'connectionOffer' }> => w.type === 'connectionOffer');
+    const privateNotes = batch
+      .map((q) => q.want)
+      .filter((w): w is Extract<Want, { type: 'privateNotes' }> => w.type === 'privateNotes');
+    const privateReplies = batch
+      .map((q) => q.want)
+      .filter((w): w is Extract<Want, { type: 'privateReplies' }> => w.type === 'privateReplies');
 
     await Promise.all([
       profiles.length > 0
@@ -325,6 +384,37 @@ export const createScheduler = (
       threads.length > 0 ? runThreadWants(lane, ctx, threads) : undefined,
       authorNotes.length > 0 ? runAuthorNotesWants(lane, ctx, authorNotes) : undefined,
       followers.length > 0 ? runFollowerWants(lane, ctx, followers) : undefined,
+      connections.length > 0 ? runTagWants(
+        lane,
+        ctx,
+        [...new Set(connections.map((w) => w.derivedIdentityId))],
+        (ids) => ({ kinds: [KIND_CONNECTION], '#c': ids, limit: CONNECTION_CAP * ids.length }),
+        20,
+      ) : undefined,
+      offers.length > 0 ? runTagWants(
+        lane,
+        ctx,
+        [...new Set(offers.map((w) => w.d))],
+        (ids) => ({ kinds: [KIND_CONNECTION], '#d': ids }),
+        20,
+        [...new Set(offers.map((w) => w.offerer))],
+      ) : undefined,
+      privateNotes.length > 0 ? runTagWants(
+        lane,
+        ctx,
+        [...new Set(privateNotes.flatMap((w) => w.aliases))],
+        (aliases) => ({ kinds: [KIND_PRIVATE_NOTE], '#f': aliases, limit: PRIVATE_NOTES_LIMIT }),
+        50,
+        [...new Set(privateNotes.flatMap((w) => w.peers))],
+      ) : undefined,
+      privateReplies.length > 0 ? runTagWants(
+        lane,
+        ctx,
+        [...new Set(privateReplies.flatMap((w) => w.noteIds))],
+        (ids) => ({ kinds: [KIND_PRIVATE_REPLY], '#n': ids, limit: PRIVATE_REPLY_LIMIT }),
+        50,
+        [...new Set(privateReplies.flatMap((w) => w.peers))],
+      ) : undefined,
     ]);
   };
 
@@ -482,6 +572,53 @@ export const createScheduler = (
     );
   };
 
+  /**
+   * Private-feed kinds live on our read relays and on our connections'
+   * write relays — outbox on the peer's real pubkey from the connection
+   * payload, never on the burner (a burner has no relay list, and asking
+   * strangers' relays would leak the alias tags). Peers whose NIP-65 list
+   * we lack are asked for on ours, and a relay-list want is queued so the
+   * next pass is outbox-correct.
+   */
+  const privateRelayGroups = (ctx: RoutingContext, peers: readonly string[]): Set<string> => {
+    const urls = new Set(myReadRelays(ctx));
+    for (const peer of peers) {
+      const write = ctx.authorRelays.get(peer)?.write ?? [];
+      if (write.length > 0) {
+        for (const url of write) urls.add(url);
+      } else {
+        enqueue({ type: 'relayList', pubkey: peer }, 'background');
+      }
+    }
+    return urls;
+  };
+
+  const runTagWants = async (
+    lane: Lane,
+    ctx: RoutingContext,
+    subjects: string[],
+    filterOf: (slice: string[]) => NostrFilter,
+    size: number,
+    peers: readonly string[] = [],
+  ): Promise<void> => {
+    if (subjects.length === 0) return;
+    const groups: Groups = new Map();
+    for (const url of privateRelayGroups(ctx, peers)) addGroup(groups, url, subjects);
+    await runGroups(lane, groups, filterOf, size);
+  };
+
+  /** Re-run wants parked while our own routing was unresolved. */
+  const reroute = (): void => {
+    if (rerouteQueue.size === 0) return;
+    for (const [key, q] of rerouteQueue) {
+      if (!pending.has(key) && !inflight.has(key)) pending.set(key, q);
+    }
+    rerouteQueue.clear();
+    if (timer === undefined && pending.size > 0) {
+      timer = setTimeout(() => void flush(), DEBOUNCE_MS);
+    }
+  };
+
   const flush = async (): Promise<void> => {
     if (timer !== undefined) {
       clearTimeout(timer);
@@ -507,7 +644,9 @@ export const createScheduler = (
       const now = Date.now();
       const settled: EntityKey[] = [];
       const ctx = context();
-      for (const { want } of batch) {
+      let selfResolved = false;
+      for (const q of batch) {
+        const want = q.want;
         const key = wantKey(want);
         inflight.delete(key);
         // An event miss while we still don't know the author's relays is
@@ -517,13 +656,36 @@ export const createScheduler = (
           !target.getEvent(want.id) &&
           !!want.author &&
           !ctx.authorRelays.get(want.author);
-        if (!waitingOnAuthor) satisfiedAt.set(key, now);
-        const entity = wantEntity(want);
-        if (entity) settled.push(entity);
+        // Same rule for private wants while our own relay list has not
+        // synced: they ran on the discovery fallback, which is not where
+        // private kinds live. Park them until routing resolves — unless
+        // the user's own relay list has settled empty, when the fallback
+        // is all the routing there is.
+        const waitingOnSelf =
+          SELF_ROUTED.has(want.type) &&
+          ctx.pubkey !== undefined &&
+          selfResolvedFor !== ctx.pubkey &&
+          ctx.myRelays.length === 0;
+        if (waitingOnSelf) {
+          rerouteQueue.set(key, q);
+        } else {
+          rerouteQueue.delete(key);
+          if (want.type === 'relayList' && want.pubkey === ctx.pubkey) {
+            // A definitive miss on our own list: the fallback is authoritative.
+            if (!target.getReplaceable(REPLACEABLE_KIND.relayList, want.pubkey)) {
+              selfResolvedFor = want.pubkey;
+              selfResolved = true;
+            }
+          }
+          if (!waitingOnAuthor) satisfiedAt.set(key, now);
+          const entity = wantEntity(want);
+          if (entity) settled.push(entity);
+        }
       }
       // Settling after ingest, so a component never sees "asked and missing"
       // in the same tick that the answer arrived.
       target.settle(settled, now);
+      if (selfResolved) reroute();
       running = undefined;
     });
 
@@ -541,12 +703,16 @@ export const createScheduler = (
 
     drop: (want) => {
       pending.delete(wantKey(want));
+      rerouteQueue.delete(wantKey(want));
     },
+
+    reroute,
 
     flush,
 
     invalidate: () => {
       satisfiedAt.clear();
+      selfResolvedFor = undefined;
     },
 
     reset: () => {
@@ -555,9 +721,12 @@ export const createScheduler = (
       pending.clear();
       inflight.clear();
       satisfiedAt.clear();
+      rerouteQueue.clear();
+      selfResolvedFor = undefined;
       running = undefined;
     },
   };
+
 };
 
 export const scheduler: Scheduler = createScheduler();

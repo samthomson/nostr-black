@@ -42,6 +42,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     setSelf({ pubkey, myRelays, discovery });
+    // Self routing moved (relay list synced, account switched): re-run
+    // any wants parked on the discovery fallback.
+    scheduler.reroute();
   }, [pubkey, myRelays, discovery]);
 
   // Switching accounts changes where everything is looked up, so nothing

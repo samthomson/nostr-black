@@ -91,8 +91,17 @@ const embeddedRepost = (event: NostrEvent): Want[] => {
   return out;
 };
 
+/**
+ * Burner-signed envelopes. Walking their public tags would fetch the
+ * envelope key's "profile" and leak a REQ for a key that is not a person.
+ */
+const OPAQUE_KINDS = new Set([124, 1370, 1470, 30378]);
+
 /** Every want this event implies, deduped. Author profile is always first. */
 export const extractWants = (event: NostrEvent): Want[] => {
+  // Deletions render nothing, and private ones are burner-signed — walking
+  // their author or tags is the same burner-profile leak OPAQUE_KINDS stops.
+  if (OPAQUE_KINDS.has(event.kind) || event.kind === 5) return [];
   const out: Want[] = [];
 
   if (HEX.test(event.pubkey)) {

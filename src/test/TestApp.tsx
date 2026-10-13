@@ -15,8 +15,12 @@ import { scheduler } from '@/data/scheduler';
 import { clearFeeds } from '@/data/feed/registry';
 import { resetPersist } from '@/data/persist/persist';
 import { resetUseIsTor } from '@/hooks/useEgress';
+import { lock } from '@/auth/keystore';
 
 afterEach(async () => {
+  lock();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
   store.clear();
   scheduler.reset();
   clearFeeds();
