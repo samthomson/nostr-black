@@ -6,6 +6,7 @@ Plan of record: `README.md`.
 
 - be concise in dialog always. use no more words than needed
 - hard caps: answers ≤5 lines unless a decision genuinely needs more; task-done replies are one line; explanations max 3 bullets, only when asked or load-bearing
+- when answering multiple questions in one message, lead each answer with a bolded one-sentence summary of its question, comprehensible on its own
 - programming-style feedback from the user is captured here as rules. components stay thin and dumb (props in, render out); generic deterministic pure functions live once in `src/lib` utils, never duplicated inside components
 - output must be product relevant: code, plans, technical docs. no marketing speak or filler
 - read before writing; never overwrite user-authored content
@@ -46,5 +47,6 @@ Plan of record: `README.md`.
 ## Tests & validation
 
 - write tests for everything. tests must be intelligent and critically cover the features — behavior, boundaries, invariants, real error paths — not plumbing or source-text checks
+- fixed test identities are fine: hardcode dedicated keypairs created for testing (reused across runs is good) so tests exercise real nostr events end-to-end — the most realistic data. never real user identities
 - after code changes: typecheck → build → lint (fix critical) → run the test suite. not done until they pass
 - verify UI changes by browser-driving the dev server
