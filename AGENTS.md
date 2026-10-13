@@ -12,6 +12,7 @@ Plan of record: `README.md`.
 - read before writing; never overwrite user-authored content
 - user-facing copy is user-authored: never modify, rewrite, or "improve" existing copy (UI text, landing pages, error messages, README prose) without explicit permission in the current conversation. propose options; do not apply
 - do not plan for failure: build features that work. surface errors, never mask them — no swallowed catches, fallback values, or graceful-degradation UI hiding a bug
+- no silent fallbacks, ever. a missing prerequisite (relay list not synced, config absent, empty input) is surfaced to the user or explicitly awaited — never papered over with fallback data that silently proceeds. fallbacks mask bugs and ship them. the sole exception is the cold-start discovery bootstrap before the user's relay list syncs, and a miss on that fallback must never be treated as a verdict
 - one correct way, no legacy fallbacks. pre-launch: no migrations, no back-compat branches, no old-shape guards. change the schema and move on
 
 ## Git
