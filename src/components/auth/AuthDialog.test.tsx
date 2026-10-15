@@ -1,111 +1,46 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { generateSecretKey, nip19 } from 'nostr-tools';
-import type * as LoginActionsModule from '@/hooks/useLoginActions';
-
 import AuthDialog from './AuthDialog';
-import { TestApp } from '@/test/TestApp';
+import { KeystoreProvider } from '@/auth/KeystoreProvider';
+import { flushSession } from '@/auth/keystore';
 
-const { mockBunker, mockExtension } = vi.hoisted(() => ({
-  mockBunker: vi.fn(),
-  mockExtension: vi.fn(),
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-router-dom')>()),
+  Link: ({ children }: { children: React.ReactNode }) => <a href="#">{children}</a>,
 }));
 
-vi.mock('@/hooks/useLoginActions', async (importOriginal) => {
-  const actual = await importOriginal<typeof LoginActionsModule>();
-  return {
-    ...actual,
-    useLoginActions: () => ({
-      bunker: mockBunker,
-      extension: mockExtension,
-      nostrconnect: vi.fn(),
-      getRelayUrls: () => ['wss://relay.example'],
-    }),
-  };
-});
-
-const renderDialog = (onClose = vi.fn()) =>
+const renderDialog = () =>
   render(
-    <TestApp>
-      <AuthDialog isOpen onClose={onClose} />
-    </TestApp>,
+    <KeystoreProvider>
+      <AuthDialog isOpen onClose={() => undefined} />
+    </KeystoreProvider>,
   );
 
-beforeEach(() => {
-  mockBunker.mockReset();
-  mockExtension.mockReset();
-  window.localStorage.clear();
-});
-
 describe('AuthDialog', () => {
-  it('offers method tabs: extension, signer, nsec', async () => {
-    renderDialog();
+  it.beforeEach?.(() => flushSession());
 
-    expect(await screen.findByRole('tab', { name: /extension/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /^signer$/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /^nsec$/i })).toBeTruthy();
-    expect(screen.getByRole('button', { name: /log in with extension/i })).toBeTruthy();
-  });
-
-  it('the nsec option is memory-only: input present, nothing persisted', async () => {
-    const user = userEvent.setup();
-    renderDialog();
-    await user.click(await screen.findByRole('tab', { name: /^nsec$/i }));
-
-    const input = screen.getByLabelText(/secret key/i) as HTMLInputElement;
-    expect(input.placeholder).toMatch(/session only/i);
-  });
-
-  it('refuses an nsec pasted into the bunker field', async () => {
+  it('logs in with an nsec and remembers it on this device', async () => {
     const user = userEvent.setup();
     renderDialog();
 
-    await user.click(await screen.findByRole('tab', { name: /^signer$/i }));
-    const field = await screen.findByRole('textbox', { name: /bunker uri/i });
-    const nsec = nip19.nsecEncode(generateSecretKey());
-    await user.type(field, nsec);
-    await user.click(screen.getByRole('button', { name: /log in with bunker/i }));
+    const field = await screen.findByLabelText(/secret key/i);
+    await user.type(field, nip19.nsecEncode(generateSecretKey()));
+    await user.click(screen.getByRole('button', { name: /log in/i }));
 
-    expect(await screen.findByText('Enter a bunker://… URI.')).toBeTruthy();
-    expect(mockBunker).not.toHaveBeenCalled();
+    expect(localStorage.getItem('keystore.nsec')).toBeTruthy();
   });
 
-  it('logs in with a browser extension', async () => {
-    const onClose = vi.fn();
-    const user = userEvent.setup();
-    mockExtension.mockResolvedValue(undefined);
-    renderDialog(onClose);
-
-    await user.click(
-      await screen.findByRole('button', { name: /log in with extension/i }),
-    );
-
-    await waitFor(() => expect(mockExtension).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-  });
-
-  it('logs in with a bunker URI', async () => {
-    const onClose = vi.fn();
-    const user = userEvent.setup();
-    mockBunker.mockResolvedValue(undefined);
-    renderDialog(onClose);
-
-    await user.click(await screen.findByRole('tab', { name: /^signer$/i }));
-    const field = await screen.findByRole('textbox', { name: /bunker uri/i });
-    await user.type(field, 'bunker://abc@relay.example');
-    await user.click(screen.getByRole('button', { name: /log in with bunker/i }));
-
-    await waitFor(() =>
-      expect(mockBunker).toHaveBeenCalledWith('bunker://abc@relay.example'),
-    );
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
-  });
-
-  it('signer tab exposes open signer app', async () => {
+  it('rejects garbage with an explicit error', async () => {
     const user = userEvent.setup();
     renderDialog();
-    await user.click(await screen.findByRole('tab', { name: /^signer$/i }));
-    expect(screen.getByRole('button', { name: /open signer app/i })).toBeTruthy();
+
+    const field = await screen.findByLabelText(/secret key/i);
+    await user.type(field, 'not-a-key');
+    await user.click(screen.getByRole('button', { name: /log in/i }));
+
+    expect(await screen.findByText(/invalid key/i)).toBeTruthy();
+    expect(localStorage.getItem('keystore.nsec')).toBeNull();
   });
 });

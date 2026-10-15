@@ -1,22 +1,30 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { KeystoreContext } from './keystoreContext';
 import { NSecSigner } from '@nostrify/nostrify';
-import { lock, unlock, isUnlocked, currentPubkey, getSecretKey } from './keystore';
+import { flushSession, lock, unlock, isUnlocked, currentPubkey, getSecretKey, storedSession } from './keystore';
 
 /**
  * Keystore context: exposes session-key state and the NIP-07-shaped signer
- * built from the in-memory key. One flow, top to bottom: the login UI calls
- * `login(nsec)` → keystore unlocks → consumers see `signer`/`pubkey`.
- * Locking zeroes the key.
+ * built from the in-memory key. One flow, top to bottom: the login UI
+ * calls `login(nsec)` → keystore unlocks and remembers → consumers see
+ * `signer`/`pubkey`. A remembered key re-unlocks on boot, so reloads keep
+ * you logged in; `logout` flushes the stored nsec entirely.
  */
 
-
-
-
+const bootFromStorage = (): void => {
+  const stored = storedSession();
+  if (!stored) return;
+  try {
+    unlock(stored);
+  } catch {
+    flushSession();
+  }
+};
 
 export const KeystoreProvider = ({ children }: { children: React.ReactNode }) => {
-  const [unlockedState, setUnlockedState] = useState(isUnlocked());
-  const [pk, setPk] = useState<string | null>(currentPubkey());
+  useState(bootFromStorage); // re-unlock a remembered key before first paint
+  const [unlockedState, setUnlockedState] = useState(isUnlocked);
+  const [pk, setPk] = useState<string | null>(currentPubkey);
 
   const login = useCallback((nsec: string): string => {
     const pubkey = unlock(nsec);
@@ -26,6 +34,7 @@ export const KeystoreProvider = ({ children }: { children: React.ReactNode }) =>
   }, []);
 
   const logout = useCallback(() => {
+    flushSession();
     lock();
     setUnlockedState(false);
     setPk(null);
@@ -33,13 +42,6 @@ export const KeystoreProvider = ({ children }: { children: React.ReactNode }) =>
 
   const rawKey = getSecretKey();
   const signer = unlockedState && rawKey ? new NSecSigner(rawKey) : null;
-
-  useEffect(() => {
-    // Safety net: pagehide is the last reliable moment to zero the key.
-    const onHide = () => lock();
-    window.addEventListener('pagehide', onHide);
-    return () => window.removeEventListener('pagehide', onHide);
-  }, []);
 
   return (
     <KeystoreContext.Provider value={{ unlocked: unlockedState, pubkey: pk, login, logout, signer }}>

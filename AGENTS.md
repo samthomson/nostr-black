@@ -24,7 +24,7 @@ Plan of record: `README.md`.
 
 - value privacy of client users; raise alarms about any NIPs etc being implemented that will reveal the user's info publicly
 - private by default: anything that publishes publicly must be a deliberate, visible opt-in
-- keys: extension (NIP-07) or bunker (NIP-46) only. never facilitate nsec pasting, never store keys
+- keys: nsec login only — the private generics need raw-key crypto no signer exposes. the nsec is remembered in localStorage so sessions survive reload; logout flushes it. never stored anywhere else, never transmitted
 - all network egress goes through the egress module (`src/net`) — no direct `fetch`, `WebSocket`, or media loads anywhere else. desktop routes it through Tor; web gates on the IsTor check
 - nothing loads off-origin: no third-party CDNs, fonts, analytics
 - treat any new metadata an event would publish (client tag, relay lists, follows, upload hashes) as a leak until proven intentional

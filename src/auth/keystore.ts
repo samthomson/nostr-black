@@ -1,12 +1,15 @@
 import { nip19, getPublicKey } from 'nostr-tools';
 /**
- * Memory-only key store. THE only module in the app that ever holds key
- * material (see AGENTS.md privacy doctrine). Nothing is persisted — the key
- * lives in a closure variable for the session and dies with the tab/app.
+ * The key store. THE only module in the app that ever holds key
+ * material (see AGENTS.md privacy doctrine).
  *
- * Callers get capabilities (sign/encrypt via the signer they build from
- * `getSecretKey()`), never a stored copy elsewhere.
+ * The nsec is kept in localStorage so sessions survive reloads; logout
+ * flushes it. In memory it lives in a closure variable and dies with the
+ * tab. Callers get capabilities (sign/encrypt via the signer they build
+ * from `getSecretKey()`), never a stored copy elsewhere.
  */
+
+const STORAGE_KEY = 'keystore.nsec';
 
 let secretKey: Uint8Array | null = null;
 let pubkey: string | null = null;
@@ -17,16 +20,41 @@ export const isUnlocked = (): boolean => secretKey !== null;
 /** Pubkey of the unlocked key, or null. */
 export const currentPubkey = (): string | null => pubkey;
 
-/** Unlock with an nsec (or hex) key. Throws on garbage. Zeroes any prior key. */
+/** The persisted nsec, if this device remembers one. */
+export const storedSession = (): string | null => {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+};
+
+/** Drop the persisted nsec — logout. */
+export const flushSession = (): void => {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Storage unavailable: nothing was ever persisted.
+  }
+};
+
+/** Unlock with an nsec (or hex) key and remember it across reloads.
+ * Throws on garbage. Zeroes any prior key. */
 export const unlock = (nsecOrHex: string): string => {
   const next = decodeKey(nsecOrHex);
   lock();
   secretKey = next;
   pubkey = getPublicKey(next);
+  try {
+    localStorage.setItem(STORAGE_KEY, nsecOrHex.trim());
+  } catch {
+    // Storage unavailable: session-only login.
+  }
   return pubkey;
 };
 
-/** Zero the key and drop it. Idempotent. */
+/** Zero the key and drop it from memory. Idempotent. Keeps the stored
+ * nsec — use flushSession to forget the device. */
 export const lock = (): void => {
   if (secretKey) secretKey.fill(0);
   secretKey = null;

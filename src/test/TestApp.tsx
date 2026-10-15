@@ -2,7 +2,6 @@ import { afterEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createHead, UnheadProvider } from '@unhead/react/client';
 import { BrowserRouter } from 'react-router-dom';
-import { NostrLoginProvider } from '@nostrify/react/login';
 import { AppProvider } from '@/components/AppProvider';
 import { KeystoreProvider } from '@/auth/KeystoreProvider';
 import { AppConfig } from '@/contexts/AppContext';
@@ -58,13 +57,11 @@ export function TestApp({ children, userState }: TestAppProps) {
         <UserStateProvider storageKey='test-user-state' initialState={userState}>
         <KeystoreProvider>
         <QueryClientProvider client={queryClient}>
-          <NostrLoginProvider storageKey='test-login'>
-            <DataProvider>
-              <BrowserRouter>
-                {children}
-              </BrowserRouter>
-            </DataProvider>
-          </NostrLoginProvider>
+          <DataProvider>
+            <BrowserRouter>
+              {children}
+            </BrowserRouter>
+          </DataProvider>
         </QueryClientProvider>
         </KeystoreProvider>
         </UserStateProvider>

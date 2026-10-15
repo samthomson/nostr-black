@@ -7,7 +7,6 @@ import { InferSeoMetaPlugin } from 'unhead/plugins';
 import { Suspense } from 'react';
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { NostrLoginProvider } from '@nostrify/react/login';
 import { KeystoreProvider } from '@/auth/KeystoreProvider';
 import { AppProvider } from '@/components/AppProvider';
 import { UserStateProvider } from '@/components/UserStateProvider';
@@ -48,11 +47,9 @@ export function App() {
         <UserStateProvider storageKey="nostr:user-state">
         <KeystoreProvider>
         <QueryClientProvider client={queryClient}>
-          <NostrLoginProvider storageKey='nostr:login'>
-            <DataProvider>
-              <AppRoot />
-            </DataProvider>
-          </NostrLoginProvider>
+          <DataProvider>
+            <AppRoot />
+          </DataProvider>
           <QueryDevtools />
         </QueryClientProvider>
         </KeystoreProvider>
