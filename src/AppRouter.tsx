@@ -1,4 +1,5 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import type { ReactNode } from "react";
 import { ScrollToTop } from "./components/ScrollToTop";
 import { AuthGate } from "./components/AuthGate";
 
@@ -10,19 +11,30 @@ import SettingsPage from "./pages/Settings";
 import ConnectionsPage from "./pages/Connections";
 import PrivateFeedPage from "./pages/PrivateFeed";
 import NotFound from "./pages/NotFound";
+
+/**
+ * App surfaces behind the login gate. `network` routes also run the tor
+ * check while logged out — they make relay queries; settings and debug do
+ * not, so they render ungated until login.
+ */
+const GATED: readonly { path: string; element: ReactNode; network?: boolean }[] = [
+  { path: "/settings", element: <SettingsPage /> },
+  { path: "/debug", element: <DebugPage /> },
+  { path: "/connections", element: <ConnectionsPage />, network: true },
+  { path: "/private", element: <PrivateFeedPage />, network: true },
+  { path: "/:nip19", element: <NIP19Page />, network: true },
+];
+
 export function AppRouter() {
   return (
     <BrowserRouter>
       <ScrollToTop />
       <Routes>
         <Route path="/" element={<Index />} />
-        <Route path="/settings" element={<AuthGate><SettingsPage /></AuthGate>} />
-        <Route path="/debug" element={<AuthGate><DebugPage /></AuthGate>} />
         <Route path="/crash" element={<CrashPage />} />
-        <Route path="/connections" element={<AuthGate network><ConnectionsPage /></AuthGate>} />
-        <Route path="/private" element={<AuthGate network><PrivateFeedPage /></AuthGate>} />
-        {/* NIP-19 route for npub1, note1, naddr1, nevent1, nprofile1 */}
-        <Route path="/:nip19" element={<AuthGate network><NIP19Page /></AuthGate>} />
+        {GATED.map(({ path, element, network }) => (
+          <Route key={path} path={path} element={<AuthGate network={network}>{element}</AuthGate>} />
+        ))}
         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
         <Route path="*" element={<NotFound />} />
       </Routes>
