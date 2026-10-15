@@ -55,13 +55,13 @@
 
   /* Off-black base: pure black is reserved for redaction marks so they
      contrast against the app. Palette: white, off-black, greys, maroon. */
-  --background: hsl(240 5% 12%);
+  --background: hsl(240 5% 17%);
   --foreground: hsl(0 0% 98%);
 
-  --card: hsl(240 5% 16%);
+  --card: hsl(240 5% 21%);
   --card-foreground: hsl(0 0% 98%);
 
-  --popover: hsl(240 5% 18%);
+  --popover: hsl(240 5% 23%);
   --popover-foreground: hsl(0 0% 98%);
 
   --primary: hsl(0 0% 98%);
