@@ -5,6 +5,8 @@ import { useCurrentUser } from "./useCurrentUser";
 import { useRouting } from '@/data/hooks/useRouting';
 
 import { clientTag } from "@/lib/clientTag";
+import { eventTooLarge } from "@/lib/eventSize";
+import { toast } from "@/hooks/useToast";
 import type { NostrEvent } from "@nostrify/nostrify";
 
 type EventTemplate = Pick<NostrEvent, 'kind' | 'content'> &
@@ -21,13 +23,11 @@ export function useNostrPublish(): UseMutationResult<
   return useMutation({
     mutationFn: async (t: EventTemplate) => {
       if (user) {
-        const tags = t.tags ?? [];
-
-        // Add the client tag when the app is configured to send one.
+        // The client tag reflects the client actually publishing — any
+        // existing one is replaced, never inherited from a prior publisher.
+        const tags = (t.tags ?? []).filter(([name]) => name !== "client");
         const tag = clientTag();
-        if (tag && !tags.some(([name]) => name === "client")) {
-          tags.push(["client", tag]);
-        }
+        if (tag) tags.push(["client", tag]);
 
         const event = await user.signer.signEvent({
           kind: t.kind,
@@ -36,6 +36,12 @@ export function useNostrPublish(): UseMutationResult<
           created_at: t.created_at ?? Math.floor(Date.now() / 1000),
         });
 
+        if (eventTooLarge(event)) {
+          toast({
+            title: "large event",
+            description: "over the usual 64 KB relay limit — some relays may reject it",
+          });
+        }
         await publishEvent(event, relays({ kind: 'publish', event }));
         return event;
       } else {

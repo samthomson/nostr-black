@@ -13,17 +13,16 @@ import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { usePrivateFeed } from '@/data/hooks/usePrivateFeed';
 import { usePublishSigned } from '@/hooks/usePublishSigned';
 import { store } from '@/data/store';
-import { conversationOf } from '@/lib/feRead';
+import { conversationOf, type OpenedReply } from '@/lib/feedEncryptionRead';
 import {
   KIND_PRIVATE_NOTE,
-  audienceOf,
   deletePrivateEvent,
   makeRevision,
   makeRumor,
   wrapPrivateNote,
   wrapPrivateReply,
   type OpenedNote,
-} from '@/lib/fe';
+} from '@/lib/feedEncryption';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
 
@@ -57,21 +56,29 @@ const PrivateFeedBody = () => {
     const { rumor } = makeRumor(getPublicKey(sk), content, [['e', parent.rumor.id]]);
     await publishSigned(wrapPrivateReply(sk, parent.replyCek, rumor));
   };
+
   const edit = async (parent: OpenedNote, content: string) => {
     if (!sk) throw new Error('session key required');
+    // One slotless event under the reply CEK: every holder already has
+    // the key, so one revision covers the whole audience — no slots,
+    // no aliases, no connection state.
     const revision = makeRevision(getPublicKey(sk), parent.rumor, content);
-    // The revision keeps the original audience across every chunk —
-    // membership is fixed at note creation.
-    const wrappers = conversationOf(sk, store.queryByKind(KIND_PRIVATE_NOTE), parent);
-    const audience = audienceOf(sk, wrappers, connectedPeers);
-    for (const event of wrapPrivateNote(sk, audience, revision)) {
-      await publishSigned(event);
-    }
+    await publishSigned(wrapPrivateReply(sk, parent.replyCek, revision));
+  };
+  const editReply = async (parent: OpenedNote, reply: OpenedReply, content: string) => {
+    if (!sk) throw new Error('session key required');
+    const revision = makeRevision(getPublicKey(sk), reply.rumor, content);
+    await publishSigned(wrapPrivateReply(sk, parent.replyCek, revision));
   };
 
-  const remove = async (parent: OpenedNote) => {
+  const remove = async (parent: OpenedNote, history: readonly OpenedNote[]) => {
     if (!sk) throw new Error('session key required');
-    const wrappers = conversationOf(sk, store.queryByKind(KIND_PRIVATE_NOTE), parent);
+    // The publication's chunks, plus our own revision events — each holds
+    // its burner in the `b` tag, so all are deletable.
+    const wrappers = [
+      ...conversationOf(sk, store.queryByKind(KIND_PRIVATE_NOTE), parent),
+      ...history.map((h) => h.wrapper),
+    ].filter((wrapper, i, all) => all.findIndex((w) => w.id === wrapper.id) === i);
     for (const wrapper of wrappers) {
       await publishSigned(deletePrivateEvent(sk, wrapper));
     }
@@ -136,9 +143,11 @@ const PrivateFeedBody = () => {
         <PrivateNote
           key={item.note.rumor.id}
           note={item.note}
+          history={item.history}
           replies={item.replies}
           onReply={reply}
           onEdit={edit}
+          onEditReply={editReply}
           onDelete={remove}
         />
       ))}

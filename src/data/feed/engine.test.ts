@@ -247,7 +247,7 @@ describe('sealed pages', () => {
     // relay that served it, which is what engagement routing needs.
     const held = store.queryByAuthors([ALICE], [1], { until: 500, since: 500 })[0];
     expect(held).toBeDefined();
-    expect(store.get(`e:${held.id}`).foundOn).toEqual(['wss://old/']);
+    expect(store.get(`event:${held.id}`).foundOn).toEqual(['wss://old/']);
   });
 
   it('does not fetch at all when the spec has no authors', async () => {

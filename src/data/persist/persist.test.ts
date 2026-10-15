@@ -105,7 +105,7 @@ describe('write-behind', () => {
 
     const db = await database();
     expect(await db.get(REPLACEABLE, replaceableKey(0, ALICE))).toBeDefined();
-    expect(await db.get(ADDRESSABLE, `a:30023:${ALICE}:post`)).toBeDefined();
+    expect(await db.get(ADDRESSABLE, `addressable:30023:${ALICE}:post`)).toBeDefined();
     expect(await db.count(EVENTS)).toBe(0);
     await persister.stop();
   });

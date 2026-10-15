@@ -14,7 +14,7 @@ import { createSlotLimiter, LANES, rank, type Lane, type SlotLimiter } from './s
 import { ENGAGEMENT_KINDS, REACTION_CAP } from './engagement';
 import { THREAD_KINDS, THREAD_LIMIT } from './thread';
 import { FEED_KINDS } from './feed/spec';
-import { KIND_CONNECTION, KIND_PRIVATE_NOTE, KIND_PRIVATE_REPLY } from '@/lib/fe';
+import { KIND_CONNECTION, KIND_PRIVATE_NOTE, KIND_PRIVATE_REPLY } from '@/lib/feedEncryption';
 
 /**
  * The scheduler.
@@ -38,8 +38,8 @@ export type Want =
   | { type: 'followers'; pubkey: string }
   | { type: 'connections'; derivedIdentityId: string } // our whole graph: kind 30378 by #c = derived_identity_id = H(my_sk ‖ label), known only to us
   | { type: 'connectionOffer'; d: string; offerer: string } // one pair's records: kind 30378 by #d = conn_addr(me, peer); `offerer` outboxes the query to their write relays
-  | { type: 'privateNotes'; aliases: readonly string[]; peers: readonly string[] } // kind 1370 by #f = alias(peer, me); `peers` fans the query out to their write relays
-  | { type: 'privateReplies'; noteIds: readonly string[]; peers: readonly string[] } // kind 1470 by #n = note_id(reply CEK); `peers` fans the query out
+  | { type: 'privateNotes'; aliases: readonly string[]; peers: readonly string[] } // kinds 1370/1470 by #f = alias(peer, me) + self-alias; `peers` fans the query out
+  | { type: 'privateReplies'; noteIds: readonly string[]; peers: readonly string[] } // kind 1470 (replies, reactions, revisions) by #n = note_id(reply CEK); `peers` fans the query out
 
 export type { Lane };
 
@@ -80,10 +80,9 @@ export const PRIVATE_NOTES_LIMIT = 50;
 export const PRIVATE_REPLY_LIMIT = 200;
 
 /**
- * Wants that route by the user's own read relays. Until the user's kind
- * 10002 has synced, myReadRelays falls back to discovery — relays that
- * do not host private kinds — so a miss there is not a verdict. These
- * park instead of settling, and re-run once routing resolves.
+ * Wants whose only correct routing is the user's own relays. Until our
+ * NIP-65 relay list is resolved — synced, or settled as not existing —
+ * these are held: never run on the discovery fallback, never settled.
  */
 const SELF_ROUTED: ReadonlySet<Want['type']> = new Set([
   'connections',
@@ -113,11 +112,11 @@ export const wantKey = (want: Want): string => {
     case 'connections':
       return `connections:${want.derivedIdentityId}`;
     case 'connectionOffer':
-      return `offer:${want.d}`;
+      return `connectionOffer:${want.d}`;
     case 'privateNotes':
-      return `pn:${[...want.aliases].sort().join(',')}`;
+      return `privateNotes:${[...want.aliases].sort().join(',')}`;
     case 'privateReplies':
-      return `pr:${[...want.noteIds].sort().join(',')}`;
+      return `privateReplies:${[...want.noteIds].sort().join(',')}`;
   }
 };
 
@@ -135,19 +134,19 @@ export const wantEntity = (want: Want): EntityKey | undefined => {
     case 'engagement':
       return undefined;
     case 'thread':
-      return `t:${want.parent}`;
+      return `thread:${want.parent}`;
     case 'authorNotes':
-      return `n:${want.pubkey}`;
+      return `authorNotes:${want.pubkey}`;
     case 'followers':
-      return `f:${want.pubkey}`;
+      return `followers:${want.pubkey}`;
     case 'connections':
-      return `cn:${want.derivedIdentityId}`;
+      return `connections:${want.derivedIdentityId}`;
     case 'connectionOffer':
-      return `co:${want.d}`;
+      return `connectionOffer:${want.d}`;
     case 'privateNotes':
-      return `pn:${[...want.aliases].sort().join(',')}`;
+      return `privateNotes:${[...want.aliases].sort().join(',')}`;
     case 'privateReplies':
-      return `pr:${[...want.noteIds].sort().join(',')}`;
+      return `privateReplies:${[...want.noteIds].sort().join(',')}`;
   }
 };
 
@@ -197,11 +196,17 @@ export const createScheduler = (
 ): Scheduler => {
   const pending = new Map<string, Queued>();
   const satisfiedAt = new Map<string, number>();
-  /** Wants that ran on the discovery fallback and await real routing. */
-  const rerouteQueue = new Map<string, Queued>();
-  /** The pubkey whose own relay list settled empty — fallback is then authoritative. */
-  let selfResolvedFor: string | undefined;
   const inflight = new Set<string>();
+
+  /** Our NIP-65 relay list is resolved once it has synced, or a lookup
+   * settled that we publish none — the read state of our own kind 10002
+   * entity, nothing else. */
+  const isMyOwnRelayListKnown = (ctx: RoutingContext): boolean =>
+    ctx.myRelays.length > 0 ||
+    (ctx.pubkey !== undefined &&
+      (target.get(replaceableKey(REPLACEABLE_KIND.relayList, ctx.pubkey)).settledAt !== undefined
+        || target.getReplaceable(REPLACEABLE_KIND.relayList, ctx.pubkey) !== undefined));
+
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running: Promise<void> | undefined;
@@ -403,7 +408,7 @@ export const createScheduler = (
         lane,
         ctx,
         [...new Set(privateNotes.flatMap((w) => w.aliases))],
-        (aliases) => ({ kinds: [KIND_PRIVATE_NOTE], '#f': aliases, limit: PRIVATE_NOTES_LIMIT }),
+        (aliases) => ({ kinds: [KIND_PRIVATE_NOTE, KIND_PRIVATE_REPLY], '#f': aliases, limit: PRIVATE_NOTES_LIMIT }),
         50,
         [...new Set(privateNotes.flatMap((w) => w.peers))],
       ) : undefined,
@@ -607,16 +612,10 @@ export const createScheduler = (
     await runGroups(lane, groups, filterOf, size);
   };
 
-  /** Re-run wants parked while our own routing was unresolved. */
+  /** Our relay list changed (synced, account switched): run whatever
+   * was held waiting for it. */
   const reroute = (): void => {
-    if (rerouteQueue.size === 0) return;
-    for (const [key, q] of rerouteQueue) {
-      if (!pending.has(key) && !inflight.has(key)) pending.set(key, q);
-    }
-    rerouteQueue.clear();
-    if (timer === undefined && pending.size > 0) {
-      timer = setTimeout(() => void flush(), DEBOUNCE_MS);
-    }
+    void flush();
   };
 
   const flush = async (): Promise<void> => {
@@ -632,8 +631,16 @@ export const createScheduler = (
     }
     if (pending.size === 0) return;
 
-    const batch = [...pending.values()];
-    pending.clear();
+    // Private wants wait for our relay list: held in pending — never run
+    // on the discovery fallback, never settled — until reroute().
+    const held = context();
+    const batch: Queued[] = [];
+    for (const [key, q] of pending) {
+      if (SELF_ROUTED.has(q.want.type) && !isMyOwnRelayListKnown(held)) continue;
+      pending.delete(key);
+      batch.push(q);
+    }
+    if (batch.length === 0) return;
     for (const { want } of batch) inflight.add(wantKey(want));
 
     // Lanes run concurrently; the slot limiter is what orders them, so a
@@ -644,7 +651,7 @@ export const createScheduler = (
       const now = Date.now();
       const settled: EntityKey[] = [];
       const ctx = context();
-      let selfResolved = false;
+      let selfRelayListSettled = false;
       for (const q of batch) {
         const want = q.want;
         const key = wantKey(want);
@@ -656,42 +663,22 @@ export const createScheduler = (
           !target.getEvent(want.id) &&
           !!want.author &&
           !ctx.authorRelays.get(want.author);
-        // Same rule for private wants while our own relay list has not
-        // synced: they ran on the discovery fallback, which is not where
-        // private kinds live. Park them until routing resolves — unless
-        // the user's own relay list has settled empty, when the fallback
-        // is all the routing there is.
-        const waitingOnSelf =
-          SELF_ROUTED.has(want.type) &&
-          ctx.pubkey !== undefined &&
-          selfResolvedFor !== ctx.pubkey &&
-          ctx.myRelays.length === 0;
-        if (waitingOnSelf) {
-          rerouteQueue.set(key, q);
-        } else {
-          rerouteQueue.delete(key);
-          if (want.type === 'relayList' && want.pubkey === ctx.pubkey) {
-            // A definitive miss on our own list: the fallback is authoritative.
-            if (!target.getReplaceable(REPLACEABLE_KIND.relayList, want.pubkey)) {
-              selfResolvedFor = want.pubkey;
-              selfResolved = true;
-            }
-          }
-          if (!waitingOnAuthor) satisfiedAt.set(key, now);
-          const entity = wantEntity(want);
-          if (entity) settled.push(entity);
-        }
+        if (want.type === 'relayList' && want.pubkey === ctx.pubkey) selfRelayListSettled = true;
+        if (!waitingOnAuthor) satisfiedAt.set(key, now);
+        const entity = wantEntity(want);
+        if (entity) settled.push(entity);
       }
       // Settling after ingest, so a component never sees "asked and missing"
       // in the same tick that the answer arrived.
       target.settle(settled, now);
-      if (selfResolved) reroute();
+      // Our own relay list settling (found or definitively absent) is
+      // what held private wants were waiting for.
+      if (selfRelayListSettled) reroute();
       running = undefined;
     });
 
     await running;
   };
-
   return {
     want: enqueue,
 
@@ -703,7 +690,6 @@ export const createScheduler = (
 
     drop: (want) => {
       pending.delete(wantKey(want));
-      rerouteQueue.delete(wantKey(want));
     },
 
     reroute,
@@ -712,7 +698,6 @@ export const createScheduler = (
 
     invalidate: () => {
       satisfiedAt.clear();
-      selfResolvedFor = undefined;
     },
 
     reset: () => {
@@ -721,11 +706,10 @@ export const createScheduler = (
       pending.clear();
       inflight.clear();
       satisfiedAt.clear();
-      rerouteQueue.clear();
-      selfResolvedFor = undefined;
       running = undefined;
     },
   };
+
 
 };
 

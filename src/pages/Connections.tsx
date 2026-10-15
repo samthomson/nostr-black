@@ -18,7 +18,7 @@ import {
   closeConnection,
   requestConnection,
   type ConnectionRecord,
-} from '@/lib/fe';
+} from '@/lib/feedEncryption';
 import { parsePubkey, npubOf, profileHref } from '@/lib/format';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';

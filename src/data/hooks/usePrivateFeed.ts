@@ -1,14 +1,17 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import { store } from '@/data/store';
-import { KIND_PRIVATE_NOTE, KIND_PRIVATE_REPLY, noteIdOf, type OpenedNote, type Rumor } from '@/lib/fe';
-import { collapseNotes, repliesOn, tryOpenNote, tryOpenReply, type OpenedReply } from '@/lib/feRead';
+import { KIND_PRIVATE_NOTE, KIND_PRIVATE_REPLY, aliasOf, noteIdOf, type OpenedNote, type Rumor } from '@/lib/feedEncryption';
+import { collapseNotes, conversationOn, tryOpenNote, tryOpenReply, type OpenedReply } from '@/lib/feedEncryptionRead';
 import { isPending, useEntity } from './useEntity';
 import { useConnections } from './useConnections';
 import { useSessionKey } from './useSessionKey';
+import { getPublicKey } from 'nostr-tools';
 
 export interface PrivatePost {
   note: OpenedNote;
+  /** The note's superseded revisions — its edit history. */
+  history: readonly OpenedNote[];
   replies: readonly OpenedReply[];
 }
 
@@ -19,10 +22,11 @@ export interface PrivateFeed {
 }
 
 const EMPTY_POSTS: PrivatePost[] = [];
-
 const samePosts = (a: readonly PrivatePost[], b: readonly PrivatePost[]): boolean =>
   a.length === b.length && a.every((post, i) =>
     post.note.wrapper.id === b[i].note.wrapper.id
+    && post.history.length === b[i].history.length
+    && post.history.every((rev, j) => rev.wrapper.id === b[i].history[j].wrapper.id)
     && post.replies.length === b[i].replies.length
     && post.replies.every((reply, j) => reply.wrapper.id === b[i].replies[j].wrapper.id));
 
@@ -37,8 +41,16 @@ export const usePrivateFeed = (): PrivateFeed => {
 
   const peers = useMemo(() => connected.map((r) => r.peer), [connected]);
 
+  // Connection aliases plus the self-alias: the same #f query that feeds
+  // the page also fetches everything the user authored — the archive is
+  // identity-derived, no device-local state.
+  const withSelf = useMemo(
+    () => (sk ? [...aliases, aliasOf(sk, getPublicKey(sk))] : aliases),
+    [aliases, sk],
+  );
+
   const notesSettle = useEntity(
-    aliases.length > 0 ? { type: 'privateNotes', aliases, peers } : undefined,
+    withSelf.length > 0 ? { type: 'privateNotes', aliases: withSelf, peers } : undefined,
     'interactive',
   );
 
@@ -81,13 +93,29 @@ export const usePrivateFeed = (): PrivateFeed => {
       return rumor;
     };
 
-    const notes = collapseNotes(
-      store.queryByKind(KIND_PRIVATE_NOTE)
-        .map(openNote)
-        .filter((note): note is OpenedNote => note !== undefined),
-    );
+    const openedNotes = store.queryByKind(KIND_PRIVATE_NOTE)
+      .map(openNote)
+      .filter((note): note is OpenedNote => note !== undefined);
+    const notes = collapseNotes(openedNotes);
     const replyEvents = store.queryByKind(KIND_PRIVATE_REPLY);
-    const next = notes.map((note) => ({ note, replies: repliesOn(note, replyEvents, openReply) }));
+    const next = notes.map((note) => {
+      const conversation = conversationOn(note, replyEvents, openReply);
+      // The tip of the revision chain is what renders; everything it
+      // superseded — the original included — is history.
+      const tip = conversation.revisions.at(-1);
+      const shown = tip
+        ? { ...note, wrapper: tip.wrapper, rumor: tip.rumor }
+        : note;
+      return {
+        note: shown,
+        // With a tip, the original plus every intermediate revision is
+        // history, oldest first.
+        history: tip
+          ? [note, ...conversation.revisions.map((r) => ({ ...note, wrapper: r.wrapper, rumor: r.rumor }))]
+          : [],
+        replies: conversation.replies,
+      };
+    });
     if (samePosts(cache.current, next)) return cache.current;
     cache.current = next;
     return next;

@@ -1,8 +1,8 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { getPublicKey } from 'nostr-tools';
 import { store } from '@/data/store';
-import { KIND_CONNECTION, aliasOf, connAddrOf, derivedIdentityIdOf, type ConnectionRecord } from '@/lib/fe';
-import { tryOpenConnection } from '@/lib/feRead';
+import { KIND_CONNECTION, aliasOf, connAddrOf, derivedIdentityIdOf, type ConnectionRecord } from '@/lib/feedEncryption';
+import { tryOpenConnection } from '@/lib/feedEncryptionRead';
 import { isPending, useEntity } from './useEntity';
 import { useSessionKey } from './useSessionKey';
 
@@ -78,9 +78,13 @@ export const useConnections = (offerPeer?: string): Connections => {
     () => records.filter((r) => r.state === 'request' && !r.payload.sigs.some((s) => s.pk === me)),
     [records, me],
   );
+  // Every relationship we have ever had, closed included: connection
+  // records are durable, and conversation membership is fixed at note
+  // creation — a note's chunks stay discoverable (and revisable) even
+  // after the author and a recipient disconnect.
   const aliases = useMemo(
-    () => (sk ? connected.map((r) => aliasOf(sk, r.peer)) : []),
-    [sk, connected],
+    () => (sk ? records.map((r) => aliasOf(sk, r.peer)) : []),
+    [sk, records],
   );
 
   return {

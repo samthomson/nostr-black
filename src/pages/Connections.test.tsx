@@ -7,7 +7,7 @@ import { TestApp } from '@/test/TestApp';
 import ConnectionsPage from '@/pages/Connections';
 import { useKeystore } from '@/auth/useKeystore';
 import { useLayoutEffect, type ReactNode } from 'react';
-import { acceptConnection, openConnection, requestConnection } from '@/lib/fe';
+import { acceptConnection, openConnection, requestConnection } from '@/lib/feedEncryption';
 
 const queryRelay = vi.fn<(url: string, filters: NostrFilter[]) => Promise<NostrEvent[]>>();
 const publish = vi.fn<(event: NostrEvent, relays: string[]) => Promise<void>>();

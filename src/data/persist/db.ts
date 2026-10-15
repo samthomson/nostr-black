@@ -51,8 +51,8 @@ export type EntityStoreName = (typeof ENTITY_STORES)[number];
  * see `store.ts` — so this stays a pure function of the key.
  */
 export const storeForKey = (key: string): EntityStoreName => {
-  if (key.startsWith('r:')) return REPLACEABLE;
-  if (key.startsWith('a:')) return ADDRESSABLE;
+  if (key.startsWith('replaceable:')) return REPLACEABLE;
+  if (key.startsWith('addressable:')) return ADDRESSABLE;
   return EVENTS;
 };
 

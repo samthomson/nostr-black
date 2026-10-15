@@ -442,13 +442,13 @@ describe('private feed wants', () => {
     expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://mine/']);
   });
 
-  it('asks my read relays for private notes by alias', async () => {
+  it('asks my read relays for private events by alias', async () => {
     const { scheduler } = build();
     scheduler.want({ type: 'privateNotes', aliases: [ALIAS], peers: [] }, 'interactive');
     await scheduler.flush();
 
     expect(queryRelay.mock.calls[0][1][0]).toMatchObject({
-      kinds: [1370],
+      kinds: [1370, 1470],
       '#f': [ALIAS],
     });
     expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://mine/']);
@@ -461,7 +461,7 @@ describe('private feed wants', () => {
     expect(queryRelay).not.toHaveBeenCalled();
   });
 
-  it('asks my read relays for replies by note id', async () => {
+  it('asks for conversation events by note id', async () => {
     const { scheduler } = build();
     scheduler.want({ type: 'privateReplies', noteIds: [NOTE], peers: [] }, 'interactive');
     await scheduler.flush();
@@ -472,28 +472,27 @@ describe('private feed wants', () => {
     });
   });
 
-  it('parks a private want on the discovery fallback until our relays sync, then reroutes', async () => {
+  it('holds a private want until our relays are known — nothing runs on the fallback', async () => {
     const { scheduler, store, ctx } = build({ myRelays: [] });
     const entity = wantEntity({ type: 'privateNotes', aliases: [ALIAS], peers: [] })!;
 
     scheduler.want({ type: 'privateNotes', aliases: [ALIAS], peers: [] }, 'interactive');
     await scheduler.flush();
 
-    // Ran on the discovery fallback, and did not settle: a miss there is
-    // not a verdict.
-    expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://discovery/']);
+    // Not run at all — no discovery-relay query, no settle — just held.
+    expect(queryRelay).not.toHaveBeenCalled();
     expect(store.get(entity).settledAt).toBeUndefined();
 
-    // Our relay list lands; reroute re-runs the want where it belongs.
+    // Our relay list lands; reroute runs it where it belongs.
     ctx.myRelays = [{ url: 'wss://mine/', read: true, write: true }];
     scheduler.reroute();
     await scheduler.flush();
 
-    expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://discovery/', 'wss://mine/']);
+    expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://mine/']);
     expect(store.get(entity).settledAt).toBeDefined();
   });
 
-  it('settles a parked want once the own relay list settles empty', async () => {
+  it('runs a held want once the own relay list settles as not existing', async () => {
     const { scheduler, store } = build({ myRelays: [] });
     const entity = wantEntity({ type: 'privateNotes', aliases: [ALIAS], peers: [] })!;
 
@@ -503,7 +502,9 @@ describe('private feed wants', () => {
     await scheduler.flush();
     await scheduler.flush();
 
-    // The fallback is authoritative now: the want settles instead of parking forever.
+    // No list exists: the discovery relays are all the routing there is —
+    // both the relay-list lookup and the (previously held) private want.
+    expect(queryRelay.mock.calls.map(([url]) => url).every((url) => url === 'wss://discovery/')).toBe(true);
     expect(store.get(entity).settledAt).toBeDefined();
   });
   it('fans private notes out to connected peers write relays', async () => {

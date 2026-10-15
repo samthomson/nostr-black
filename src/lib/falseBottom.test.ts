@@ -13,7 +13,7 @@ import {
   sealSlotless,
   openSlotless,
   encodeEnvelope,
-} from './fb';
+} from './falseBottom';
 
 const pair = () => {
   const sk = generateSecretKey();

@@ -17,13 +17,13 @@ import type { NostrEvent } from '@nostrify/nostrify';
  */
 export type EntityKey = string;
 
-export const eventKey = (id: string): EntityKey => `e:${id}`;
+export const eventKey = (id: string): EntityKey => `event:${id}`;
 
 export const replaceableKey = (kind: number, pubkey: string): EntityKey =>
-  `r:${kind}:${pubkey}`;
+  `replaceable:${kind}:${pubkey}`;
 
 export const addressableKey = (kind: number, pubkey: string, d: string): EntityKey =>
-  `a:${kind}:${pubkey}:${d}`;
+  `addressable:${kind}:${pubkey}:${d}`;
 
 /** NIP-01 kind ranges. */
 export const isReplaceable = (kind: number): boolean =>
@@ -298,9 +298,9 @@ export const createStore = (): EventStore => {
       let addressable = 0;
       for (const [key, state] of entities) {
         if (!state.event) continue;
-        if (key.startsWith('e:')) events += 1;
-        else if (key.startsWith('r:')) replaceable += 1;
-        else if (key.startsWith('a:')) addressable += 1;
+        if (key.startsWith('event:')) events += 1;
+        else if (key.startsWith('replaceable:')) replaceable += 1;
+        else if (key.startsWith('addressable:')) addressable += 1;
       }
       return { events, replaceable, addressable };
     },

@@ -5,7 +5,6 @@ import {
   KIND_PRIVATE_NOTE,
   KIND_PRIVATE_REPLY,
   acceptConnection,
-  audienceOf,
   burnerKeyOf,
   closeConnection,
   deletePrivateEvent,
@@ -19,8 +18,8 @@ import {
   requestConnection,
   wrapPrivateNote,
   wrapPrivateReply,
-} from './fe';
-import { collapseNotes } from './feRead';
+} from './feedEncryption';
+import { collapseNotes } from './feedEncryptionRead';
 
 const pair = () => {
   const sk = generateSecretKey();
@@ -89,19 +88,25 @@ describe('NIP-FE private notes', () => {
     expect(collapseNotes(opened).map((n) => n.rumor.content)).toEqual(['second version']);
   });
 
-  it('revisions keep the original audience across all chunks', () => {
+  it('originals carry no n tag; a revision is one conversation event for the whole audience', () => {
     const alice = pair();
     const bob = pair();
     const carol = pair();
-    const { rumor } = makeRumor(alice.pk, 'v1');
-    const chunks = wrapPrivateNote(alice.sk, [bob.pk, carol.pk], rumor);
+    const { rumor, replyCek } = makeRumor(alice.pk, 'v1');
+    const [chunk] = wrapPrivateNote(alice.sk, [bob.pk, carol.pk], rumor);
+    // Chunk carries aliases only — the publication is not linkable.
+    expect(chunk.tags.some(([name]) => name === 'n')).toBe(false);
 
-    // Connected since: both were in the original audience, in any chunk.
-    expect(audienceOf(alice.sk, chunks, [bob.pk, carol.pk])).toEqual([bob.pk, carol.pk]);
-    // A peer whose alias is on no wrapper is not in the audience.
-    const stranger = pair();
-    expect(audienceOf(alice.sk, chunks, [stranger.pk])).toEqual([]);
+    const revision = makeRevision(alice.pk, rumor, 'v2');
+    const event = wrapPrivateReply(alice.sk, replyCek, revision);
+    expect(event.kind).toBe(KIND_PRIVATE_REPLY);
+    expect(event.tags).toContainEqual(['n', noteIdOf(replyCek)]);
+    // Every holder opens the revision with the reply CEK — both chunks'
+    // recipients, from either chunk.
+    expect(openPrivateReply(replyCek, event).content).toBe('v2');
+    expect(openPrivateReply(replyCek, event).tags).toContainEqual(['revision_of', rumor.id]);
   });
+
 });
 
 describe('NIP-FE connections', () => {

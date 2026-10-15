@@ -104,11 +104,11 @@ export const sealAuthorKey = (envelopeSk: Uint8Array, authorPk: string): string 
 export const openAuthorKey = (sk: Uint8Array, envelopePk: string, packed: string): Uint8Array =>
   aeadDecrypt(readerKek(sk, envelopePk), packed);
 
-/** 1..20 junk slots of the same encoded length as a real wrap. */
-const junkSlots = (template: string): string[] => {
+/** 1..20 junk slots of the given encoded byte length — random bytes only,
+ * never derived from a real slot's contents. */
+const junkSlots = (bytes: number): string[] => {
   const extra = 1 + Math.floor(Math.random() * 20);
-  const size = fromB64(template).length;
-  return Array.from({ length: extra }, () => toB64(randomBytes(size)));
+  return Array.from({ length: extra }, () => toB64(randomBytes(bytes)));
 };
 
 export const sealEnvelope = (
@@ -119,19 +119,18 @@ export const sealEnvelope = (
 ): { envelope: FbEnvelope; cek: Uint8Array } => {
   if (recipientPks.length === 0) throw new Error('fb envelope needs recipients');
   const cek = opts.cek ?? randomBytes(32);
-  const slot0 = wrapCek(envelopeSk, recipientPks[0], cek);
-  const slots = [
-    slot0,
-    ...recipientPks.slice(1).map((pk) => wrapCek(envelopeSk, pk, cek)),
-    ...(opts.pad === false ? [] : junkSlots(slot0)),
-  ];
+  // One slot per recipient, all interchangeable. The first is only special
+  // as the length template junk padding imitates — so every slot, real or
+  // junk, looks identical to an outsider.
+  const slots = recipientPks.map((pk) => wrapCek(envelopeSk, pk, cek));
+  const [template] = slots;
   return {
     cek,
     envelope: {
       v: FB_VERSION,
       alg: FB_ALG,
       ct: aeadEncrypt(cek, payload),
-      slots,
+      slots: opts.pad === false ? slots : [...slots, ...junkSlots(fromB64(template!).length)],
     },
   };
 };
@@ -144,6 +143,15 @@ export const sealSlotless = (cek: Uint8Array, payload: Uint8Array): FbEnvelope =
   slots: [],
 });
 
+/** A revision's envelope: same CEK and slots as the chunk it revises,
+ * only the payload re-encrypted. Slot bytes are copied verbatim, so
+ * recipients open it exactly as they opened the original. */
+export const resealEnvelope = (cek: Uint8Array, payload: Uint8Array, slots: string[]): FbEnvelope => ({
+  v: FB_VERSION,
+  alg: FB_ALG,
+  ct: aeadEncrypt(cek, payload),
+  slots,
+});
 export const openEnvelope = (sk: Uint8Array, envelopePk: string, envelope: FbEnvelope): Uint8Array =>
   openEnvelopeWithCek(sk, envelopePk, envelope).payload;
 
