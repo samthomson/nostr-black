@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { nip10, nip19 } from 'nostr-tools';
 import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat2, Trash2, Zap } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
-import type { Rumor } from '@/lib/fe';
+import type { Rumor } from '@/lib/feedEncryption';
 import { useProfile } from '@/data/hooks/useProfile';
 import { useEvent } from '@/data/hooks/useEvent';
 import { useEngagement } from '@/data/hooks/useEngagement';
