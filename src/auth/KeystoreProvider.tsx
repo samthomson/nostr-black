@@ -2,6 +2,9 @@ import { useCallback, useState } from 'react';
 import { KeystoreContext } from './keystoreContext';
 import { NSecSigner } from '@nostrify/nostrify';
 import { flushSession, lock, unlock, isUnlocked, currentPubkey, getSecretKey, storedSession } from './keystore';
+import { store } from '@/data/store';
+import { scheduler } from '@/data/scheduler';
+import { persister } from '@/data/persist/persist';
 
 /**
  * Keystore context: exposes session-key state and the NIP-07-shaped signer
@@ -26,8 +29,18 @@ export const KeystoreProvider = ({ children }: { children: React.ReactNode }) =>
   const [unlockedState, setUnlockedState] = useState(isUnlocked);
   const [pk, setPk] = useState<string | null>(currentPubkey);
 
+  // Identity is the cache key. Switching or dropping the key drops all
+  // fetched data with it — one identity must never see another's store.
+  const wipeData = (): void => {
+    void persister.wipe();
+    store.clear();
+    scheduler.invalidate();
+  };
+
   const login = useCallback((nsec: string): string => {
+    const previous = currentPubkey();
     const pubkey = unlock(nsec);
+    if (previous !== null && previous !== pubkey) wipeData();
     setUnlockedState(true);
     setPk(pubkey);
     return pubkey;
@@ -36,6 +49,7 @@ export const KeystoreProvider = ({ children }: { children: React.ReactNode }) =>
   const logout = useCallback(() => {
     flushSession();
     lock();
+    wipeData();
     setUnlockedState(false);
     setPk(null);
   }, []);
