@@ -8,7 +8,6 @@ import { PrivacyTag } from '@/components/PrivacyTag';
 import { PrivateNote } from '@/components/PrivateNote';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { usePrivateFeed } from '@/data/hooks/usePrivateFeed';
 import { usePublishSigned } from '@/hooks/usePublishSigned';
@@ -27,7 +26,6 @@ import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
 
 const PrivateFeedBody = () => {
-  const { user } = useCurrentUser();
   const sk = useSessionKey();
   const publishSigned = usePublishSigned();
   const { posts, pending, connectedPeers } = usePrivateFeed();
@@ -35,9 +33,7 @@ const PrivateFeedBody = () => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
 
-  if (!user) {
-    return <p className="text-muted-foreground text-sm">log in to use the private feed</p>;
-  }
+  // The router's gate guarantees a user here.
   if (!sk) {
     return (
       <p className="text-muted-foreground text-sm">

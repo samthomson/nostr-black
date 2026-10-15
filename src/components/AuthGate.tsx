@@ -1,15 +1,19 @@
+import { Navigate, useLocation } from 'react-router-dom';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { TorGate } from './TorGate';
 
 /**
- * Gate for authenticated surfaces. Logged in: the full Tor gate (network
- * use ahead). Logged out: the content renders ungated only where it makes
- * no relay queries (settings, debug); querying surfaces (NIP-19 routes)
- * fall through to the Tor gate too — the landing page is the single place
- * a logged-out visitor ever meets the tor warning.
+ * Gate for app surfaces. Logged in: full Tor gate. Logged out: redirect to
+ * the landing — no dead routes, no page-level login prompts. The intended
+ * path rides along in location state, and the landing returns you there
+ * after login.
  */
-export const AuthGate = ({ network, children }: { network?: boolean; children: React.ReactNode }) => {
+export const AuthGate = ({ children }: { children: React.ReactNode }) => {
   const { user } = useCurrentUser();
-  if (user || network) return <TorGate>{children}</TorGate>;
-  return <>{children}</>;
+  const location = useLocation();
+
+  if (!user) {
+    return <Navigate to="/" replace state={{ from: location.pathname + location.search }} />;
+  }
+  return <TorGate>{children}</TorGate>;
 };

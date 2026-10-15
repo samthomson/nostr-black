@@ -8,7 +8,6 @@ import { PrivacyTag } from '@/components/PrivacyTag';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { useConnections } from '@/data/hooks/useConnections';
 import { useProfile } from '@/data/hooks/useProfile';
@@ -64,7 +63,6 @@ const Row = ({
 
 const ConnectionsBody = () => {
   const sk = useSessionKey();
-  const { user } = useCurrentUser();
   const publishSigned = usePublishSigned();
   const [input, setInput] = useState('');
   const [lookup, setLookup] = useState<string | undefined>();
@@ -72,9 +70,7 @@ const ConnectionsBody = () => {
   const [error, setError] = useState<string | undefined>();
   const { records, connected, outgoing, incoming, pending } = useConnections(lookup);
 
-  if (!user) {
-    return <p className="text-muted-foreground text-sm">log in to use connections</p>;
-  }
+  // The router's gate guarantees a user here.
   if (!sk) {
     return (
       <p className="text-muted-foreground text-sm">

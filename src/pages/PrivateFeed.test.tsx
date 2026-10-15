@@ -43,15 +43,6 @@ beforeEach(() => {
 });
 
 describe('PrivateFeedPage', () => {
-  it('asks for a session key when logged out', async () => {
-    render(
-      <TestApp>
-        <PrivateFeedPage />
-      </TestApp>,
-    );
-    expect(await screen.findByText('log in to use the private feed')).toBeTruthy();
-  });
-
   it('points at connections when the session has none', async () => {
     const alice = generateSecretKey();
     render(

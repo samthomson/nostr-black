@@ -42,15 +42,6 @@ beforeEach(() => {
 });
 
 describe('ConnectionsPage', () => {
-  it('asks to log in when there is no session', async () => {
-    render(
-      <TestApp>
-        <ConnectionsPage />
-      </TestApp>,
-    );
-    expect(await screen.findByText('log in to use connections')).toBeTruthy();
-  });
-
   it('publishes a kind 30378 request to the peer', async () => {
     const alice = generateSecretKey();
     const bob = generateSecretKey();
