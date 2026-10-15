@@ -97,17 +97,17 @@ const embeddedRepost = (event: NostrEvent): Want[] => {
  */
 const OPAQUE_KINDS = new Set([124, 1370, 1470, 30378]);
 
+/** Kinds that render nothing and imply nothing: deletions. */
+const IGNORED_KINDS = new Set([5]);
+
 /** Every want this event implies, deduped. Author profile is always first. */
 export const extractWants = (event: NostrEvent): Want[] => {
-  // Deletions render nothing, and private ones are burner-signed — walking
-  // their author or tags is the same burner-profile leak OPAQUE_KINDS stops.
-  if (OPAQUE_KINDS.has(event.kind) || event.kind === 5) return [];
+  if (OPAQUE_KINDS.has(event.kind) || IGNORED_KINDS.has(event.kind)) return [];
   const out: Want[] = [];
 
   if (HEX.test(event.pubkey)) {
     push(out, { type: 'profile', pubkey: event.pubkey });
   }
-
   const parsed = nip10.parse(event);
   const reply = parsed.reply ?? parsed.root;
   if (reply) {
