@@ -1,11 +1,16 @@
 import { ReactNode, useCallback, useMemo, useState } from 'react';
 import { UserStateContext, type UserState } from '@/contexts/UserStateContext';
 import { useLocalStorage } from '@/hooks/useLocalStorage';
+import { useKeystore } from '@/auth/useKeystore';
 
 const EMPTY_STATE: UserState = {
   relayMetadata: { relays: [], updatedAt: 0 },
   follows: { pubkeys: [], updatedAt: 0 },
 };
+
+/** Persisted shape: state per pubkey — switching identities must never
+ * leak one account's follows or relay list into another's queries. */
+type Stored = Partial<Record<string, Partial<UserState>>>;
 
 interface UserStateProviderProps {
   children: ReactNode;
@@ -15,26 +20,33 @@ interface UserStateProviderProps {
 }
 
 /**
- * Owns synced user nostr state (relay list, follows), persisted separately
- * from app config. All writes go through updateUser; sync effects compare
- * `updatedAt` so only newer relay data ever replaces stored data.
+ * Owns synced user nostr state (relay list, follows), persisted per
+ * identity: `storageKey` holds a pubkey → state map, and only the active
+ * pubkey's entry is read or written. All writes go through updateUser;
+ * sync effects compare `updatedAt` so only newer relay data ever
+ * replaces stored data.
  */
 export function UserStateProvider(props: UserStateProviderProps) {
   const { children, storageKey, initialState } = props;
+  const { pubkey } = useKeystore();
 
-  const [stored, setStored] = useLocalStorage<Partial<UserState>>(storageKey, {});
+  const [stored, setStored] = useLocalStorage<Stored>(storageKey, {});
 
   const updateUser = useCallback(
     (updater: (current: UserState) => UserState) => {
-      setStored((current) => updater({ ...EMPTY_STATE, ...current }));
+      if (!pubkey) return;
+      setStored((current) => ({
+        ...current,
+        [pubkey]: updater({ ...EMPTY_STATE, ...current[pubkey] }),
+      }));
     },
-    [setStored],
+    [pubkey, setStored],
   );
 
   const state = useMemo<UserState>(
     // initialState (test seed) wins over stored — the seed is the scenario.
-    () => ({ ...EMPTY_STATE, ...stored, ...initialState }),
-    [stored, initialState],
+    () => ({ ...EMPTY_STATE, ...(pubkey ? stored[pubkey] : undefined), ...initialState }),
+    [stored, pubkey, initialState],
   );
 
   const [relaySyncedAt, setRelaySyncedAt] = useState<number | undefined>(undefined);
@@ -46,7 +58,6 @@ export function UserStateProvider(props: UserStateProviderProps) {
     () => ({ state, updateUser, relaySyncedAt, markRelaySynced, relaySyncNonce, bumpRelaySync }),
     [state, updateUser, relaySyncedAt, markRelaySynced, relaySyncNonce, bumpRelaySync],
   );
-
 
   return <UserStateContext.Provider value={value}>{children}</UserStateContext.Provider>;
 }

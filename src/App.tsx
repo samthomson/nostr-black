@@ -44,16 +44,16 @@ export function App() {
   return (
     <UnheadProvider head={head}>
       <AppProvider storageKey="nostr:app-config/2" defaultConfig={defaultConfig}>
-        <UserStateProvider storageKey="nostr:user-state">
         <KeystoreProvider>
+        <UserStateProvider storageKey="nostr:user-state">
         <QueryClientProvider client={queryClient}>
           <DataProvider>
             <AppRoot />
           </DataProvider>
           <QueryDevtools />
         </QueryClientProvider>
-        </KeystoreProvider>
         </UserStateProvider>
+        </KeystoreProvider>
       </AppProvider>
     </UnheadProvider>
   );

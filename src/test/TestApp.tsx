@@ -54,8 +54,8 @@ export function TestApp({ children, userState }: TestAppProps) {
   return (
     <UnheadProvider head={head}>
       <AppProvider storageKey='test-app-config' defaultConfig={defaultConfig}>
-        <UserStateProvider storageKey='test-user-state' initialState={userState}>
         <KeystoreProvider>
+        <UserStateProvider storageKey='test-user-state' initialState={userState}>
         <QueryClientProvider client={queryClient}>
           <DataProvider>
             <BrowserRouter>
@@ -63,8 +63,8 @@ export function TestApp({ children, userState }: TestAppProps) {
             </BrowserRouter>
           </DataProvider>
         </QueryClientProvider>
-        </KeystoreProvider>
         </UserStateProvider>
+        </KeystoreProvider>
       </AppProvider>
     </UnheadProvider>
   );
