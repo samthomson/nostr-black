@@ -1,5 +1,6 @@
 import { useSeoMeta } from '@unhead/react';
 import { Page } from '@/components/Page';
+import { FollowsDialog } from '@/components/FollowsDialog';
 import { Note } from '@/components/Note';
 import { useAuthorNotes } from '@/data/hooks/useAuthorNotes';
 import { useFollowers } from '@/data/hooks/useFollowers';
@@ -9,6 +10,7 @@ import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useAsset } from '@/hooks/useAsset';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
 /** Banner image through the same media path as avatars. */
@@ -60,6 +62,7 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
   const follows = useFollowList(pubkey);
   const followers = useFollowers(pubkey);
 
+  const [followsOpen, setFollowsOpen] = useState(false);
   const displayName = about?.display_name || about?.name || `${npub.slice(0, 10)}…`;
   const uniqueRelays = new Set([...relayList.list.write, ...relayList.list.read]).size;
 
@@ -100,10 +103,14 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
           )}
 
           <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            <span>
+            <button
+              type="button"
+              onClick={() => setFollowsOpen(true)}
+              className="cursor-pointer hover:underline"
+            >
               <span className="text-foreground font-medium">{countLabel(follows.count, follows.pending)}</span>
               {' '}following
-            </span>
+            </button>
             <span>
               <span className="text-foreground font-medium">{countLabel(followers.count, followers.pending, followers.capped)}</span>
               {' '}followers
@@ -152,6 +159,8 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
           </CardContent>
         </Card>
       )}
+
+      <FollowsDialog followList={follows.event} open={followsOpen} onOpenChange={setFollowsOpen} />
     </div>
   );
 };
