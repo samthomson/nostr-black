@@ -13,7 +13,7 @@ import { useIsDesktop } from '@/hooks/useTransport';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Feed } from '@/components/Feed';
-import { Shell } from '@/components/Shell';
+import { Page } from '@/components/Page';
 import { TorGate } from '@/components/TorGate';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
@@ -189,9 +189,9 @@ const Index = () => {
 
   return (
     <TorGate>
-      <Shell>
+      <Page>
         <Feed />
-      </Shell>
+      </Page>
     </TorGate>
   );
 };

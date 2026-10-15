@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSeoMeta } from '@unhead/react';
-import { Shell } from '@/components/Shell';
+import { Page } from '@/components/Page';
 
 /** Each button triggers a render-time throw (state change → re-render →
  * throw), which is what ErrorBoundary catches — click-handler throws go
@@ -52,14 +52,14 @@ const CrashPage = () => {
   useSeoMeta({ title: 'crash test — nostr.black' });
 
   return (
-    <Shell>
+    <Page>
       <div className="space-y-4">
         <p className="text-muted-foreground text-sm">
           each button throws during render — the black screen of death should catch it
         </p>
         <Throwers />
       </div>
-    </Shell>
+    </Page>
   );
 };
 

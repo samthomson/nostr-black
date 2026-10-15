@@ -1,5 +1,5 @@
 import { useSeoMeta } from '@unhead/react';
-import { Shell } from '@/components/Shell';
+import { Page } from '@/components/Page';
 import { Note } from '@/components/Note';
 import { useAuthorNotes } from '@/data/hooks/useAuthorNotes';
 import { useFollowers } from '@/data/hooks/useFollowers';
@@ -160,8 +160,8 @@ export const ProfilePage = ({ pubkey }: { pubkey: string }) => {
   useSeoMeta({ title: `${npubOf(pubkey).slice(0, 16)}… — nostr.black` });
 
   return (
-    <Shell>
+    <Page>
       <ProfileBody pubkey={pubkey} />
-    </Shell>
+    </Page>
   );
 };

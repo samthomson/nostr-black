@@ -1,6 +1,6 @@
 import { useSeoMeta } from '@unhead/react';
 import { Link } from 'react-router-dom';
-import { Shell } from '@/components/Shell';
+import { Page } from '@/components/Page';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useUserState } from '@/hooks/useUserState';
 import { useEgress, useIsTor } from '@/hooks/useEgress';
@@ -290,9 +290,9 @@ const DebugPage = () => {
   useSeoMeta({ title: 'debug — nostr.black' });
 
   return (
-    <Shell>
+    <Page title="debug">
       <DebugBody />
-    </Shell>
+    </Page>
   );
 };
 

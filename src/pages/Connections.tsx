@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Loader2 } from 'lucide-react';
 import { getPublicKey } from 'nostr-tools';
-import { Shell } from '@/components/Shell';
+import { Page } from '@/components/Page';
 import { PrivacyTag } from '@/components/PrivacyTag';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -233,13 +233,9 @@ const ConnectionsBody = () => {
 const ConnectionsPage = () => {
   useSeoMeta({ title: 'connections — nostr.black' });
   return (
-    <Shell>
-      <div className="mb-3 flex items-center gap-2">
-        <h1 className="text-lg font-semibold">connections</h1>
-        <PrivacyTag grade="private" />
-      </div>
+    <Page title={<>connections<PrivacyTag grade="private" /></>}>
       <ConnectionsBody />
-    </Shell>
+    </Page>
   );
 };
 

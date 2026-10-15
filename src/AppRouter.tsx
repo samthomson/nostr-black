@@ -15,7 +15,7 @@ import NotFound from "./pages/NotFound";
 /** App surfaces behind the login gate: logged out redirects to the
  * landing, which returns you here after login. */
 const GATED: readonly { path: string; element: ReactNode }[] = [
-  { path: "/settings", element: <SettingsPage /> },
+  { path: "/settings/*", element: <SettingsPage /> },
   { path: "/debug", element: <DebugPage /> },
   { path: "/connections", element: <ConnectionsPage /> },
   { path: "/private", element: <PrivateFeedPage /> },

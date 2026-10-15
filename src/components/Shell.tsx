@@ -50,17 +50,18 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   }, [menuOpen]);
 
   const navLink = (to: string, label: string, Icon: LucideIcon, onNavigate?: () => void) => {
-    const active = pathname === to;
+    const active = to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`);
     return (
       <Link
         key={to}
         to={to}
         onClick={onNavigate}
+        aria-current={active ? 'page' : undefined}
         className={cn(
-          'flex items-center gap-3 rounded-sm px-2 py-2 text-[15px] font-semibold transition-colors',
+          'flex items-center gap-3 rounded-sm border px-2 py-2 text-[15px] font-semibold transition-colors',
           active
-            ? 'text-foreground'
-            : 'text-muted-foreground hover:text-foreground',
+            ? 'border-border text-foreground'
+            : 'border-transparent text-muted-foreground hover:text-foreground',
         )}
       >
         <Icon className="size-5 shrink-0" strokeWidth={active ? 2.5 : 2} />

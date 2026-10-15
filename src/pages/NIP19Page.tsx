@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useEvent } from '@/data/hooks/useEvent';
 import { Note } from '@/components/Note';
 import { Thread } from '@/components/Thread';
-import { Shell } from '@/components/Shell';
+import { Page } from '@/components/Page';
 import { ProfilePage } from '@/pages/Profile';
 import type { DecodeResult } from '@/lib/format';
 import { Card, CardContent } from '@/components/ui/card';
@@ -94,16 +94,16 @@ export function NIP19Page() {
     case 'note':
     case 'nevent':
       return (
-        <Shell>
+        <Page>
           <EventPage identifier={identifier} />
-        </Shell>
+        </Page>
       );
 
     case 'naddr':
       return (
-        <Shell>
+        <Page>
           <div>Addressable event placeholder</div>
-        </Shell>
+        </Page>
       );
 
     default:

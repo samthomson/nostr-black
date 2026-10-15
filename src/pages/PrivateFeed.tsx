@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Loader2 } from 'lucide-react';
 import { getPublicKey } from 'nostr-tools';
-import { Shell } from '@/components/Shell';
+import { Page } from '@/components/Page';
 import { PrivacyTag } from '@/components/PrivacyTag';
 import { PrivateNote } from '@/components/PrivateNote';
 import { Button } from '@/components/ui/button';
@@ -164,13 +164,9 @@ const PrivateFeedBody = () => {
 const PrivateFeedPage = () => {
   useSeoMeta({ title: 'private feed — nostr.black' });
   return (
-    <Shell>
-      <div className="mb-3 flex items-center gap-2">
-        <h1 className="text-lg font-semibold">private feed</h1>
-        <PrivacyTag grade="private" />
-      </div>
+    <Page title={<>private feed<PrivacyTag grade="private" /></>}>
       <PrivateFeedBody />
-    </Shell>
+    </Page>
   );
 };
 
