@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools';
+import { generateSecretKey, getEventHash, getPublicKey, verifyEvent } from 'nostr-tools';
 import {
   KIND_CONNECTION,
   KIND_PRIVATE_NOTE,
@@ -18,8 +18,14 @@ import {
   requestConnection,
   wrapPrivateNote,
   wrapPrivateReply,
+  type Rumor,
 } from './feedEncryption';
 import { collapseNotes } from './feedEncryptionRead';
+
+const rumorOf = (pubkey: string, content: string, tags: string[][], kind: number): Rumor => {
+  const template = { pubkey, created_at: 1790000000, kind, tags, content };
+  return { ...template, id: getEventHash(template) };
+};
 
 const pair = () => {
   const sk = generateSecretKey();
@@ -71,6 +77,17 @@ describe('NIP-FE private notes', () => {
     expect(reply.kind).toBe(KIND_PRIVATE_REPLY);
     expect(reply.tags.some(([n, v]) => n === 'n' && v === noteIdOf(replyCek))).toBe(true);
     expect(openPrivateReply(opened.replyCek, reply).content).toBe('a reply');
+  });
+
+  it('revisions keep the conversation key, kind, and content tags', () => {
+    const alice = pair();
+    const picture = rumorOf(alice.pk, 'sunset', [['url', 'https://pics.example/s.jpg'], ['m', 'image/jpeg'], ['reply_cek', 'ab'.repeat(32)]], 20);
+    const revision = makeRevision(alice.pk, picture, 'sunset, edited');
+
+    expect(revision.kind).toBe(20);
+    expect(revision.tags).toContainEqual(['url', 'https://pics.example/s.jpg']);
+    expect(revision.tags).toContainEqual(['m', 'image/jpeg']);
+    expect(revision.tags).toContainEqual(['revision_of', picture.id]);
   });
 
   it('revisions keep the conversation key and supersede the original', () => {
