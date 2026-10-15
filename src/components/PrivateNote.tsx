@@ -3,8 +3,9 @@ import { Loader2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { Note } from '@/components/Note';
 import { useProvenance } from '@/data/hooks/useProvenance';
-import type { OpenedNote, Rumor } from '@/lib/fe';
-import type { OpenedReply } from '@/lib/feRead';
+import type { OpenedNote, Rumor } from '@/lib/feedEncryption';
+import type { OpenedReply } from '@/lib/feedEncryptionRead';
+import { formatTimestamp } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
@@ -91,6 +92,27 @@ const ReplyComposer = ({
   );
 };
 
+/** A note's superseded versions — the edit history, oldest first. */
+const EditHistory = ({ history }: { history: readonly OpenedNote[] }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="text-muted-foreground space-y-1 text-xs">
+      <button
+        type="button"
+        className="underline hover:text-foreground"
+        onClick={() => setOpen(!open)}
+      >
+        edited — {history.length} {history.length === 1 ? 'version' : 'versions'}
+      </button>
+      {open && history.map((item) => (
+        <p key={item.rumor.id} className="whitespace-pre-wrap break-words border-l pl-2">
+          {formatTimestamp(item.rumor.created_at)} — {item.rumor.content}
+        </p>
+      ))}
+    </div>
+  );
+};
+
 /**
  * One private post: the note, its replies, and the composer. Every item —
  * post or reply — renders through the same Note component the public feed
@@ -98,27 +120,37 @@ const ReplyComposer = ({
  */
 export const PrivateNote = ({
   note,
+  history,
   replies,
   onReply,
   onEdit,
+  onEditReply,
   onDelete,
 }: {
   note: OpenedNote;
+  history: readonly OpenedNote[];
   replies: readonly OpenedReply[];
   onReply: (parent: OpenedNote, content: string) => Promise<void>;
   onEdit?: (parent: OpenedNote, content: string) => Promise<void>;
-  onDelete?: (parent: OpenedNote) => Promise<void>;
+  onEditReply?: (parent: OpenedNote, reply: OpenedReply, content: string) => Promise<void>;
+  onDelete?: (parent: OpenedNote, history: readonly OpenedNote[]) => Promise<void>;
 }) => (
   <div className="space-y-3">
     <PrivateItem
       rumor={note.rumor}
       wrapper={note.wrapper}
       onEdit={onEdit ? (content) => onEdit(note, content) : undefined}
-      onDelete={onDelete ? () => onDelete(note) : undefined}
+      onDelete={onDelete ? () => onDelete(note, history) : undefined}
     />
     <div className="space-y-3 border-l pl-3">
+      {history.length > 0 && <EditHistory history={history} />}
       {replies.map((reply) => (
-        <PrivateItem key={reply.wrapper.id} rumor={reply.rumor} wrapper={reply.wrapper} />
+        <PrivateItem
+          key={reply.wrapper.id}
+          rumor={reply.rumor}
+          wrapper={reply.wrapper}
+          onEdit={onEditReply ? (content) => onEditReply(note, reply, content) : undefined}
+        />
       ))}
       <ReplyComposer parent={note} onReply={onReply} />
     </div>
