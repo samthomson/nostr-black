@@ -3,7 +3,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useUserState } from '@/hooks/useUserState';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
-import { useEntities } from '@/data/hooks/useEntity';
+import { useEntities, useEntity } from '@/data/hooks/useEntity';
 import { feedEngine, syncFeedAuthors } from '@/data/feed/registry';
 import type { FeedState } from '@/data/feed/engine';
 
@@ -40,6 +40,12 @@ export const useFeed = (): Feed => {
 
   const engine = feedEngine(FOLLOWS);
   const state = useSyncExternalStore(engine.subscribe, engine.getState, engine.getState);
+
+  // The own follow-list fetch itself: "not found" is only claimable once
+  // this want has settled (it waits for our relay list, then asks the
+  // right relays). Same want key as the bootstrap's — deduped.
+  const selfFollowList = useEntity(self ? { type: 'followList', pubkey: self } : undefined);
+  const followsSettled = self === undefined || selfFollowList.settledAt !== undefined;
 
   // Outbox routing is only as good as the authors' NIP-65 lists, so the
   // feed declares them as wants of its own rather than hoping something
@@ -138,6 +144,6 @@ export const useFeed = (): Feed => {
       waitingOnRouting ||
       (authors.length > 0 && notes.length === 0 && (state.loading || state.attempts === 0)),
     noFollows: discoverySettled && userState.follows.updatedAt > 0 && authors.length === 0,
-    followsNotFound: discoverySettled && userState.follows.updatedAt === 0,
+    followsNotFound: discoverySettled && followsSettled && userState.follows.updatedAt === 0,
   };
 };

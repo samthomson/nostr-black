@@ -8,6 +8,8 @@ import type { EgressEntry } from '@/hooks/useEgress';
 import { useMediaCache } from '@/hooks/useMediaCache';
 import { useStoreSummary } from '@/data/hooks/useStoreSummary';
 import { hostOf } from '@/lib/format';
+import { store } from '@/data/store';
+import { parseRelayList } from '@/lib/outbox';
 
 /** Per-relay view: all queries to one relay grouped into one row. */
 interface RelayGroup {
@@ -98,6 +100,24 @@ const DebugBody = () => {
   const empty = relayGroups.filter((g) => relayHealth(g) === 'empty');
   const healthy = relayGroups.length - unhealthy.length - empty.length;
 
+  // Outbox coverage: how wide the follows' NIP-65 declarations spread, and
+  // how much of it is shared — the "why are there so many relays" answer.
+  const follows = useUserState().state.follows.pubkeys;
+  const outbox = (() => {
+    const relayUse = new Map<string, number>();
+    let listed = 0;
+    for (const pubkey of follows) {
+      const list = parseRelayList(store.getReplaceable(10002, pubkey));
+      if (!list || (list.write.length === 0 && list.read.length === 0)) continue;
+      listed += 1;
+      for (const url of new Set([...list.write, ...list.read])) {
+        relayUse.set(url, (relayUse.get(url) ?? 0) + 1);
+      }
+    }
+    const shared = [...relayUse.values()].filter((n) => n > 1).length;
+    return { follows: follows.length, listed, relays: relayUse.size, shared };
+  })();
+
   return (
     <div className="space-y-6 text-sm">
       {/* Health summary: the answer to "is anything wrong?" at a glance. */}
@@ -118,6 +138,9 @@ const DebugBody = () => {
             {unhealthy.length} failing: {unhealthy.map((g) => g.host).join(', ')}
           </span>
         )}
+        <span className="rounded-sm border px-2 py-1">
+          {outbox.follows} follows → {outbox.listed} with NIP-65 → {outbox.relays} distinct relays ({outbox.shared} shared)
+        </span>
         <span className="rounded-sm border px-2 py-1">
           media cache {(media.bytes / 1024 / 1024).toFixed(1)} MB
         </span>
