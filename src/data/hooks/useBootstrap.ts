@@ -43,6 +43,10 @@ export const useBootstrap = (): void => {
     markRelaySynced();
   }, [pubkey, relays.settledAt, follows.settledAt, markRelaySynced]);
 
+  // TODO (ui nudge): once `relays` settles without an event, the user
+  // publishes no NIP-65 list — surface that here so settings can suggest
+  // setting relays. Not built yet; this is the seam.
+
   useEffect(() => {
     const event = relays.event;
     if (!event || event.created_at <= state.relayMetadata.updatedAt) return;
