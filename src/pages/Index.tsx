@@ -189,7 +189,13 @@ const Index = () => {
 
   return (
     <TorGate>
-      <Page>
+      <Page title={<PrivacyTag grade="public">public feed</PrivacyTag>}>
+        <div
+          aria-disabled="true"
+          className="bg-card/50 text-muted-foreground min-h-[4.5rem] shrink-0 rounded-sm border border-border/50 px-3 py-2.5 text-sm"
+        >
+          write a note…
+        </div>
         <Feed />
       </Page>
     </TorGate>

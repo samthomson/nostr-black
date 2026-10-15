@@ -233,7 +233,7 @@ const ConnectionsBody = () => {
 const ConnectionsPage = () => {
   useSeoMeta({ title: 'connections — nostr.black' });
   return (
-    <Page title={<>connections<PrivacyTag grade="private" /></>}>
+    <Page title={<PrivacyTag grade="high">connections</PrivacyTag>}>
       <ConnectionsBody />
     </Page>
   );

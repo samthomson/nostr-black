@@ -19,7 +19,7 @@ export const PrivacyTag = ({
   const style = PRIVACY[grade];
   return (
     <span
-      className={`inline-flex items-center rounded-sm px-[0.35em] py-[0.1em] align-middle font-mono leading-none ${style.className} ${className}`}
+      className={`inline-flex items-center rounded-sm px-[0.35em] py-[0.1em] align-middle ${style.className} ${className}`}
     >
       {children ?? style.label}
     </span>

@@ -164,7 +164,7 @@ const PrivateFeedBody = () => {
 const PrivateFeedPage = () => {
   useSeoMeta({ title: 'private feed — nostr.black' });
   return (
-    <Page title={<>private feed<PrivacyTag grade="private" /></>}>
+    <Page title={<PrivacyTag grade="private">private feed</PrivacyTag>}>
       <PrivateFeedBody />
     </Page>
   );

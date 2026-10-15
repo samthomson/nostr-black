@@ -9,9 +9,11 @@ import { BrandMark } from '@/components/BrandMark';
 import { Input } from '@/components/ui/input';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { profileHref } from '@/lib/format';
+import { PrivacyTag } from '@/components/PrivacyTag';
 import { cn } from '@/lib/utils';
 
-type NavItem = { to: string; label: string; Icon: LucideIcon };
+type NavItem = { to: string; label: string; Icon: LucideIcon; grade?: import('@/lib/privacy').PrivacyGrade };
+type Grade = NavItem['grade'];
 
 /**
  * App chrome. Desktop (md+): centred rail + feed. Mobile: header with
@@ -21,7 +23,6 @@ type NavItem = { to: string; label: string; Icon: LucideIcon };
 export const Shell = ({ children }: { children: React.ReactNode }) => {
   const { pathname } = useLocation();
   const { user } = useCurrentUser();
-  const onFeed = pathname === '/';
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPath, setMenuPath] = useState(pathname);
   if (pathname !== menuPath) {
@@ -30,10 +31,12 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   }
 
   const profileTo = user ? profileHref(user.pubkey) : undefined;
+  // Privacy is colour: the public feed is white, the private feed black,
+  // encrypted connections near-black; your profile carries no grade.
   const nav: NavItem[] = [
-    { to: '/', label: 'feed', Icon: House },
-    { to: '/private', label: 'private', Icon: Lock },
-    { to: '/connections', label: 'connections', Icon: Users },
+    { to: '/', label: 'feed', Icon: House, grade: 'public' },
+    { to: '/private', label: 'private feed', Icon: Lock, grade: 'private' },
+    { to: '/connections', label: 'connections', Icon: Users, grade: 'high' },
     ...(profileTo ? [{ to: profileTo, label: 'profile', Icon: User }] : []),
     { to: '/settings', label: 'settings', Icon: Settings },
     { to: '/debug', label: 'debug', Icon: Bug },
@@ -49,7 +52,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
     };
   }, [menuOpen]);
 
-  const navLink = (to: string, label: string, Icon: LucideIcon, onNavigate?: () => void) => {
+  const navLink = (to: string, label: string, Icon: LucideIcon, grade: Grade, onNavigate?: () => void) => {
     const active = to === '/' ? pathname === '/' : pathname === to || pathname.startsWith(`${to}/`);
     return (
       <Link
@@ -65,14 +68,14 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
         )}
       >
         <Icon className="size-5 shrink-0" strokeWidth={active ? 2.5 : 2} />
-        {label}
+        {grade ? <PrivacyTag grade={grade}>{label}</PrivacyTag> : label}
       </Link>
     );
   };
 
   const navBlock = (onNavigate?: () => void) => (
     <div className="flex flex-col gap-0.5">
-      {nav.map(({ to, label, Icon }) => navLink(to, label, Icon, onNavigate))}
+      {nav.map(({ to, label, Icon, grade }) => navLink(to, label, Icon, grade, onNavigate))}
       <Input
         type="search"
         placeholder="search"
@@ -160,14 +163,6 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
         <main
           className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pt-4 md:pb-3"
         >
-          {onFeed && (
-            <div
-              aria-disabled="true"
-              className="bg-card/50 text-muted-foreground min-h-[4.5rem] shrink-0 rounded-sm border border-border/50 px-3 py-2.5 text-sm"
-            >
-              write a note…
-            </div>
-          )}
           {children}
         </main>
       </div>
