@@ -8,6 +8,6 @@
 export const DEFAULT_DISCOVERY_RELAYS = [
   'wss://relay.nostr.black/',
   'wss://relay.samt.st/',
-  'wss://bruh.samt.st/',
-  'wss://testnet.samt.st/',
+  'wss://relay.primal.net/',
+  'wss://relay.ditto.pub/',
 ];
