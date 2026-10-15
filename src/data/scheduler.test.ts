@@ -169,7 +169,7 @@ describe('outbox routing', () => {
     queryRelay.mockClear();
     await scheduler.flush();
 
-    expect(asked()).toEqual([{ url: 'wss://mine/', kinds: [10002], authors: [ALICE] }]);
+    expect(asked().map((a) => a.url).sort()).toEqual(['wss://discovery/', 'wss://mine/']);
   });
 
   it('splits a mixed batch by what it can route, one request per relay', async () => {
@@ -186,13 +186,13 @@ describe('outbox routing', () => {
     ]);
   });
 
-  it('never looks for someone else\'s relay list on a discovery relay', async () => {
+  it("looks for someone else's relay list on discovery too — a personal read relay would strand every followee", async () => {
     const { scheduler } = build();
 
     scheduler.want({ type: 'relayList', pubkey: ALICE }, 'interactive');
     await scheduler.flush();
 
-    expect(asked().map((a) => a.url)).toEqual(['wss://mine/']);
+    expect(asked().map((a) => a.url).sort()).toEqual(['wss://discovery/', 'wss://mine/']);
   });
 
   it('bootstraps our own identity against discovery as well as our relays', async () => {
@@ -489,6 +489,26 @@ describe('private feed wants', () => {
     await scheduler.flush();
 
     expect(queryRelay.mock.calls.map(([url]) => url)).toEqual(['wss://mine/']);
+    expect(store.get(entity).settledAt).toBeDefined();
+  });
+
+  it('holds the own follow list until our relays are known, then asks there', async () => {
+    const { scheduler, store, ctx } = build({ pubkey: ME, myRelays: [] });
+    const entity = wantEntity({ type: 'followList', pubkey: ME })!;
+
+    scheduler.want({ type: 'followList', pubkey: ME }, 'interactive');
+    await scheduler.flush();
+
+    // Not settled on the discovery fallback — a miss there must not lock
+    // in as a verdict for the staleness window.
+    expect(store.get(entity).settledAt).toBeUndefined();
+
+    ctx.myRelays = [{ url: 'wss://mine/', read: true, write: true }];
+    scheduler.reroute();
+    await scheduler.flush();
+
+    const kind3 = queryRelay.mock.calls.filter(([, f]) => f[0].kinds?.includes(3));
+    expect(kind3.some(([url]) => url === 'wss://mine/')).toBe(true);
     expect(store.get(entity).settledAt).toBeDefined();
   });
 

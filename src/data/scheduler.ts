@@ -91,6 +91,18 @@ const SELF_ROUTED: ReadonlySet<Want['type']> = new Set([
   'privateReplies',
 ]);
 
+/**
+ * The user's own kind 0/3 must not settle a miss on the discovery
+ * fallback either: before the 10002 syncs they would be asked nowhere
+ * useful, settle empty, and the staleness window would lock the miss in
+ * even after routing becomes known. (Their own kind 10002 is the probe
+ * that resolves routing, so it always runs.)
+ */
+const isSelfBootstrapWant = (want: Want, ctx: RoutingContext): boolean =>
+  ctx.pubkey !== undefined &&
+  (want.type === 'followList' || want.type === 'profile') &&
+  want.pubkey === ctx.pubkey;
+
 export const wantKey = (want: Want): string => {
   switch (want.type) {
     case 'profile':
@@ -301,17 +313,19 @@ export const createScheduler = (
   };
 
   /**
-   * A kind 10002 can only be looked for where we already read — knowing
-   * where *they* publish is the thing the lookup is for. Discovery relays
-   * are reserved for the logged-in user's own identity events, so other
-   * people's lists are never sought there.
+   * A kind 10002 can only be looked for where others' events might be.
+   * The user's read set alone is not that: a personal relay nobody else
+   * publishes their list to would strand every followee. Others' lists
+   * are therefore asked on the read set ∪ discovery — the standard place
+   * strangers' metadata lives. The user's own list rides the bootstrap
+   * tier instead.
    */
   const relayListGroups = (ctx: RoutingContext, pubkeys: string[]): Groups => {
     const groups: Groups = new Map();
     const others = pubkeys.filter((pubkey) => pubkey !== ctx.pubkey);
 
     if (others.length > 0) {
-      for (const url of myReadRelays(ctx)) addGroup(groups, url, others);
+      for (const url of [...myReadRelays(ctx), ...ctx.discovery]) addGroup(groups, url, others);
     }
 
     if (ctx.pubkey && pubkeys.includes(ctx.pubkey)) {
@@ -472,11 +486,19 @@ export const createScheduler = (
     ctx: RoutingContext,
     wants: Extract<Want, { type: 'engagement' }>[],
   ): Promise<void> => {
+    // Where a note's responses are asked. Two sources: where the note was
+    // found (its author's outbox, capped at three — every relay that ever
+    // served it does not need re-asking), plus the note author's NIP-65
+    // read relays — their inbox, where polite clients publish replies so
+    // the author actually sees them.
     const targets = wants.map((want) => {
-      const foundOn = target.get(eventKey(want.target)).foundOn ?? [];
+      const foundOn = (target.get(eventKey(want.target)).foundOn ?? []).slice(0, 3);
+      const author = target.getEvent(want.target)?.pubkey;
+      const inbox = author ? (ctx.authorRelays.get(author)?.read ?? []) : [];
+      const relays = [...new Set([...foundOn, ...inbox])];
       return {
         id: want.target,
-        foundOn: foundOn.length > 0 ? foundOn : myReadRelays(ctx),
+        foundOn: relays.length > 0 ? relays : myReadRelays(ctx),
       };
     });
 
@@ -631,12 +653,14 @@ export const createScheduler = (
     }
     if (pending.size === 0) return;
 
-    // Private wants wait for our relay list: held in pending — never run
-    // on the discovery fallback, never settled — until reroute().
+    // Wants that must wait for our own relay list are held in pending —
+    // never run on the discovery fallback, never settled — until reroute().
     const held = context();
     const batch: Queued[] = [];
     for (const [key, q] of pending) {
-      if (SELF_ROUTED.has(q.want.type) && !isMyOwnRelayListKnown(held)) continue;
+      const waitsForOwnRelays =
+        SELF_ROUTED.has(q.want.type) || isSelfBootstrapWant(q.want, held);
+      if (waitsForOwnRelays && !isMyOwnRelayListKnown(held)) continue;
       pending.delete(key);
       batch.push(q);
     }
