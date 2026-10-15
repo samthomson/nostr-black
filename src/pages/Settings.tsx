@@ -6,11 +6,13 @@ import { cn } from '@/lib/utils';
 import { NetworkSection } from './settings/NetworkSection';
 import { MediaSection } from './settings/MediaSection';
 import { AccountSection } from './settings/AccountSection';
+import { CacheSection } from './settings/CacheSection';
 
 const SETTINGS_SECTIONS = [
   { id: 'network', label: 'network' },
   { id: 'media', label: 'media' },
   { id: 'account', label: 'account' },
+  { id: 'cache', label: 'cache' },
 ] as const;
 
 type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
@@ -24,6 +26,7 @@ const PANELS: Record<SettingsSectionId, React.FC> = {
   network: NetworkSection,
   media: MediaSection,
   account: AccountSection,
+  cache: CacheSection,
 };
 
 const SectionTabs = () => {
