@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react';
 import { KeystoreContext } from './keystoreContext';
 import { NSecSigner } from '@nostrify/nostrify';
 import { flushSession, lock, unlock, isUnlocked, currentPubkey, getSecretKey, storedSession } from './keystore';
+import { flushBurners } from './burners';
 import { store } from '@/data/store';
 import { scheduler } from '@/data/scheduler';
 import { persister } from '@/data/persist/persist';
@@ -32,9 +33,11 @@ export const KeystoreProvider = ({ children }: { children: React.ReactNode }) =>
   // Identity is the cache key. Switching or dropping the key drops all
   // fetched data with it — one identity must never see another's store.
   const wipeData = (): void => {
+    const identity = currentPubkey();
     void persister.wipe();
     store.clear();
     scheduler.invalidate();
+    if (identity) flushBurners(identity);
   };
 
   const login = useCallback((nsec: string): string => {

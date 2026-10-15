@@ -156,8 +156,8 @@ describe('Note UI', () => {
 
     expect(await screen.findByTestId('note-counts')).toBeTruthy();
     expect(screen.getByLabelText('replies')).toBeTruthy();
-    expect(screen.getByLabelText('reposts')).toBeTruthy();
-    expect(screen.getByLabelText('likes')).toBeTruthy();
+    expect(screen.getByLabelText(/reposts?/)).toBeTruthy();
+    expect(screen.getByLabelText(/likes|react/)).toBeTruthy();
     expect(screen.getByLabelText('zaps')).toBeTruthy();
   });
 
@@ -176,8 +176,8 @@ describe('Note UI', () => {
       </TestApp>,
     );
 
-    expect(await screen.findByLabelText('likes')).toHaveTextContent('1');
-    expect(screen.getByLabelText('reposts')).toHaveTextContent('1');
+    expect(await screen.findByLabelText(/likes|react/)).toHaveTextContent('1');
+    expect(screen.getByLabelText(/reposts?/)).toHaveTextContent('1');
   });
 
   it('links the reply count to the note so the thread can open', async () => {

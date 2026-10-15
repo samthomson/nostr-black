@@ -12,12 +12,15 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EventInfoDialog } from '@/components/EventInfoDialog';
+import { RelayPill, RoutePill } from '@/components/Pills';
 import { NoteEditor } from '@/components/NoteEditor';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useAsset } from '@/hooks/useAsset';
-import { profileHref, eventHref, hostOf, npubOf, formatTimestamp } from '@/lib/format';
+import { profileHref, eventHref, npubOf, formatTimestamp } from '@/lib/format';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { useDeleteEvent } from '@/hooks/useDeleteEvent';
+import { clientTag as clientTagOf } from '@/lib/clientTag';
+import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
+import { useRouting } from '@/data/hooks/useRouting';
 
 
 /** Content/image budget past which a note is collapsed with a fade. */
@@ -47,12 +50,6 @@ const NostrRef = ({ bech32 }: { bech32: string }) => {
     </Link>
   );
 };
-
-/**
- * Renders note content as safe React nodes: URLs, nostr: entities (NIP-21)
- * and hashtags become links/spans. Never uses innerHTML — event content is
- * untrusted (see AGENTS.md).
- */
 
 /**
  * Renders note content as safe React nodes: nostr: entities (NIP-21),
@@ -187,25 +184,26 @@ const AuthorLink = ({ pubkey }: { pubkey: string }) => {
 };
 
 /** Compact rendering of a reposted/quoted event. */
-const EmbeddedNote = ({ event }: { event: NostrEvent }) => {
-  const media = mediaUrls(event);
-
+/** The media grid — the one layout for a note's images/videos, used by
+ * the note body and embedded notes alike. */
+const MediaGrid = ({ urls, alt }: { urls: readonly string[]; alt: string }) => {
+  if (urls.length === 0) return null;
   return (
-    <blockquote className="space-y-1 border-l-2 border-muted-foreground/30 pl-3">
-      <AuthorLink pubkey={event.pubkey} />
-      <div className="whitespace-pre-wrap break-words text-sm">
-        {renderContent(event.content)}
-      </div>
-      {media.length > 0 && (
-        <div className={`mt-1 gap-1 ${media.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
-          {media.map((url) => (
-            <MediaItem key={url} url={url} alt={event.tags.find(([n]) => n === 'alt')?.[1] ?? 'embedded media'} />
-          ))}
-        </div>
-      )}
-    </blockquote>
+    <div className={`mt-1 gap-1 ${urls.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
+      {urls.map((url) => <MediaItem key={url} url={url} alt={alt} />)}
+    </div>
   );
 };
+
+const EmbeddedNote = ({ event }: { event: NostrEvent }) => (
+  <blockquote className="space-y-1 border-l-2 border-muted-foreground/30 pl-3">
+    <AuthorLink pubkey={event.pubkey} />
+    <div className="whitespace-pre-wrap break-words text-sm">
+      {renderContent(event.content)}
+    </div>
+    <MediaGrid urls={mediaUrls(event)} alt={event.tags.find(([n]) => n === 'alt')?.[1] ?? 'embedded media'} />
+  </blockquote>
+);
 
 /** Reply affordance: names the author of the parent event (the person
  * actually replied to). Prefers the loaded parent event's pubkey; until
@@ -248,54 +246,90 @@ const ReplyContext = ({
  */
 const fmt = (n: number, capped: boolean): string => `${n}${capped ? '+' : ''}`;
 
+/** One engagement count. The count is the button when a handler is
+ * present, a link when only routing exists, plain text otherwise. */
+const Count = ({
+  icon,
+  count,
+  label,
+  testid,
+  onClick,
+  href,
+}: {
+  icon: React.ReactNode;
+  count: React.ReactNode;
+  label: string;
+  testid?: string;
+  onClick?: () => void;
+  href?: string;
+}) => {
+  const inner = (
+    <>
+      {icon}
+      {count}
+    </>
+  );
+  const cls = 'inline-flex items-center gap-1';
+  if (onClick) {
+    return (
+      <button type="button" className={`${cls} cursor-pointer hover:text-foreground`} onClick={onClick} aria-label={label} data-testid={testid}>
+        {inner}
+      </button>
+    );
+  }
+  if (href) {
+    return (
+      <Link to={href} className={`${cls} hover:text-foreground`} aria-label={label} data-testid={testid}>
+        {inner}
+      </Link>
+    );
+  }
+  return <span className={cls} aria-label={label} data-testid={testid}>{inner}</span>;
+};
+
 const NoteCounts = ({
   event,
   engagement,
   linkReplies,
   onReplies,
+  onReact,
+  onRepost,
 }: {
   event: NostrEvent | Rumor;
   engagement: Engagement;
   linkReplies: boolean;
   onReplies?: () => void;
+  /** Present when reacting is available: the count is the button. */
+  onReact?: () => void;
+  onRepost?: () => void;
 }) => {
   const { replies, reactions, downvotes, reposts, zaps, capped } = engagement;
   const href = linkReplies ? eventHref(event.id, event.pubkey) : undefined;
-    const count = (n: number) => (n > 0 ? fmt(n, capped) : null);
-
-  const replyInner = (
-    <>
-      <MessageCircle className="size-4" />
-      {count(replies)}
-    </>
-  );
+  const count = (n: number) => (n > 0 ? fmt(n, capped) : null);
 
   return (
     <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
-      {onReplies ? (
-        <button type="button" className="inline-flex items-center gap-1 hover:text-foreground" onClick={onReplies} aria-label="replies">
-          {replyInner}
-        </button>
-      ) : href ? (
-        <Link to={href} className="inline-flex items-center gap-1 hover:text-foreground" aria-label="replies">
-          {replyInner}
-        </Link>
-      ) : (
-        <span className="inline-flex items-center gap-1" aria-label="replies">{replyInner}</span>
-      )}
-      <span className="inline-flex items-center gap-1" aria-label="reposts">
-        <Repeat2 className="size-4" />
-        {count(reposts)}
-      </span>
-      <span className="inline-flex items-center gap-1" aria-label="likes" data-testid="count-likes">
-        <Heart className="size-4" />
-        {count(reactions)}
-        {downvotes > 0 && <span>{fmt(downvotes, capped)}</span>}
-      </span>
-      <span className="inline-flex items-center gap-1" aria-label="zaps">
-        <Zap className="size-4" />
-        {count(zaps)}
-      </span>
+      <Count
+        icon={<MessageCircle className="size-4" />}
+        count={count(replies)}
+        label="replies"
+        onClick={onReplies}
+        href={href}
+      />
+      <Count
+        icon={<Repeat2 className="size-4" />}
+        count={count(reposts)}
+        label="repost"
+        onClick={onRepost}
+      />
+      <Count
+        icon={<Heart className="size-4" />}
+        count={<>{count(reactions)}{downvotes > 0 && <span>{fmt(downvotes, capped)}</span>}</>}
+        label="react"
+        testid="count-likes"
+        onClick={onReact}
+      />
+      <Count icon={<Zap className="size-4" />} count={count(zaps)} label="zaps" />
     </div>
   );
 };
@@ -313,29 +347,14 @@ const NoteMeta = ({
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1 border-t pt-1.5">
       {foundOn?.map((url) => (
-        <span
-          key={url}
-          className="rounded-sm bg-muted px-1 py-0.5 font-mono text-[10px] leading-none text-muted-foreground"
-        >
-          {hostOf(url)}
-        </span>
+        <RelayPill key={url} url={url} />
       ))}
       {client && (
         <span className="rounded-sm border px-1 py-0.5 font-mono text-[10px] leading-none text-muted-foreground">
           via {client}
         </span>
       )}
-      {route && (
-        <span
-          className={`rounded-sm px-1 py-0.5 font-mono text-[10px] leading-none ${
-            route === 'tor'
-              ? 'bg-emerald-600/15 text-emerald-500'
-              : 'bg-amber-600/15 text-amber-500'
-          }`}
-        >
-          {route === 'tor' ? '⏁ tor' : 'clearnet'}
-        </span>
-      )}
+      {route && <RoutePill route={route} />}
     </div>
   );
 };
@@ -356,10 +375,10 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   onReplies?: () => void;
   /** Present when the item is editable (private notes): publish a
    * revision with this content. */
-  onEdit?: (content: string) => Promise<void>;
+  onEdit?: (content: string) => void;
   /** Present when the parent owns deletion (a private note deletes its
    * whole conversation). Falls back to a single-event NIP-09. */
-  onDelete?: () => Promise<void>;
+  onDelete?: () => void;
 }) => {
   const { config } = useAppContext();
   const showMedia = config.mediaEnabled;
@@ -369,53 +388,72 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   const isPrivate = wrapper !== undefined;
   const { user } = useCurrentUser();
   const mine = !!user && event.pubkey === user.pubkey;
-  const del = useDeleteEvent();
+  const { request, dialog: broadcastDialog } = useBroadcastFlow();
+  const { relays: planRelays } = useRouting();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | undefined>();
 
   const startEdit = () => {
     setDraft(event.content);
     setEditing(true);
   };
 
-  const saveEdit = async () => {
-    const content = draft.trim();
-    if (!content || busy || !onEdit) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await onEdit(content);
-      setEditing(false);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+  // Reactions and reposts are the same broadcast with a different kind —
+  // one confirm, same modal, same queue. Signed by the session signer.
+  const confirmEngagement = async (kind: 6 | 7) => {
+    const target = event as NostrEvent;
+    const engaged = await user!.signer.signEvent({
+      kind, content: kind === 7 ? '+' : '',
+      tags: [['e', target.id], ['p', target.pubkey]],
+      created_at: Math.floor(Date.now() / 1000),
+    });
+    request({
+      grade: 'public',
+      label: kind === 7 ? 'reaction' : 'repost',
+      preview: `${kind === 7 ? '+ on' : 'repost of'} ${target.id.slice(0, 16)}…`,
+      identityPubkey: user!.pubkey,
+      relays: planRelays({ kind: 'publish', event: engaged }),
+      events: [engaged],
+    });
   };
 
-  const remove = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      if (onDelete) await onDelete();
-      else await del(wrapper ?? (event as NostrEvent));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
+  // Public deletion previews in the broadcast modal like everything
+  // else; private kinds flow up through onDelete instead.
+  const confirmDelete = () => {
+    if (onDelete) {
+      onDelete();
+      return;
     }
+    void (async () => {
+      const tags: string[][] = [['e', (event as NostrEvent).id]];
+      const tag = clientTagOf();
+      if (tag) tags.push(['client', tag]);
+      const deletion = await user!.signer.signEvent({
+        kind: 5, content: '', tags, created_at: Math.floor(Date.now() / 1000),
+      });
+      request({
+        grade: 'public',
+        label: 'deletion',
+        preview: 'delete this event from your relays',
+        identityPubkey: (event as NostrEvent).pubkey,
+        relays: planRelays({ kind: 'publish', event: deletion }),
+        events: [deletion],
+      });
+    })();
+  };
+
+  const saveEdit = () => {
+    const content = draft.trim();
+    if (!content || !onEdit) return;
+    onEdit(content);
+    setEditing(false);
   };
   const displayName = metadata?.display_name || metadata?.name;
   const npub = npubOf(event.pubkey);
   const href = profileHref(event.pubkey);
   const embedded = repostedEvent(event);
   const media = showMedia ? mediaUrls(event) : [];
-  const allMedia = showMedia
-    ? [...mediaUrls(event), ...(embedded ? mediaUrls(embedded) : [])]
-    : [];
+  const allMedia = showMedia ? [...media, ...(embedded ? mediaUrls(embedded) : [])] : [];
   const renderedText = embedded
     ? embedded.content
     : (event.kind === 30023
@@ -501,10 +539,10 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
                 variant="ghost"
                 size="icon"
                 className="h-6 w-6 shrink-0 text-muted-foreground"
-                onClick={() => void remove()}
+                onClick={confirmDelete}
                 aria-label="delete note"
               >
-                {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Trash2 className="size-3.5" />}
+                <Trash2 className="size-3.5" />
               </Button>
             )}
           </div>
@@ -512,9 +550,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
             <NoteEditor
               draft={draft}
               onDraft={setDraft}
-              busy={busy}
-              error={error}
-              onSave={() => void saveEdit()}
+              onSave={saveEdit}
               onCancel={() => setEditing(false)}
             />
           ) : (
@@ -549,13 +585,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
                 </div>
               )}
 
-              {!embedded && media.length > 0 && (
-                <div className={`mt-1 gap-1 ${media.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
-                  {media.map((url) => (
-                    <MediaItem key={url} url={url} alt={altText} />
-                  ))}
-                </div>
-              )}
+              {!embedded && <MediaGrid urls={media} alt={altText} />}
             </div>
             {clampable && !expanded && (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent" />
@@ -572,17 +602,24 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
               {expanded ? 'show less' : 'read more'}
             </Button>
           )}
-          {error && <p className="text-destructive text-xs">{error}</p>}
           </>
           )}
 
           {!isPrivate && (
-            <NoteCounts event={event} engagement={engagement} linkReplies={linkReplies} onReplies={onReplies} />
+            <NoteCounts
+              event={event}
+              engagement={engagement}
+              linkReplies={linkReplies}
+              onReplies={onReplies}
+              onReact={() => void confirmEngagement(7)}
+              onRepost={() => void confirmEngagement(6)}
+            />
           )}
           <NoteMeta foundOn={foundOn} route={route} client={clientTag} />
         </div>
       </CardContent>
 
+      {broadcastDialog}
       {/* No wrapper means the item is public, so event is signed. */}
       <EventInfoDialog event={wrapper ?? (event as NostrEvent)} foundOn={foundOn} open={infoOpen} onOpenChange={setInfoOpen} />
     </Card>

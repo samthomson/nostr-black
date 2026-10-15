@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Loader2 } from 'lucide-react';
 import { getPublicKey } from 'nostr-tools';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { Page } from '@/components/Page';
 import { PrivacyTag } from '@/components/PrivacyTag';
 import { PrivateNote } from '@/components/PrivateNote';
@@ -10,7 +11,12 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { usePrivateFeed } from '@/data/hooks/usePrivateFeed';
-import { usePublishSigned } from '@/hooks/usePublishSigned';
+import { useRouting } from '@/data/hooks/useRouting';
+import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
+import type { EventLayer } from '@/components/BroadcastDialog';
+import { decryptCt, openEnvelopeWithCek, parseEnvelope } from '@/lib/falseBottom';
+import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
+import { openPrivateNote } from '@/lib/feedEncryption';
 import { store } from '@/data/store';
 import { conversationOf, type OpenedReply } from '@/lib/feedEncryptionRead';
 import {
@@ -25,13 +31,43 @@ import {
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
 
+/**
+ * The decoded layers of one private wrapper: the outer event (envelope
+ * elided), the author seal, and the rumour — each fully decoded via the
+ * app's own opening path.
+ */
+const noteLayers = (sk: Uint8Array, wrapper: NostrEvent | undefined): readonly EventLayer[] | undefined => {
+  if (!wrapper) return undefined;
+  let seal: NostrEvent | undefined;
+  let rumour: unknown;
+  try {
+    const opened = openPrivateNote(sk, wrapper);
+    const envelope = parseEnvelope(wrapper.content);
+    const { cek, payload } = openEnvelopeWithCek(sk, wrapper.pubkey, envelope);
+    void cek; void payload; void opened;
+    // The seal is the JSON inside ct; recover it by re-encrypting is
+    // wrong — instead decode through the seal's own key: the ct is
+    // AEAD(CEK, seal JSON) and we hold the CEK from the slot.
+    seal = JSON.parse(new TextDecoder().decode(decryptCt(cek, envelope.ct))) as NostrEvent;
+    rumour = opened.rumor;
+  } catch {
+    // layers are best-effort
+  }
+  return [
+    { name: 'wrapper', decoded: { ...wrapper, content: '‹envelope›' } },
+    { name: 'seal', decoded: seal ?? '‹undecodable›' },
+    { name: 'rumour', decoded: rumour ?? '‹undecodable›' },
+  ];
+};
+
 const PrivateFeedBody = () => {
   const sk = useSessionKey();
-  const publishSigned = usePublishSigned();
+  const { myWrite } = useRouting();
+  const { request, dialog } = useBroadcastFlow();
+  const publishTargets = myWrite;
+  const discoveryTargets = DEFAULT_DISCOVERY_RELAYS.filter((url) => !publishTargets.includes(url));
   const { posts, pending, connectedPeers } = usePrivateFeed();
   const [draft, setDraft] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | undefined>();
 
   // The router's gate guarantees a user here.
   if (!sk) {
@@ -42,57 +78,91 @@ const PrivateFeedBody = () => {
     );
   }
 
-  const post = async (content: string) => {
+  const post = (content: string): void => {
     const { rumor } = makeRumor(getPublicKey(sk), content);
     const events = wrapPrivateNote(sk, connectedPeers, rumor);
-    for (const event of events) await publishSigned(event);
+    request({
+      grade: 'private',
+      label: 'private note',
+      preview: content,
+      identityPubkey: getPublicKey(sk),
+      identityNote: 'burner-signed',
+      relays: publishTargets,
+      extraRelays: discoveryTargets,
+      layers: noteLayers(sk, events[0]),
+      events,
+      labels: events.map((_, i) => (events.length > 1 ? `private note (${i + 1} of ${events.length})` : 'private note')),
+    });
   };
 
-  const reply = async (parent: OpenedNote, content: string) => {
+  const reply = (parent: OpenedNote, content: string) => {
     const { rumor } = makeRumor(getPublicKey(sk), content, [['e', parent.rumor.id]]);
-    await publishSigned(wrapPrivateReply(sk, parent.replyCek, rumor));
+    request({
+      grade: 'private',
+      label: 'private reply',
+      preview: content,
+      identityPubkey: getPublicKey(sk),
+      identityNote: 'burner-signed',
+      relays: publishTargets,
+      extraRelays: discoveryTargets,
+      events: [wrapPrivateReply(sk, parent.replyCek, rumor)],
+    });
   };
 
-  const edit = async (parent: OpenedNote, content: string) => {
-    if (!sk) throw new Error('session key required');
+  const edit = (parent: OpenedNote, content: string) => {
     // One slotless event under the reply CEK: every holder already has
     // the key, so one revision covers the whole audience — no slots,
     // no aliases, no connection state.
     const revision = makeRevision(getPublicKey(sk), parent.rumor, content);
-    await publishSigned(wrapPrivateReply(sk, parent.replyCek, revision));
+    request({
+      grade: 'private',
+      label: 'revision',
+      preview: content,
+      identityPubkey: getPublicKey(sk),
+      identityNote: 'burner-signed',
+      relays: publishTargets,
+      extraRelays: discoveryTargets,
+      events: [wrapPrivateReply(sk, parent.replyCek, revision)],
+    });
   };
-  const editReply = async (parent: OpenedNote, reply: OpenedReply, content: string) => {
-    if (!sk) throw new Error('session key required');
+  const editReply = (parent: OpenedNote, reply: OpenedReply, content: string) => {
     const revision = makeRevision(getPublicKey(sk), reply.rumor, content);
-    await publishSigned(wrapPrivateReply(sk, parent.replyCek, revision));
+    request({
+      grade: 'private',
+      label: 'reply revision',
+      preview: content,
+      identityPubkey: getPublicKey(sk),
+      identityNote: 'burner-signed',
+      relays: publishTargets,
+      extraRelays: discoveryTargets,
+      events: [wrapPrivateReply(sk, parent.replyCek, revision)],
+    });
   };
 
-  const remove = async (parent: OpenedNote, history: readonly OpenedNote[]) => {
-    if (!sk) throw new Error('session key required');
+  const remove = (parent: OpenedNote, history: readonly OpenedNote[]) => {
     // The publication's chunks, plus our own revision events — each holds
     // its burner in the `b` tag, so all are deletable.
     const wrappers = [
       ...conversationOf(sk, store.queryByKind(KIND_PRIVATE_NOTE), parent),
       ...history.map((h) => h.wrapper),
     ].filter((wrapper, i, all) => all.findIndex((w) => w.id === wrapper.id) === i);
-    for (const wrapper of wrappers) {
-      await publishSigned(deletePrivateEvent(sk, wrapper));
-    }
+    const events = wrappers.map((wrapper) => deletePrivateEvent(sk, wrapper));
+    request({
+      grade: 'private',
+      label: 'deletion',
+      preview: `delete this note — ${events.length} ${events.length === 1 ? 'event' : 'events'} (chunks and revisions)`,
+      identityPubkey: getPublicKey(sk),
+      identityNote: 'burner-signed',
+      relays: publishTargets,
+      events,
+      labels: events.map((_, i) => `deletion (${i + 1} of ${events.length})`),
+    });
   };
 
-  const submit = async () => {
-    const content = draft.trim();
-    if (!content || busy || connectedPeers.length === 0) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await post(content);
-      setDraft('');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+  const submit = () => {
+    if (!draft.trim() || connectedPeers.length === 0) return;
+    post(draft.trim());
+    setDraft('');
   };
 
   const empty = (text: string) => (
@@ -125,15 +195,16 @@ const PrivateFeedBody = () => {
           <Button
             type="button"
             variant="privacy"
-            disabled={busy || draft.trim().length === 0}
-            onClick={() => void submit()}
+            disabled={draft.trim().length === 0}
+            onClick={submit}
             className={cn(PRIVACY_BUTTON, 'self-end', PRIVACY.private.className)}
           >
-            {busy ? <Loader2 className="size-3.5 animate-spin" /> : 'post'}
+            broadcast
           </Button>
         </div>
       )}
-      {error && <p className="text-destructive text-xs">{error}</p>}
+
+      {dialog}
 
       {posts.map((item) => (
         <PrivateNote

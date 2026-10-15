@@ -177,6 +177,10 @@ export const openEnvelopeWithCek = (
   return { cek, payload: aeadDecrypt(cek, envelope.ct) };
 };
 
+/** The plaintext behind `ct`, given the CEK — for layer inspection. */
+export const decryptCt = (cek: Uint8Array, ct: string): Uint8Array =>
+  aeadDecrypt(cek, ct);
+
 export const openSlotless = (cek: Uint8Array, envelope: FbEnvelope): Uint8Array => {
   if (envelope.slots.length !== 0) throw new Error('expected slotless envelope');
   return aeadDecrypt(cek, envelope.ct);

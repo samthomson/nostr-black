@@ -44,6 +44,13 @@ export const syncFeedAuthors = (id: string, next: readonly string[]): void => {
   engine.reset();
 };
 
+/** The broadcast queue ingested events: every live feed re-checks the
+ * store for anything above its ceiling — own notes and burner notes land
+ * on screen the moment their publish succeeds, not at the next poll. */
+export const refreshFeeds = (): void => {
+  for (const engine of engines.values()) engine.absorbStore();
+};
+
 /** Tests build their own engines; this clears the shared ones. */
 export const clearFeeds = (): void => {
   engines.clear();

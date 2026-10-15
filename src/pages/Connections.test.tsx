@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
@@ -19,6 +19,22 @@ vi.mock('@/net/net', async (importOriginal) => ({
 }));
 
 const { scheduler } = await import('@/data/scheduler');
+const { resetQueue } = await import('@/data/publish/queue');
+
+
+/** Click the confirm button in the open broadcast modal. */
+const confirmBroadcast = async (user: { click: (el: Element) => Promise<void> }) => {
+  const dialog = await screen.findByRole('dialog');
+  const buttons = await within(dialog).findAllByRole('button');
+  for (const b of buttons) {
+    const text = b.textContent ?? '';
+    if (text.trim() === 'broadcast') {
+      await user.click(b);
+      return;
+    }
+  }
+  throw new Error('broadcast button not found');
+};
 
 const Unlock = ({ nsec, children }: { nsec: string; children: ReactNode }) => {
   const ks = useKeystore();
@@ -35,6 +51,7 @@ const settle = async () => {
 };
 
 beforeEach(() => {
+  resetQueue();
   queryRelay.mockReset();
   queryRelay.mockResolvedValue([]);
   publish.mockReset();
@@ -57,6 +74,7 @@ describe('ConnectionsPage', () => {
 
     await user.type(await screen.findByLabelText('npub'), nip19.npubEncode(getPublicKey(bob)));
     await user.click(screen.getByRole('button', { name: 'request' }));
+    await confirmBroadcast(user);
 
     expect(publish).toHaveBeenCalled();
     const event = publish.mock.calls[0][0];
@@ -87,6 +105,7 @@ describe('ConnectionsPage', () => {
     await settle();
 
     await user.click(await screen.findByRole('button', { name: 'accept' }));
+    await confirmBroadcast(user);
     expect(publish).toHaveBeenCalled();
     const accepted = publish.mock.calls[0][0];
     expect(openConnection(alice, accepted).state).toBe('connected');

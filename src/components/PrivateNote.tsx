@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { Note } from '@/components/Note';
 import { useProvenance } from '@/data/hooks/useProvenance';
@@ -22,8 +21,8 @@ const PrivateItem = ({
 }: {
   rumor: Rumor;
   wrapper: NostrEvent;
-  onEdit?: (content: string) => Promise<void>;
-  onDelete?: () => Promise<void>;
+  onEdit?: (content: string) => void;
+  onDelete?: () => void;
 }) => {
   const { foundOn, route } = useProvenance(wrapper.id);
   return (
@@ -43,25 +42,15 @@ const ReplyComposer = ({
   onReply,
 }: {
   parent: OpenedNote;
-  onReply: (parent: OpenedNote, content: string) => Promise<void>;
+  onReply: (parent: OpenedNote, content: string) => void;
 }) => {
   const [draft, setDraft] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | undefined>();
 
-  const submit = async () => {
+  const submit = () => {
     const content = draft.trim();
-    if (!content || busy) return;
-    setBusy(true);
-    setError(undefined);
-    try {
-      await onReply(parent, content);
-      setDraft('');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+    if (!content) return;
+    onReply(parent, content);
+    setDraft('');
   };
 
   return (
@@ -80,14 +69,13 @@ const ReplyComposer = ({
         <Button
           type="button"
           variant="privacy"
-          disabled={busy || draft.trim().length === 0}
+          disabled={draft.trim().length === 0}
           onClick={() => void submit()}
           className={cn(PRIVACY_BUTTON, PRIVACY.private.className)}
         >
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : 'reply'}
+          reply
         </Button>
       </div>
-      {error && <p className="text-destructive text-xs">{error}</p>}
     </div>
   );
 };
@@ -130,10 +118,10 @@ export const PrivateNote = ({
   note: OpenedNote;
   history: readonly OpenedNote[];
   replies: readonly OpenedReply[];
-  onReply: (parent: OpenedNote, content: string) => Promise<void>;
-  onEdit?: (parent: OpenedNote, content: string) => Promise<void>;
-  onEditReply?: (parent: OpenedNote, reply: OpenedReply, content: string) => Promise<void>;
-  onDelete?: (parent: OpenedNote, history: readonly OpenedNote[]) => Promise<void>;
+  onReply: (parent: OpenedNote, content: string) => void;
+  onEdit?: (parent: OpenedNote, content: string) => void;
+  onEditReply?: (parent: OpenedNote, reply: OpenedReply, content: string) => void;
+  onDelete?: (parent: OpenedNote, history: readonly OpenedNote[]) => void;
 }) => (
   <div className="space-y-3">
     <PrivateItem

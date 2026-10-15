@@ -19,7 +19,21 @@ vi.mock('@/net/net', async (importOriginal) => ({
 }));
 
 const { scheduler } = await import('@/data/scheduler');
+const { resetQueue } = await import('@/data/publish/queue');
 const { store } = await import('@/data/store');
+
+
+/** Click the confirm button in the open broadcast modal. */
+const confirmBroadcast = async (user: { click: (el: Element) => Promise<void> }) => {
+  const dialog = await screen.findByRole('dialog');
+  for (const b of await within(dialog).findAllByRole('button')) {
+    if ((b.textContent ?? '').trim() === 'broadcast') {
+      await user.click(b);
+      return;
+    }
+  }
+  throw new Error('broadcast button not found');
+};
 
 const Unlock = ({ nsec, children }: { nsec: string; children: ReactNode }) => {
   const ks = useKeystore();
@@ -36,6 +50,7 @@ const settle = async () => {
 };
 
 beforeEach(() => {
+  resetQueue();
   queryRelay.mockReset();
   queryRelay.mockResolvedValue([]);
   publish.mockReset();
@@ -137,6 +152,7 @@ describe('PrivateFeedPage', () => {
     await user.clear(box);
     await user.type(box, 'edited secret');
     await user.click(screen.getByRole('button', { name: 'save' }));
+    await confirmBroadcast(user);
     await settle();
 
     expect(await screen.findByText('edited secret')).toBeTruthy();
@@ -150,6 +166,7 @@ describe('PrivateFeedPage', () => {
     expect(screen.queryByText(/original secret/)).toBeNull();
     // delete: burner-signed kind 5s for every wrapper of the conversation
     await user.click(screen.getByRole('button', { name: 'delete note' }));
+    await confirmBroadcast(user);
     await settle();
 
     // Both the chunk and our revision event are deleted — each via its own burner.
@@ -200,6 +217,7 @@ describe('PrivateFeedPage', () => {
     await user.clear(box);
     await user.type(box, 'edited reply');
     await user.click(screen.getByRole('button', { name: 'save' }));
+    await confirmBroadcast(user);
     await settle();
 
     expect(await screen.findByText('edited reply')).toBeTruthy();
@@ -247,6 +265,7 @@ describe('PrivateFeedPage', () => {
     await user.clear(box);
     await user.type(box, 'edited after close');
     await user.click(screen.getByRole('button', { name: 'save' }));
+    await confirmBroadcast(user);
     // One slotless conversation event under the reply CEK: bob holds the
     // key regardless of connection state, and finds it by #n.
     const revision = publish.mock.calls.map(([ev]) => ev).find((ev) => ev.kind === 1470);

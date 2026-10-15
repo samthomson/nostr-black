@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { BrandMark } from '@/components/BrandMark';
 import { MovingBackground } from '@/components/MovingBackground';
 import { PrivacyTag } from '@/components/PrivacyTag';
+import { NoteComposer } from '@/components/NoteComposer';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { Button } from '@/components/ui/button';
 import { useIsTor } from '@/hooks/useEgress';
@@ -190,12 +191,7 @@ const Index = () => {
   return (
     <TorGate>
       <Page title={<PrivacyTag grade="public">public feed</PrivacyTag>}>
-        <div
-          aria-disabled="true"
-          className="bg-card/50 text-muted-foreground min-h-[4.5rem] shrink-0 rounded-sm border border-border/50 px-3 py-2.5 text-sm"
-        >
-          write a note…
-        </div>
+        <NoteComposer />
         <Feed />
       </Page>
     </TorGate>

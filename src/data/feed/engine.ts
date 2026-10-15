@@ -69,6 +69,8 @@ export interface FeedEngine {
   /** Unblock the next page. Called when hydration settles or times out. */
   markHydrated(): void;
   reset(): void;
+  /** Re-check the store now — the ingest path after a broadcast. */
+  absorbStore(): void;
 }
 
 export const PAGE_LIMIT = 50;
@@ -400,6 +402,15 @@ export const createFeedEngine = (spec: FeedSpec, deps: EngineDeps = {}): FeedEng
       return () => listeners.delete(onChange);
     },
     hydrateFromStore,
+    absorbStore: () => {
+      if (state.pages.length === 0) {
+        hydrateFromStore();
+        return;
+      }
+      if (!absorbNewerFromStore()) return;
+      reset();
+      void loadMore();
+    },
     markHydrated: () => {
       const last = state.pages.at(-1);
       if (!last || last.hydrated) return;

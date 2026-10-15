@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { queuedEntries, resetQueue } from '@/data/publish/queue';
 import userEvent from '@testing-library/user-event';
 import { finalizeEvent, generateSecretKey, nip19, verifyEvent } from 'nostr-tools';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
@@ -16,6 +17,21 @@ vi.mock('@/net/net', async (importOriginal) => ({
   queryRelay: (...args: unknown[]) => queryRelay(...(args as [string, NostrFilter[]])),
   publish: (...args: unknown[]) => publish(...(args as [NostrEvent, string[]])),
 }));
+
+
+/** Click the confirm button in the open broadcast modal. */
+const confirmBroadcast = async (user: { click: (el: Element) => Promise<void> }) => {
+  const dialog = await screen.findByRole('dialog');
+  const buttons = await within(dialog).findAllByRole('button');
+  for (const b of buttons) {
+    const text = b.textContent ?? '';
+    if (text.trim() === 'broadcast') {
+      await user.click(b);
+      return;
+    }
+  }
+  throw new Error('broadcast button not found');
+};
 
 const Unlock = ({ nsec, children }: { nsec: string; children: ReactNode }) => {
   const ks = useKeystore();
@@ -35,6 +51,7 @@ const note = (sk: Uint8Array, content: string): NostrEvent =>
   }, sk);
 
 beforeEach(() => {
+  resetQueue();
   queryRelay.mockReset();
   queryRelay.mockResolvedValue([]);
   publish.mockReset();
@@ -56,6 +73,7 @@ describe('Note', () => {
     );
 
     await user.click(await screen.findByRole('button', { name: 'delete note' }));
+    await confirmBroadcast(user);
 
     expect(publish).toHaveBeenCalled();
     const [deletion] = publish.mock.calls[0];
@@ -79,8 +97,14 @@ describe('Note', () => {
 
     publish.mockRejectedValueOnce(new Error('relay down'));
     await user.click(await screen.findByRole('button', { name: 'delete note' }));
+    await confirmBroadcast(user);
 
-    expect(await screen.findByText('relay down')).toBeTruthy();
+    // the queue keeps the failed broadcast with its error
+    await waitFor(() => {
+      const failed = queuedEntries().filter((e) => e.status === 'failed');
+      expect(failed).toHaveLength(1);
+      expect(failed[0]!.error).toBe('relay down');
+    });
   });
 
   it('offers no actions on someone else\'s note', async () => {

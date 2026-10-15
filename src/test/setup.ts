@@ -1,6 +1,12 @@
 import '@testing-library/jest-dom';
 import 'fake-indexeddb/auto';
 import { vi } from 'vitest';
+import { resetBurners } from '@/auth/burners';
+import { beforeEach } from 'vitest';
+
+beforeEach(() => {
+  resetBurners();
+});
 
 // Mock window.matchMedia
 Object.defineProperty(window, 'matchMedia', {

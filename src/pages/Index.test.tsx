@@ -3,7 +3,8 @@ import { render, screen } from '@testing-library/react';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { store } from '@/data/store';
 import { scheduler } from '@/data/scheduler';
-import { clearFeeds } from '@/data/feed/registry';
+import { clearFeeds, refreshFeeds } from '@/data/feed/registry';
+import { rememberBurner } from '@/auth/burners';
 import { createPersister } from '@/data/persist/persist';
 import { closeDatabase, deleteDatabase } from '@/data/persist/db';
 import { resetUseIsTor } from '@/hooks/useEgress';
@@ -231,6 +232,30 @@ describe('Index outbox feed (logged in)', () => {
 
     expect(await screen.findByText('cached note', {}, { timeout: 3000 })).toBeTruthy();
     expect(feedCalls()).toHaveLength(0);
+  });
+
+  it('shows your own burner note the moment its broadcast lands in the store', async () => {
+    mockUser = { pubkey: USER };
+    authorRelays = { [A]: ['wss://one.example'] };
+    notesByRelay = { 'wss://one.example': [event(1, A, 'followed note', [], 1700000700)] };
+
+    render(
+      <TestApp userState={{ follows: { pubkeys: [A], updatedAt: 1 } }}>
+        <Index />
+      </TestApp>,
+    );
+    expect(await screen.findByText('followed note', {}, { timeout: 3000 })).toBeTruthy();
+
+    // The broadcast completes: the queue ingests the signed burner note
+    // and the composer remembered the burner pubkey.
+    const burnerNote = event(1, 'b'.repeat(64), 'note from my burner', [], 1700000900);
+    rememberBurner(USER, burnerNote.pubkey);
+    store.ingest([burnerNote], 'wss://one.example');
+    refreshFeeds();
+
+    expect(await screen.findByText('note from my burner', {}, { timeout: 3000 })).toBeTruthy();
+    // The burner has no relay list, so no outbox query is ever sent for it.
+    expect(feedCalls().every((c) => (c.filters[0].authors ?? []).every((a) => a !== burnerNote.pubkey))).toBe(true);
   });
 
   it('shows follow-list-not-found when no kind 3 exists, and never claims zero follows', async () => {

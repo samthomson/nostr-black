@@ -5,6 +5,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useEntities, useEntity } from '@/data/hooks/useEntity';
 import { feedEngine, syncFeedAuthors } from '@/data/feed/registry';
+import { useMyBurners } from '@/auth/burners';
 import type { FeedState } from '@/data/feed/engine';
 
 /** Polling is cheap over a warm socket, but a Tor circuit is not. */
@@ -32,10 +33,18 @@ export const useFeed = (): Feed => {
   const { config } = useAppContext();
   const self = user?.pubkey;
   const followKey = userState.follows.pubkeys.join(',');
+  // Own burner pubkeys count as "you": their notes are yours and must
+  // render in the feed like any other own note. Burners have no relay
+  // list, so outbox routing skips them — they surface from the local
+  // store when the broadcast queue ingests them.
+  const burners = useMyBurners(self);
   const authors = useMemo(() => {
     const follows = followKey.length === 0 ? [] : followKey.split(',');
-    return self && follows.length > 0 && !follows.includes(self) ? [self, ...follows] : follows;
-  }, [self, followKey]);
+    const mine = self && follows.length > 0 && !follows.includes(self)
+      ? [self, ...burners]
+      : [...burners];
+    return [...mine, ...follows];
+  }, [self, followKey, burners]);
   const authorKey = authors.join(',');
 
   const engine = feedEngine(FOLLOWS);

@@ -2,6 +2,7 @@ import { useState, type ReactElement } from 'react';
 import { useLocation } from 'react-router-dom';
 import { replaceableKey, store } from '@/data/store';
 import { useUserState } from '@/hooks/useUserState';
+import { useQueueDialog } from '@/hooks/useQueueDialog';
 import { useEgress, useEgressSession, useIsTor } from '@/hooks/useEgress';
 import { useRoutePreference, useIsDesktop } from '@/hooks/useTransport';
 import { hostOf } from '@/lib/format';
@@ -26,6 +27,7 @@ export const ConnectionStatus = () => {
   const { pathname } = useLocation();
   const onFeed = pathname === '/';
   const followCount = useUserState().state.follows.pubkeys.length;
+  const queued = useQueueDialog();
   const desktop = useIsDesktop();
   const onTor = useIsTor();
   const { torEnabled, set } = useRoutePreference();
@@ -54,6 +56,7 @@ export const ConnectionStatus = () => {
       {session.events === 1 ? 'event' : 'events'}
     </span>,
     pending > 0 ? <span key="load" className="text-yellow-600">{pending} loading</span> : null,
+    queued.element,
     onFeed && followCount > 0 ? <RelayListCoverage key="cov" /> : null,
     blocked.length > 0 ? (
       <span key="blocked" className="relative">

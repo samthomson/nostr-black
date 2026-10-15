@@ -9,9 +9,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
+import { useRouting } from '@/data/hooks/useRouting';
+import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { useConnections } from '@/data/hooks/useConnections';
 import { useProfile } from '@/data/hooks/useProfile';
-import { usePublishSigned } from '@/hooks/usePublishSigned';
+import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 import {
   acceptConnection,
   closeConnection,
@@ -40,7 +42,7 @@ const Row = ({
   action,
 }: {
   record: ConnectionRecord;
-  action?: { label: string; onClick: () => void; busy: boolean };
+  action?: { label: string; onClick: () => void; busy?: boolean };
 }) => (
   <li className="flex items-center justify-between gap-3 border-b py-2 last:border-b-0">
     <div className="min-w-0">
@@ -51,7 +53,7 @@ const Row = ({
       <Button
         type="button"
         variant="privacy"
-        disabled={action.busy}
+        disabled={action.busy ?? false}
         onClick={action.onClick}
         className={cn(PRIVACY_BUTTON, PRIVACY.private.className)}
       >
@@ -63,11 +65,12 @@ const Row = ({
 
 const ConnectionsBody = () => {
   const sk = useSessionKey();
-  const publishSigned = usePublishSigned();
+  const { request: requestBroadcast, dialog } = useBroadcastFlow();
+  const { myWrite } = useRouting();
+  const discoveryTargets = DEFAULT_DISCOVERY_RELAYS.filter((url) => !myWrite.includes(url));
   const [input, setInput] = useState('');
+  const [formError, setFormError] = useState<string | undefined>();
   const [lookup, setLookup] = useState<string | undefined>();
-  const [busy, setBusy] = useState<string | undefined>();
-  const [error, setError] = useState<string | undefined>();
   const { records, connected, outgoing, incoming, pending } = useConnections(lookup);
 
   // The router's gate guarantees a user here.
@@ -81,29 +84,17 @@ const ConnectionsBody = () => {
 
   const me = getPublicKey(sk);
 
-  const run = async (key: string, work: () => Promise<void>) => {
-    setBusy(key);
-    setError(undefined);
-    try {
-      await work();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(undefined);
-    }
-  };
-
   const peerOf = (): string | undefined => {
     const peer = parsePubkey(input);
     if (!peer) {
-      setError('need an npub');
+      setFormError('need an npub');
       return undefined;
     }
     if (peer === me) {
-      setError('cannot connect to yourself');
+      setFormError('cannot connect to yourself');
       return undefined;
     }
-    setError(undefined);
+    setFormError(undefined);
     return peer;
   };
 
@@ -117,16 +108,25 @@ const ConnectionsBody = () => {
     if (!peer) return;
     const existing = records.find((r) => r.peer === peer);
     if (existing?.state === 'connected') {
-      setError('already connected');
+      setFormError('already connected');
       return;
     }
-    void run('request', async () => {
-      await publishSigned(requestConnection(sk, peer));
-      setInput('');
+    const event = requestConnection(sk, peer);
+    requestBroadcast({
+      grade: 'private',
+      label: 'connection request',
+      preview: `connect with ${npubOf(peer).slice(0, 20)}… — one signature, awaiting theirs.\nthey accept by entering your npub here and looking you up.`,
+      identityPubkey: getPublicKey(sk),
+      identityNote: 'connection key',
+      relays: myWrite,
+      extraRelays: discoveryTargets,
+      events: [event],
     });
+    setInput('');
   };
 
   return (
+    <>
     <div className="space-y-4">
       {pending && (
         <div className="text-muted-foreground flex items-center gap-2 text-xs">
@@ -152,7 +152,7 @@ const ConnectionsBody = () => {
         <Button
           type="button"
           variant="outline"
-          disabled={!!busy || input.trim().length === 0}
+          disabled={input.trim().length === 0}
           onClick={lookUp}
           className="rounded-sm"
         >
@@ -161,13 +161,13 @@ const ConnectionsBody = () => {
         <Button
           type="submit"
           variant="privacy"
-          disabled={!!busy || input.trim().length === 0}
+          disabled={input.trim().length === 0}
           className={cn(PRIVACY_BUTTON, PRIVACY.private.className)}
         >
-          {busy === 'request' ? <Loader2 className="size-3.5 animate-spin" /> : 'request'}
+          request
         </Button>
       </form>
-      {error && <p className="text-destructive text-xs">{error}</p>}
+      {formError && <p className="text-destructive text-xs">{formError}</p>}
 
       {incoming.length > 0 && (
         <section className="space-y-1">
@@ -179,9 +179,15 @@ const ConnectionsBody = () => {
                 record={record}
                 action={{
                   label: 'accept',
-                  busy: busy === record.event.id,
-                  onClick: () => void run(record.event.id, async () => {
-                    await publishSigned(acceptConnection(sk, record));
+                  onClick: () => requestBroadcast({
+                    grade: 'private',
+                    label: 'connection accept',
+                    preview: `accept ${npubOf(record.peer).slice(0, 20)}… — two signatures, connected`,
+                    identityPubkey: getPublicKey(sk),
+                    identityNote: 'connection key',
+                    relays: myWrite,
+      extraRelays: discoveryTargets,
+                    events: [acceptConnection(sk, record)],
                   }),
                 }}
               />
@@ -217,9 +223,16 @@ const ConnectionsBody = () => {
               record={record}
               action={{
                 label: 'close',
-                busy: busy === record.event.id,
-                onClick: () => void run(record.event.id, async () => {
-                  await publishSigned(closeConnection(sk, record));
+
+                onClick: () => requestBroadcast({
+                  grade: 'private',
+                  label: 'connection close',
+                  preview: `close the connection with ${npubOf(record.peer).slice(0, 20)}… — forward only`,
+                  identityPubkey: getPublicKey(sk),
+                  identityNote: 'connection key',
+                  relays: myWrite,
+      extraRelays: discoveryTargets,
+                  events: [closeConnection(sk, record)],
                 }),
               }}
             />
@@ -227,6 +240,8 @@ const ConnectionsBody = () => {
         </ul>
       </section>
     </div>
+    {dialog}
+    </>
   );
 };
 

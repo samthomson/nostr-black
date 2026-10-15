@@ -14,7 +14,7 @@ export const NoteEditor = ({
 }: {
   draft: string;
   onDraft: (next: string) => void;
-  busy: boolean;
+  busy?: boolean;
   error?: string;
   onSave: () => void;
   onCancel: () => void;
