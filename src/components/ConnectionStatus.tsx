@@ -86,9 +86,13 @@ export const ConnectionStatus = () => {
   if (!desktop) {
     return (
       <div className="relative flex h-7 shrink-0 items-center gap-4 border-t bg-background px-3 font-mono text-[11px] text-muted-foreground">
-        <span className={onTor ? 'text-emerald-600' : 'text-amber-600'}>
-          {onTor === undefined ? 'checking tor…' : onTor ? 'tor' : 'clearnet'}
-        </span>
+        {onTor === undefined ? (
+          <span>checking tor…</span>
+        ) : onTor ? (
+          <span className="text-emerald-600">tor</span>
+        ) : (
+          <span className="rounded-sm bg-amber-600 px-1.5 py-px leading-none text-white">clearnet</span>
+        )}
         <span className="ml-auto flex items-center gap-4">{stats}</span>
       </div>
     );
