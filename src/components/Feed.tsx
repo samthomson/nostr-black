@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
-import { ArrowUp, Loader2 } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 import { Note } from '@/components/Note';
 import { Card, CardContent } from '@/components/ui/card';
-import { NoteSkeleton } from '@/components/NoteSkeleton';
+import { FeedSkeleton } from '@/components/NoteSkeleton';
 import { useFeed } from '@/data/hooks/useFeed';
 import { useProvenance } from '@/data/hooks/useProvenance';
 import { useVisibility } from '@/data/hooks/useVisibility';
@@ -65,24 +65,14 @@ export const Feed = () => {
         <NewNotes count={pending.length} onAccept={accept} />
       )}
 
-      {isLoading && (
-        <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 rounded-sm border bg-background/95 px-3 py-2 text-xs text-muted-foreground backdrop-blur">
-          <Loader2 className="size-3.5 animate-spin" />
-          fetching events{notes.length > 0 ? ` — ${notes.length} so far` : '…'}
-        </div>
-      )}
       {!isLoading && notes.length > 0 && (
         <p className="px-1 text-xs text-muted-foreground">{notes.length} notes</p>
       )}
+      {isLoading && notes.length === 0 && <FeedSkeleton count={5} />}
 
       {notes.map((event) => (
         <FeedNote key={event.id} event={event} />
       ))}
-
-      {isLoading &&
-        Array.from({ length: notes.length > 0 ? 2 : 5 }, (_, i) => (
-          <NoteSkeleton key={`s${i}`} />
-        ))}
 
       {notes.length > 0 && !exhausted && (
         <button

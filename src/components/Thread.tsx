@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { Note } from '@/components/Note';
 import { useThread } from '@/data/hooks/useThread';
-import { NoteSkeleton } from '@/components/NoteSkeleton';
+import { FeedSkeleton } from '@/components/NoteSkeleton';
 /**
  * One level of replies under a note. Expanding a child mounts another
  * Thread — depth is the user's clicks, never prefetched.
@@ -10,17 +10,7 @@ import { NoteSkeleton } from '@/components/NoteSkeleton';
 export const Thread = ({ parent, author }: { parent: string; author?: string }) => {
   const { children, pending } = useThread(parent, author);
 
-  if (pending && children.length === 0) {
-    return (
-      <div className="space-y-3">
-        {Array.from({ length: 2 }, (_, i) => (
-          <NoteSkeleton key={i} />
-        ))}
-      </div>
-    );
-  }
-
-  if (children.length === 0) return null;
+  if (pending && children.length === 0) return <FeedSkeleton count={2} />;
 
   return (
     <div className="space-y-3 border-l pl-3">

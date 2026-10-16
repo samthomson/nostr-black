@@ -3,7 +3,7 @@ import { nip19 } from 'nostr-tools';
 import { useParams } from 'react-router-dom';
 import { Page } from '@/components/Page';
 import { PrivateNote } from '@/components/PrivateNote';
-import { NoteSkeleton } from '@/components/NoteSkeleton';
+import { FeedSkeleton } from '@/components/NoteSkeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { usePrivateFeed } from '@/data/hooks/usePrivateFeed';
 import { usePrivateActions } from '@/hooks/usePrivateActions';
@@ -27,7 +27,7 @@ const PrivateThreadBody = ({ id }: { id: string }) => {
     );
   }
 
-  if (pending) return <NoteSkeleton />;
+  if (pending) return <FeedSkeleton count={1} />;
 
   const item = posts.find((post) => post.note.rumor.id === id);
   if (!item) {

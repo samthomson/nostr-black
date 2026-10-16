@@ -1,9 +1,8 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
-/** One note-shaped loading placeholder — the feed, thread and profile
- * pages all show the same skeleton while notes fetch. Same chrome as a
- * loaded note so nothing shifts when the data lands. */
+/** One note-shaped loading placeholder — the same chrome as a loaded
+ * note so nothing shifts when the data lands. */
 export const NoteSkeleton = () => (
   <Card className="py-0">
     <CardContent className="flex gap-3 px-4 py-3">
@@ -14,4 +13,14 @@ export const NoteSkeleton = () => (
       </div>
     </CardContent>
   </Card>
+);
+
+/** A feed while it fetches: nothing on screen yet, so show what's
+ *  coming. The one loading pattern for every feed surface. */
+export const FeedSkeleton = ({ count = 3 }: { count?: number }) => (
+  <div className="space-y-3">
+    {Array.from({ length: count }, (_, i) => (
+      <NoteSkeleton key={i} />
+    ))}
+  </div>
 );

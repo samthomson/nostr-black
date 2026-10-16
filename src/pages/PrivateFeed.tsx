@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Loader2 } from 'lucide-react';
 import { Page } from '@/components/Page';
 import { PrivacyTag } from '@/components/PrivacyTag';
 import { PrivateNote } from '@/components/PrivateNote';
 import { Composer } from '@/components/Composer';
+import { FeedSkeleton } from '@/components/NoteSkeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import { usePrivateFeed } from '@/data/hooks/usePrivateFeed';
 import { usePrivateActions } from '@/hooks/usePrivateActions';
@@ -48,13 +48,6 @@ const PrivateFeedBody = () => {
 
   return (
     <div className="space-y-3">
-      {pending && (
-        <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 rounded-sm border bg-background/95 px-3 py-2 text-xs text-muted-foreground backdrop-blur">
-          <Loader2 className="size-3.5 animate-spin" />
-          fetching events{posts.length > 0 ? ` — ${posts.length} so far` : '…'}
-        </div>
-      )}
-
       {connectedPeers.length > 0 && (
         <Composer
           value={draft}
@@ -63,6 +56,16 @@ const PrivateFeedBody = () => {
           variant="private"
         />
       )}
+
+      {pending && posts.length === 0 && <FeedSkeleton />}
+      {!pending && connectedPeers.length === 0 && (
+        <Card className="border-dashed">
+          <CardContent className="px-4 py-3 text-center">
+            <p className="text-muted-foreground text-sm">only once you've connected with people can you make private posts</p>
+          </CardContent>
+        </Card>
+      )}
+
 
       {dialog}
 
@@ -82,9 +85,6 @@ const PrivateFeedBody = () => {
         />
       ))}
 
-      {!pending && connectedPeers.length === 0 && posts.length === 0 && empty(
-        'no connections yet — add people on the connections page first',
-      )}
       {!pending && connectedPeers.length > 0 && posts.length === 0 && empty('no private notes yet')}
       {connectedPeers.length === 0 && (
         <p className="text-center text-xs">

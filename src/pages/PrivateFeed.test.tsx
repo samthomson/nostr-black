@@ -69,7 +69,7 @@ describe('PrivateFeedPage', () => {
     );
     await settle();
     await settle();
-    expect(screen.getByText(/no connections yet/)).toBeTruthy();
+    expect(screen.getByText(/only once you've connected with people/)).toBeTruthy();
   });
 
   it('renders notes and replies through the standard Note chrome, info button included', async () => {

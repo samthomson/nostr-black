@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bug, House, Lock, Menu, Settings, User, X } from 'lucide-react';
+import { Bug, House, Lock, Menu, Settings, User, Users, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { LoginArea } from '@/components/auth/LoginArea';
@@ -36,6 +36,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   const nav: NavItem[] = [
     { to: '/public-feed', label: 'feed', Icon: House, grade: 'public' },
     { to: '/private-feed', label: 'private feed', Icon: Lock, grade: 'private' },
+    { to: '/connections', label: 'connections', Icon: Users, grade: 'high' },
     ...(profileTo ? [{ to: profileTo, label: 'profile', Icon: User, grade: 'public' as const }] : []),
     { to: '/settings', label: 'settings', Icon: Settings },
     { to: '/debug', label: 'debug', Icon: Bug },
