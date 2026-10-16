@@ -666,7 +666,6 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
                 tab="reposts"
                 reactions={reactions}
                 reposts={reposts}
-                defaultEmoji=""
                 onEngage={() => void confirmRepost()}
                 ariaLabel="repost"
               />
@@ -678,8 +677,8 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
                 tab="reactions"
                 reactions={reactions}
                 reposts={reposts}
-                defaultEmoji={config.defaultReaction}
-                onEngage={(emoji) => void react(emoji)}
+                onEngage={() => void react(config.defaultReaction)}
+                onChoose={(emoji) => void react(emoji)}
                 ariaLabel="react"
               />
             </div>

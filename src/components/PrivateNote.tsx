@@ -58,8 +58,8 @@ const PrivateItem = ({
           tab="reactions"
           reactions={reactions as readonly EngagementRow[]}
           reposts={[]}
-          defaultEmoji={config.defaultReaction}
-          onEngage={(emoji) => onReact?.(rumor, emoji)}
+          onEngage={() => onReact?.(rumor, config.defaultReaction)}
+          onChoose={(emoji) => onReact?.(rumor, emoji)}
           ariaLabel="react"
         />
       </div>

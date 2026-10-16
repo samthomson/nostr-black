@@ -350,14 +350,15 @@ describe('engagement wants', () => {
     expect(urls).toContain('wss://mine/');
   });
 
-  it('a throwing query settles anyway and never wedges the scheduler', async () => {
+  it('a throwing query is surfaced, settles anyway, and never wedges the scheduler', async () => {
     const { scheduler, store } = build();
     const a = '1'.repeat(64);
     store.ingest([
       { id: a, pubkey: ALICE, created_at: 1, kind: 1, tags: [], content: '', sig: 'c'.repeat(128) },
     ], 'wss://one/');
 
-    // The relay explodes instead of answering.
+    // The relay explodes instead of answering — surfaced, not silent.
+    const surfaced = vi.spyOn(console, 'error').mockImplementation(() => {});
     queryRelay.mockRejectedValueOnce(new Error('relay exploded'));
     scheduler.want({ type: 'engagement', target: a }, 'interactive');
     await scheduler.flush();
@@ -365,6 +366,9 @@ describe('engagement wants', () => {
     // Settled regardless: the spinner resolves with whatever arrived.
     const key = wantEntity({ type: 'engagement', target: a })!;
     expect(store.get(key).settledAt).toBeDefined();
+    // And the failure was surfaced, not swallowed.
+    expect(surfaced.mock.calls.some(([, e]) => (e as Error).message === 'relay exploded')).toBe(true);
+    surfaced.mockRestore();
 
     // And the scheduler is not wedged: a later want still runs.
     queryRelay.mockResolvedValueOnce([]);

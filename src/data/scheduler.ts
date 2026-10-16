@@ -682,13 +682,15 @@ export const createScheduler = (
 
     // Lanes run concurrently; the slot limiter is what orders them, so a
     // background poll cannot hold a slot an interactive avatar needs.
-    // A lane that rejects must not wedge the scheduler: settle is
-    // unconditional, and `running` always clears — otherwise one thrown
-    // query leaves every later want queued forever behind a dead promise
-    // (seen live as engagement spinners that never resolve).
+    // A failing lane is surfaced (same console surface as net.ts relay
+    // failures) and the settle still runs — a rejection here is our
+    // bug, not a relay's (queryRelay already resolves empty on relay
+    // errors), so swallowing it silently would ship it; wedging on it
+    // would freeze every later want behind a dead promise.
     running = Promise.all(
       LANES.map((lane) =>
-        runLane(lane, batch.filter((q) => q.lane === lane)).catch(() => undefined),
+        runLane(lane, batch.filter((q) => q.lane === lane))
+          .catch((error: unknown) => console.error('[scheduler] lane failed:', error)),
       ),
     ).then(() => {
       const now = Date.now();

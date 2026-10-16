@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Loader2 } from 'lucide-react';
 import { getPublicKey } from 'nostr-tools';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { Page } from '@/components/Page';
 import { PrivacyTag } from '@/components/PrivacyTag';
 import { PrivateNote } from '@/components/PrivateNote';
@@ -24,6 +25,7 @@ import {
   wrapPrivateNote,
   wrapPrivateReply,
   type OpenedNote,
+  type EventLayer,
   type Rumor,
 } from '@/lib/feedEncryption';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
@@ -38,6 +40,26 @@ const PrivateFeedBody = () => {
   const { posts, pending, connectedPeers } = usePrivateFeed();
   const [draft, setDraft] = useState('');
 
+  /** Preview a private broadcast: everything here is burner-signed and
+   * goes to our write relays — the one place those facts are stated. */
+  const privateRequest = (
+    label: string,
+    preview: string,
+    events: readonly NostrEvent[],
+    opts: { layers?: readonly EventLayer[]; extraRelays?: readonly string[]; labels?: readonly string[] } = {},
+  ): void => {
+    request({
+      grade: 'private',
+      label,
+      preview,
+      identityPubkey: getPublicKey(sk!),
+      identityNote: 'burner-signed',
+      relays: publishTargets,
+      events,
+      ...opts,
+    });
+  };
+
   // The router's gate guarantees a user here.
   if (!sk) {
     return (
@@ -50,16 +72,9 @@ const PrivateFeedBody = () => {
   const post = (content: string): void => {
     const { rumor } = makeRumor(getPublicKey(sk), content);
     const events = wrapPrivateNote(sk, connectedPeers, rumor);
-    request({
-      grade: 'private',
-      label: 'private note',
-      preview: content,
-      identityPubkey: getPublicKey(sk),
-      identityNote: 'burner-signed',
-      relays: publishTargets,
+    privateRequest('private note', content, events, {
       extraRelays: discoveryTargets,
       layers: privateNoteLayers(sk, events[0]),
-      events,
       labels: events.map((_, i) => (events.length > 1 ? `private note (${i + 1} of ${events.length})` : 'private note')),
     });
   };
@@ -77,46 +92,25 @@ const PrivateFeedBody = () => {
       .filter((r) => r.rumor.pubkey === me && r.rumor.tags.find(([n]) => n === 'e')?.[1] === target.id)
       .sort((a, b) => b.rumor.created_at - a.rumor.created_at)[0];
     if (mine) {
-      const deletion = deletePrivateEvent(sk, mine.wrapper);
-      request({
-        grade: 'private',
-        label: 'reaction deletion',
-        preview: `take your ${mine.rumor.content} back`,
-        identityPubkey: me,
-        identityNote: 'burner-signed',
-        relays: publishTargets,
-        events: [deletion],
-      });
+      privateRequest('reaction deletion', `take your ${mine.rumor.content} back`, [
+        deletePrivateEvent(sk, mine.wrapper),
+      ]);
       return;
     }
     const { rumor } = makeRumor(me, emoji, [['e', target.id]], 7);
     const event = wrapPrivateReply(sk, parent.replyCek, rumor);
-    request({
-      grade: 'private',
-      label: 'reaction',
-      preview: `${emoji} on ${target.content.slice(0, 64)}`,
-      identityPubkey: me,
-      identityNote: 'burner-signed',
-      relays: publishTargets,
+    privateRequest('reaction', `${emoji} on ${target.content.slice(0, 64)}`, [event], {
       extraRelays: discoveryTargets,
       layers: privateNoteLayers(sk, event, parent.replyCek),
-      events: [event],
     });
   };
 
   const reply = (parent: OpenedNote, content: string) => {
     const { rumor } = makeRumor(getPublicKey(sk), content, [['e', parent.rumor.id]]);
     const event = wrapPrivateReply(sk, parent.replyCek, rumor);
-    request({
-      grade: 'private',
-      label: 'private reply',
-      preview: content,
-      identityPubkey: getPublicKey(sk),
-      identityNote: 'burner-signed',
-      relays: publishTargets,
+    privateRequest('private reply', content, [event], {
       extraRelays: discoveryTargets,
       layers: privateNoteLayers(sk, event, parent.replyCek),
-      events: [event],
     });
   };
 
@@ -126,31 +120,17 @@ const PrivateFeedBody = () => {
     // no aliases, no connection state.
     const revision = makeRevision(getPublicKey(sk), parent.rumor, content);
     const event = wrapPrivateReply(sk, parent.replyCek, revision);
-    request({
-      grade: 'private',
-      label: 'revision',
-      preview: content,
-      identityPubkey: getPublicKey(sk),
-      identityNote: 'burner-signed',
-      relays: publishTargets,
+    privateRequest('revision', content, [event], {
       extraRelays: discoveryTargets,
       layers: privateNoteLayers(sk, event, parent.replyCek),
-      events: [event],
     });
   };
   const editReply = (parent: OpenedNote, reply: OpenedReply, content: string) => {
     const revision = makeRevision(getPublicKey(sk), reply.rumor, content);
     const event = wrapPrivateReply(sk, parent.replyCek, revision);
-    request({
-      grade: 'private',
-      label: 'reply revision',
-      preview: content,
-      identityPubkey: getPublicKey(sk),
-      identityNote: 'burner-signed',
-      relays: publishTargets,
+    privateRequest('reply revision', content, [event], {
       extraRelays: discoveryTargets,
       layers: privateNoteLayers(sk, event, parent.replyCek),
-      events: [event],
     });
   };
 
@@ -162,16 +142,12 @@ const PrivateFeedBody = () => {
       ...history.map((h) => h.wrapper),
     ].filter((wrapper, i, all) => all.findIndex((w) => w.id === wrapper.id) === i);
     const events = wrappers.map((wrapper) => deletePrivateEvent(sk, wrapper));
-    request({
-      grade: 'private',
-      label: 'deletion',
-      preview: `delete this note — ${events.length} ${events.length === 1 ? 'event' : 'events'} (chunks and revisions)`,
-      identityPubkey: getPublicKey(sk),
-      identityNote: 'burner-signed',
-      relays: publishTargets,
+    privateRequest(
+      'deletion',
+      `delete this note — ${events.length} ${events.length === 1 ? 'event' : 'events'} (chunks and revisions)`,
       events,
-      labels: events.map((_, i) => `deletion (${i + 1} of ${events.length})`),
-    });
+      { labels: events.map((_, i) => `deletion (${i + 1} of ${events.length})`) },
+    );
   };
 
   const submit = () => {

@@ -6,6 +6,7 @@ import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useProfiles } from '@/data/hooks/useProfile';
 import { npubOf, profileHref } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { EMOJI_CHOICES, ENGAGEMENT_TABS, type EngagementTab } from '@/lib/engagementKinds';
 
 /** A person in the viewer, whatever they did. */
 export interface EngagementRow {
@@ -14,10 +15,6 @@ export interface EngagementRow {
   content?: string;
   id: string;
 }
-
-import { EMOJI_CHOICES, ENGAGEMENT_TABS, type EngagementTab } from '@/lib/engagementKinds';
-
-export type { EngagementTab };
 
 /** Hold the icon this long before the picker opens instead of the click. */
 const HOLD_MS = 500;
@@ -109,9 +106,9 @@ export const EngagementDialog = ({
 /**
  * The one engagement affordance: icon left, underlined count right.
  *
- * - The icon starts the action. Click: `onEngage(defaultEmoji)`. Hold
- *   half a second: the emoji picker opens, and a choice calls
- *   `onEngage(emoji)` instead.
+ * - The icon starts the action: click is `onEngage`. When `onChoose` is
+ *   present (reactions), holding the icon half a second opens the emoji
+ *   picker and a choice calls `onChoose(emoji)` instead.
  * - The count is the state: a spinner while the engagement want is
  *   still fetching, the number otherwise (0 for none). Clicking it
  *   opens the viewer on this affordance's tab.
@@ -124,10 +121,9 @@ export const EngagementCount = ({
   tab,
   reactions,
   reposts,
-  defaultEmoji,
   onEngage,
+  onChoose,
   ariaLabel,
-  testid,
 }: {
   icon: React.ReactNode;
   count: number;
@@ -138,11 +134,11 @@ export const EngagementCount = ({
   tab: EngagementTab;
   reactions: readonly EngagementRow[];
   reposts: readonly EngagementRow[];
-  /** The emoji a plain click engages with — the default reaction setting. */
-  defaultEmoji: string;
-  onEngage: (emoji: string) => void;
+  /** Icon click — the action, whatever it is for this kind. */
+  onEngage: () => void;
+  /** Present (reactions) when an emoji picker is offered on long-press. */
+  onChoose?: (emoji: string) => void;
   ariaLabel: string;
-  testid?: string;
 }) => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerTab, setViewerTab] = useState<EngagementTab>(tab);
@@ -152,6 +148,7 @@ export const EngagementCount = ({
 
   const startPress = () => {
     heldFor.current = false;
+    if (!onChoose) return;
     pressTimer.current = setTimeout(() => {
       heldFor.current = true;
       setPickerOpen(true);
@@ -160,7 +157,7 @@ export const EngagementCount = ({
   const endPress = () => {
     clearTimeout(pressTimer.current);
     pressTimer.current = undefined;
-    if (!heldFor.current) onEngage(defaultEmoji);
+    if (!heldFor.current) onEngage();
   };
   const cancelPress = () => {
     clearTimeout(pressTimer.current);
@@ -180,7 +177,6 @@ export const EngagementCount = ({
         onPointerLeave={cancelPress}
         aria-label={ariaLabel}
         aria-pressed={mine}
-        data-testid={testid}
       >
         {icon}
       </button>
@@ -208,7 +204,7 @@ export const EngagementCount = ({
                   key={emoji}
                   type="button"
                   className="cursor-pointer rounded-sm px-2 py-1.5 text-base hover:bg-accent"
-                  onClick={() => { setPickerOpen(false); onEngage(emoji); }}
+                  onClick={() => { setPickerOpen(false); onChoose?.(emoji); }}
                 >
                   {emoji}
                 </button>
