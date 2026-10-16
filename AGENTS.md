@@ -53,5 +53,5 @@ Plan of record: `README.md`.
 
 - write tests for everything. tests must be intelligent and critically cover the features — behavior, boundaries, invariants, real error paths — not plumbing or source-text checks
 - fixed test identities are fine: hardcode dedicated keypairs created for testing (reused across runs is good) so tests exercise real nostr events end-to-end — the most realistic data. never real user identities
-- after code changes: typecheck → build → lint (fix critical) → run the test suite. not done until they pass
+- after code changes: typecheck → lint (fix critical) → run tests, scaled to the change. use judgement: the full suite is for big or cross-cutting changes (or before handing over a feature); for a focused change run only the test files covering what you touched, and add anything covering shared modules you edited (store, scheduler, net, queue, feed engine). not done until the suites you ran pass
 - verify UI changes by browser-driving the dev server
