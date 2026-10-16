@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
@@ -7,7 +7,7 @@ import { useLayoutEffect, type ReactNode } from 'react';
 import { TestApp } from '@/test/TestApp';
 import PrivateFeedPage from '@/pages/PrivateFeed';
 import { useKeystore } from '@/auth/useKeystore';
-import { acceptConnection, closeConnection, makeRumor, noteIdOf, openConnection, requestConnection, wrapPrivateNote, wrapPrivateReply } from '@/lib/feedEncryption';
+import { KIND_PRIVATE_REPLY, acceptConnection, closeConnection, makeRumor, noteIdOf, openConnection, openPrivateReply, requestConnection, wrapPrivateNote, wrapPrivateReply } from '@/lib/feedEncryption';
 
 const queryRelay = vi.fn<(url: string, filters: NostrFilter[]) => Promise<NostrEvent[]>>();
 const publish = vi.fn<(event: NostrEvent, relays: string[]) => Promise<void>>();
@@ -115,6 +115,72 @@ describe('PrivateFeedPage', () => {
     expect(within(dialog).getByText('event info')).toBeTruthy();
     expect(within(dialog).getByText('1370')).toBeTruthy();
     expect(within(dialog).queryByText(/secret from alice/)).toBeNull();
+  });
+
+  it('private reactions: the count opens who reacted; reacting broadcasts a sealed 1470', async () => {
+    const alice = generateSecretKey();
+    const bob = generateSecretKey();
+    const offer = requestConnection(alice, getPublicKey(bob));
+    const accepted = acceptConnection(bob, openConnection(bob, offer));
+    const { rumor, replyCek } = makeRumor(getPublicKey(alice), 'react to my secret');
+    const [note] = wrapPrivateNote(alice, [getPublicKey(bob)], rumor);
+    // bob already reacted: a kind-7 rumor sealed into the conversation
+    const bobPlus = makeRumor(getPublicKey(bob), '+', [['e', rumor.id]], 7).rumor;
+    const reaction = wrapPrivateReply(bob, replyCek, bobPlus);
+
+    queryRelay.mockImplementation(async (_url, filters) => {
+      if (filters[0].kinds?.includes(30378)) return [accepted];
+      if (filters[0]['#f']) return [note];
+      if (filters[0]['#n']) return [reaction];
+      return [];
+    });
+
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <PrivateFeedPage />
+        </Unlock>
+      </TestApp>,
+    );
+    await settle();
+    await settle();
+    await settle();
+    expect(await screen.findByText('react to my secret')).toBeTruthy();
+
+    const user = userEvent.setup();
+    // the count shows bob's reaction and opens the viewer — no broadcast
+    await user.click(await screen.findByTestId('count-react'));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('1 reaction')).toBeTruthy();
+    expect(within(dialog).getByText(nip19.npubEncode(getPublicKey(bob)))).toBeTruthy();
+    expect(publish).not.toHaveBeenCalled();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // the heart opens the broadcast modal; confirming enqueues the sealed 1470
+    await user.click(screen.getAllByRole('button', { name: 'react' })[0]);
+    await confirmBroadcast(user);
+    await settle();
+
+    const published = publish.mock.calls.map(([ev]) => ev);
+    const mine = published.find((ev) => ev.kind === KIND_PRIVATE_REPLY);
+    expect(mine).toBeTruthy();
+    // nothing readable leaks: the wrapper's content carries no target id
+    // and no plaintext rumor fields
+    expect(mine!.content).not.toContain(rumor.id);
+    expect(mine!.content.startsWith('{"v":1,"alg":"fb-ecdh-v1"')).toBe(true);
+    // and it opens back as a kind-7 rumor addressed at the note
+    const opened = openPrivateReply(replyCek, mine!);
+    expect(opened.kind).toBe(7);
+    expect(opened.tags).toContainEqual(['e', rumor.id]);
+
+    // clicking again opens the un-react modal; confirming deletes it
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'react' })[0]).toHaveAttribute('aria-pressed', 'true'));
+    await user.click(screen.getAllByRole('button', { name: 'react' })[0]);
+    await confirmBroadcast(user);
+    await waitFor(() => expect(publish.mock.calls.some(([ev]) => ev.kind === 5)).toBe(true));
+    const deletion = publish.mock.calls.find(([ev]) => ev.kind === 5)![0];
+    expect(deletion.tags).toContainEqual(['e', mine!.id]);
   });
 
   it('lets the author edit and delete their own note', async () => {

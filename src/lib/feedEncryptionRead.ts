@@ -106,14 +106,18 @@ export interface OpenedReply {
  * One note's conversation events, split by role: **revisions** are the
  * author's own `revision_of` chain off the root rumor (each supersedes
  * the note for the whole audience — one event, every holder has the
- * reply CEK); **replies** are everything else, with the author's reply
- * revisions collapsed per `repliesOn` rules. A forged `revision_of`
- * from another author is just their own reply, never a supersede.
+ * reply CEK); **reactions** are kind-7 rumors addressed by `e` tag —
+ * they never render as text replies; **replies** are everything else,
+ * with the author's reply revisions collapsed per `repliesOn` rules. A
+ * forged `revision_of` from another author is just their own reply,
+ * never a supersede.
  */
 export interface Conversation {
   /** The author's revision chain off the note, oldest first. */
   revisions: readonly OpenedReply[];
   replies: readonly OpenedReply[];
+  /** Kind-7 rumors addressed into this conversation, any target. */
+  reactions: readonly OpenedReply[];
 }
 
 export const conversationOn = (
@@ -129,12 +133,18 @@ export const conversationOn = (
     if (rumor) opened.push({ rumor, wrapper: event });
   }
 
+  // Reactions are a role, not a reply: kind 7 leaves the conversation
+  // before revision/reply sorting — it can never be revised or rendered
+  // as text.
+  const reactions = opened.filter((r) => r.rumor.kind === 7);
+  const nonReactions = opened.filter((r) => r.rumor.kind !== 7);
+
   // The note's revision chain: same author as the note, each link's
   // revision_of pointing at the previous rumor id (root first).
   const chain: OpenedReply[] = [];
   let cursor = note.rumor.id;
   for (;;) {
-    const next = opened.find(
+    const next = nonReactions.find(
       (r) => r.rumor.pubkey === note.rumor.pubkey && revisionOf(r.rumor) === cursor,
     );
     if (!next) break;
@@ -145,7 +155,7 @@ export const conversationOn = (
 
   // Replies: everything else. An author's revision supersedes their own
   // earlier reply — never anyone else's.
-  const rest = opened.filter((r) => !revisionIds.has(r.rumor.id));
+  const rest = nonReactions.filter((r) => !revisionIds.has(r.rumor.id));
   const superseded = new Set<string>();
   for (const reply of rest) {
     const target = revisionOf(reply.rumor);
@@ -157,5 +167,34 @@ export const conversationOn = (
     .filter((reply) => !superseded.has(reply.rumor.id))
     .sort((a, b) => a.rumor.created_at - b.rumor.created_at);
 
-  return { revisions: chain, replies };
+  return { revisions: chain, replies, reactions };
+};
+
+export interface Reaction {
+  /** Who reacted — the conversation member's real pubkey. */
+  pubkey: string;
+  /** The reaction itself: '+', '-', or an emoji. */
+  content: string;
+  /** The reaction's wrapper id — the delete target for toggling off. */
+  id: string;
+  created_at: number;
+}
+
+/**
+ * The reactions addressed at one item, deduped the NIP-25 way: one
+ * person, many kind 7s — the reader cares about people, so an author's
+ * latest reaction is the one that counts.
+ */
+export const reactionsTo = (conversation: Conversation, targetId: string): readonly Reaction[] => {
+  const mine = conversation.reactions.filter(
+    (r) => r.rumor.tags.find(([name]) => name === 'e')?.[1] === targetId,
+  );
+  const latest = new Map<string, OpenedReply>();
+  for (const r of mine) {
+    const held = latest.get(r.rumor.pubkey);
+    if (!held || r.rumor.created_at >= held.rumor.created_at) latest.set(r.rumor.pubkey, r);
+  }
+  return [...latest.values()]
+    .sort((a, b) => b.rumor.created_at - a.rumor.created_at)
+    .map((r) => ({ id: r.wrapper.id, pubkey: r.rumor.pubkey, content: r.rumor.content, created_at: r.rumor.created_at }));
 };

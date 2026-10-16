@@ -349,6 +349,30 @@ describe('engagement wants', () => {
       .map(([url]) => url);
     expect(urls).toContain('wss://mine/');
   });
+
+  it('a throwing query settles anyway and never wedges the scheduler', async () => {
+    const { scheduler, store } = build();
+    const a = '1'.repeat(64);
+    store.ingest([
+      { id: a, pubkey: ALICE, created_at: 1, kind: 1, tags: [], content: '', sig: 'c'.repeat(128) },
+    ], 'wss://one/');
+
+    // The relay explodes instead of answering.
+    queryRelay.mockRejectedValueOnce(new Error('relay exploded'));
+    scheduler.want({ type: 'engagement', target: a }, 'interactive');
+    await scheduler.flush();
+
+    // Settled regardless: the spinner resolves with whatever arrived.
+    const key = wantEntity({ type: 'engagement', target: a })!;
+    expect(store.get(key).settledAt).toBeDefined();
+
+    // And the scheduler is not wedged: a later want still runs.
+    queryRelay.mockResolvedValueOnce([]);
+    scheduler.want({ type: 'engagement', target: '2'.repeat(64) }, 'interactive');
+    await scheduler.flush();
+    const later = queryRelay.mock.calls.filter(([, filters]) => filters[0]['#e']?.[0] === '2'.repeat(64));
+    expect(later.length).toBeGreaterThan(0);
+  });
 });
 
 describe('thread wants', () => {
@@ -560,5 +584,23 @@ describe('debounce', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('engagement spinner end-to-end', () => {
+  it('resolves the spinner even when a relay never answers', { timeout: 25_000 }, async () => {
+    const { scheduler, store } = build();
+    const a = '1'.repeat(64);
+    store.ingest([
+      { id: a, pubkey: ALICE, created_at: 1, kind: 1, tags: [], content: '', sig: 'c'.repeat(128) },
+    ], 'wss://one/');
+
+    // A relay that NEVER answers — not rejects, hangs.
+    queryRelay.mockImplementationOnce(() => new Promise(() => {}));
+    scheduler.want({ type: 'engagement', target: a }, 'interactive');
+    await scheduler.flush();
+
+    const key = wantEntity({ type: 'engagement', target: a })!;
+    expect(store.get(key).settledAt).toBeDefined();
   });
 });

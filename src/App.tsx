@@ -37,6 +37,7 @@ const defaultConfig: AppConfig = {
   discoveryRelays: DEFAULT_DISCOVERY_RELAYS,
   torEnabled: true,
   mediaEnabled: true,
+  defaultReaction: '+',
   mediaCacheMaxMb: 1024,
 };
 

@@ -144,7 +144,9 @@ export const wantEntity = (want: Want): EntityKey | undefined => {
     case 'addressable':
       return addressableKey(want.kind, want.pubkey, want.d);
     case 'engagement':
-      return undefined;
+      // Synthetic, like thread: the want settling is the only observable —
+      // the counts themselves live in the ref index, not an entity.
+      return `engagement:${want.target}`;
     case 'thread':
       return `thread:${want.parent}`;
     case 'authorNotes':
@@ -185,6 +187,8 @@ export interface Scheduler {
   /** Forget everything. Full teardown, for tests. */
   reset(): void;
 }
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 const chunk = <T,>(items: readonly T[], size: number): T[][] => {
   const out: T[][] = [];
@@ -251,7 +255,16 @@ export const createScheduler = (
     if (timer === undefined) timer = setTimeout(() => void flush(), DEBOUNCE_MS);
   };
 
-  /** One REQ per relay per chunk, ingested under the relay it came from. */
+  /** One lane's batch must not outlive this, whatever relays do — the
+   * settle that clears spinners waits on it. Covers queue wait and
+   * query time both. */
+  const LANE_DEADLINE_MS = 15_000;
+
+  /** One REQ per relay per chunk, ingested under the relay it came from.
+   * The returned promise resolves when all jobs finish OR the lane
+   * deadline passes — a relay that hangs (stalled circuit, silent
+   * drop) resolves late and ingests into the next snapshot, never
+   * blocks the settle. */
   const runGroups = async (
     lane: Lane,
     groups: Groups,
@@ -265,7 +278,7 @@ export const createScheduler = (
         jobs.push((async () => {
           const release = await limiter.acquire(lane);
           try {
-            target.ingest(await queryRelay(url, [filterOf(slice)]), url);
+            target.ingest(await queryRelay(url, [filterOf(slice)], { timeoutMs: LANE_DEADLINE_MS }), url);
           } finally {
             release();
           }
@@ -273,7 +286,7 @@ export const createScheduler = (
       }
     }
 
-    await Promise.all(jobs);
+    await Promise.race([Promise.all(jobs), sleep(LANE_DEADLINE_MS)]);
   };
 
   /** The user's own identity events: their write relays plus discovery. */
@@ -669,8 +682,14 @@ export const createScheduler = (
 
     // Lanes run concurrently; the slot limiter is what orders them, so a
     // background poll cannot hold a slot an interactive avatar needs.
+    // A lane that rejects must not wedge the scheduler: settle is
+    // unconditional, and `running` always clears — otherwise one thrown
+    // query leaves every later want queued forever behind a dead promise
+    // (seen live as engagement spinners that never resolve).
     running = Promise.all(
-      LANES.map((lane) => runLane(lane, batch.filter((q) => q.lane === lane))),
+      LANES.map((lane) =>
+        runLane(lane, batch.filter((q) => q.lane === lane)).catch(() => undefined),
+      ),
     ).then(() => {
       const now = Date.now();
       const settled: EntityKey[] = [];
@@ -698,6 +717,7 @@ export const createScheduler = (
       // Our own relay list settling (found or definitively absent) is
       // what held private wants were waiting for.
       if (selfRelayListSettled) reroute();
+    }).finally(() => {
       running = undefined;
     });
 

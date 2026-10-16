@@ -5,12 +5,14 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { cn } from '@/lib/utils';
 import { NetworkSection } from './settings/NetworkSection';
 import { MediaSection } from './settings/MediaSection';
+import { ReactionSection } from './settings/ReactionSection';
 import { AccountSection } from './settings/AccountSection';
 import { CacheSection } from './settings/CacheSection';
 
 const SETTINGS_SECTIONS = [
   { id: 'network', label: 'network' },
   { id: 'media', label: 'media' },
+  { id: 'reaction', label: 'reaction' },
   { id: 'account', label: 'account' },
   { id: 'cache', label: 'cache' },
 ] as const;
@@ -25,6 +27,7 @@ const isSectionId = (value: string): value is SettingsSectionId =>
 const PANELS: Record<SettingsSectionId, React.FC> = {
   network: NetworkSection,
   media: MediaSection,
+  reaction: ReactionSection,
   account: AccountSection,
   cache: CacheSection,
 };

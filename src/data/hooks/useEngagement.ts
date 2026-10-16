@@ -5,9 +5,6 @@ import { scheduler, type Lane } from '@/data/scheduler';
 
 const same = (a: Engagement, b: Engagement): boolean =>
   a.replies === b.replies &&
-  a.reactions === b.reactions &&
-  a.downvotes === b.downvotes &&
-  a.reposts === b.reposts &&
   a.zaps === b.zaps &&
   a.capped === b.capped;
 
@@ -17,7 +14,10 @@ const same = (a: Engagement, b: Engagement): boolean =>
  * (private items): no counts and no want — a rumor id is unresolvable on
  * relays and asking about one leaks the query.
  */
-export const useEngagement = (id: string | undefined, lane: Lane = 'interactive'): Engagement => {
+export const useEngagement = (
+  id: string | undefined,
+  lane: Lane = 'interactive',
+): Engagement & { pending: boolean } => {
   const cache = useRef<Engagement>(EMPTY_ENGAGEMENT);
 
   const subscribe = useCallback(
@@ -39,5 +39,14 @@ export const useEngagement = (id: string | undefined, lane: Lane = 'interactive'
     return () => scheduler.drop({ type: 'engagement', target: id });
   }, [id, lane]);
 
-  return useSyncExternalStore(subscribe, snapshot, snapshot);
+  const counts = useSyncExternalStore(subscribe, snapshot, snapshot);
+  // The engagement want settles a synthetic entity when its first run
+  // completes — until then the numbers are unknown, not zero.
+  const settleKey = id ? `engagement:${id}` : '';
+  const settle = useSyncExternalStore(
+    useCallback((onChange: () => void) => store.subscribe(settleKey, onChange), [settleKey]),
+    useCallback(() => store.get(settleKey), [settleKey]),
+    useCallback(() => store.get(settleKey), [settleKey]),
+  );
+  return { ...counts, pending: id !== undefined && settle.settledAt === undefined };
 };

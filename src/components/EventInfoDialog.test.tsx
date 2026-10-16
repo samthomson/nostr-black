@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { nip19 } from 'nostr-tools';
 
 import { EventInfoDialog } from './EventInfoDialog';
@@ -156,8 +156,10 @@ describe('Note UI', () => {
 
     expect(await screen.findByTestId('note-counts')).toBeTruthy();
     expect(screen.getByLabelText('replies')).toBeTruthy();
-    expect(screen.getByLabelText(/reposts?/)).toBeTruthy();
-    expect(screen.getByLabelText(/likes|react/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'repost' })).toBeTruthy();
+    expect(screen.getByTestId('count-repost')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'react' })).toBeTruthy();
+    expect(screen.getByTestId('count-react')).toBeTruthy();
     expect(screen.getByLabelText('zaps')).toBeTruthy();
   });
 
@@ -176,8 +178,10 @@ describe('Note UI', () => {
       </TestApp>,
     );
 
-    expect(await screen.findByLabelText(/likes|react/)).toHaveTextContent('1');
-    expect(screen.getByLabelText(/reposts?/)).toHaveTextContent('1');
+    // pending shows a spinner until the engagement want settles, then
+    // the numbers — the test waits out the fetch like a user would
+    await waitFor(() => expect(screen.getByTestId('count-react')).toHaveTextContent('1'));
+    expect(screen.getByTestId('count-repost')).toHaveTextContent('1');
   });
 
   it('links the reply count to the note so the thread can open', async () => {

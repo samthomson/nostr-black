@@ -21,6 +21,8 @@ export interface PrivatePost {
   /** The note's superseded versions — its edit history, oldest first. */
   history: readonly OpenedNote[];
   replies: readonly OpenedReply[];
+  /** The whole conversation, reactions included — addressed by rumor id. */
+  conversation: Conversation;
 }
 
 export interface PrivateFeed {
@@ -37,7 +39,9 @@ const samePosts = (a: readonly PrivatePost[], b: readonly PrivatePost[]): boolea
     && post.history.length === b[i].history.length
     && post.history.every((rev, j) => rev.wrapper.id === b[i].history[j].wrapper.id)
     && post.replies.length === b[i].replies.length
-    && post.replies.every((reply, j) => reply.wrapper.id === b[i].replies[j].wrapper.id));
+    && post.replies.every((reply, j) => reply.wrapper.id === b[i].replies[j].wrapper.id)
+    && post.conversation.reactions.length === b[i].conversation.reactions.length
+    && post.conversation.reactions.every((r, j) => r.wrapper.id === b[i].conversation.reactions[j].wrapper.id));
 
 /** Decrypted notes and rumors, cached per event id — immutable once
  * opened, so each event decrypts once per session key. Memory only. */
@@ -76,6 +80,7 @@ const postFrom = (note: OpenedNote, conversation: Conversation): PrivatePost => 
     note: tip ?? note,
     history: tip ? [note, ...revisions] : [],
     replies: conversation.replies,
+    conversation,
   };
 };
 

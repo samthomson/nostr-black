@@ -13,27 +13,27 @@ import type { EventStore } from './store';
 /** Direct responses: both reply formats, reactions, reposts, zaps. */
 export const ENGAGEMENT_KINDS = [1, 1111, 6, 16, 7, 9735] as const;
 
+/** Which tallies the UI still shows; reactions and reposts list live
+ * (`useReactions` / `useReposts`) rather than count here. */
+export const COUNTED_KINDS = [1, 1111, 9735] as const;
+
 /**
  * Per-target fetch cap. Hitting it means the number is a floor — the UI
  * must say so (`500+`), never invent a precise figure past what we have.
  */
 export const REACTION_CAP = 500;
 
+/** The note-level counts the row still shows inline. Reaction and
+ * repost numbers are not aggregates — they are the live lists' lengths. */
 export interface Engagement {
   replies: number;
-  reactions: number;
-  downvotes: number;
-  reposts: number;
   zaps: number;
-  /** True when a tally hit the cap. The number is a floor, not a count. */
+  /** True when the reply tally hit the cap. The number is a floor. */
   capped: boolean;
 }
 
 export const EMPTY_ENGAGEMENT: Engagement = Object.freeze({
   replies: 0,
-  reactions: 0,
-  downvotes: 0,
-  reposts: 0,
   zaps: 0,
   capped: false,
 });
@@ -41,34 +41,17 @@ export const EMPTY_ENGAGEMENT: Engagement = Object.freeze({
 /** Tally a set of events that all reference the same target. */
 export const tally = (events: readonly NostrEvent[]): Engagement => {
   const replies = new Set<string>();
-  const likes = new Set<string>();
-  const downvotes = new Set<string>();
-  const reposts = new Set<string>();
   const zaps = new Set<string>();
 
   for (const event of events) {
     if (event.kind === 1 || event.kind === 1111) replies.add(event.id);
-    else if (event.kind === 6 || event.kind === 16) reposts.add(event.id);
     else if (event.kind === 9735) zaps.add(event.id);
-    else if (event.kind === 7) {
-      // NIP-25: one person, many kind 7s — the reader cares about people.
-      if (event.content === '-') downvotes.add(event.pubkey);
-      else likes.add(event.pubkey);
-    }
   }
-
-  const capped =
-    likes.size >= REACTION_CAP ||
-    downvotes.size >= REACTION_CAP ||
-    replies.size >= REACTION_CAP;
 
   return {
     replies: replies.size,
-    reactions: likes.size,
-    downvotes: downvotes.size,
-    reposts: reposts.size,
     zaps: zaps.size,
-    capped,
+    capped: replies.size >= REACTION_CAP,
   };
 };
 
@@ -80,4 +63,51 @@ export const engagementOf = (target: EventStore, id: string): Engagement => {
     if (event) events.push(event);
   }
   return events.length === 0 ? EMPTY_ENGAGEMENT : tally(events);
+};
+
+export interface Reaction {
+  /** Who reacted. */
+  pubkey: string;
+  /** The reaction itself: '+', '-', or an emoji. */
+  content: string;
+  /** The kind-7 event id — the delete target for toggling off. */
+  id: string;
+  created_at: number;
+}
+
+/**
+ * The reactions on one target, deduped the NIP-25 way: one person, many
+ * kind 7s — the reader cares about people, so an author's latest
+ * reaction is the one that counts. Newest reactors first.
+ */
+export interface Repost {
+  /** Who reposted. */
+  pubkey: string;
+  /** The kind 6/16 event id — its author can delete it. */
+  id: string;
+  created_at: number;
+}
+
+/** The reposts on one target, newest first. */
+export const repostsOf = (target: EventStore, id: string): readonly Repost[] => {
+  const out: Repost[] = [];
+  for (const ref of target.getRefs(id)) {
+    const event = target.getEvent(ref);
+    if (!event || (event.kind !== 6 && event.kind !== 16)) continue;
+    out.push({ id: event.id, pubkey: event.pubkey, created_at: event.created_at });
+  }
+  return out.sort((a, b) => b.created_at - a.created_at);
+};
+
+export const reactionsOf = (target: EventStore, id: string): readonly Reaction[] => {
+  const latest = new Map<string, NostrEvent>();
+  for (const ref of target.getRefs(id)) {
+    const event = target.getEvent(ref);
+    if (!event || event.kind !== 7) continue;
+    const held = latest.get(event.pubkey);
+    if (!held || event.created_at >= held.created_at) latest.set(event.pubkey, event);
+  }
+  return [...latest.values()]
+    .sort((a, b) => b.created_at - a.created_at)
+    .map((event) => ({ id: event.id, pubkey: event.pubkey, content: event.content, created_at: event.created_at }));
 };

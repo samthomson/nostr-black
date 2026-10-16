@@ -7,7 +7,7 @@ import {
   wrapPrivateReply,
   type Rumor,
 } from './feedEncryption';
-import { collapseNotes, conversationOn, tryOpenNote } from './feedEncryptionRead';
+import { collapseNotes, conversationOn, reactionsTo, tryOpenNote } from './feedEncryptionRead';
 
 const pair = () => {
   const sk = generateSecretKey();
@@ -90,5 +90,65 @@ describe('conversationOn', () => {
       wrapPrivateReply(alice.sk, replyCek, v2),
     ]);
     expect(conversation.revisions.map((r) => r.rumor.content)).toEqual(['v2', 'v3']);
+  });
+});
+
+describe('private reactions', () => {
+  it('kind-7 rumors are reactions, never text replies', () => {
+    const alice = pair();
+    const bob = pair();
+    const { rumor: root, replyCek } = makeRumor(alice.pk, 'root');
+    const [parent] = wrapPrivateNote(alice.sk, [bob.pk], root);
+    const opened = tryOpenNote(bob.sk, parent)!;
+
+    const plus = makeRumor(bob.pk, '+', [['e', root.id]], 7).rumor;
+    const textReply = rumorOf(bob.pk, 'a real reply', [['e', root.id]], root.created_at + 10);
+    const conversation = conversationOn(opened, [
+      wrapPrivateReply(bob.sk, replyCek, plus),
+      wrapPrivateReply(bob.sk, replyCek, textReply),
+    ]);
+
+    expect(conversation.replies.map((r) => r.rumor.content)).toEqual(['a real reply']);
+    expect(conversation.reactions.map((r) => r.rumor.content)).toEqual(['+']);
+  });
+
+  it('reactions address their target by e tag — note or reply', () => {
+    const alice = pair();
+    const bob = pair();
+    const { rumor: root, replyCek } = makeRumor(alice.pk, 'root');
+    const [parent] = wrapPrivateNote(alice.sk, [bob.pk], root);
+    const opened = tryOpenNote(bob.sk, parent)!;
+    const reply = rumorOf(bob.pk, 'reply here', [['e', root.id]], root.created_at + 10);
+
+    const conversation = conversationOn(opened, [
+      wrapPrivateReply(bob.sk, replyCek, makeRumor(bob.pk, '+', [['e', root.id]], 7).rumor),
+      wrapPrivateReply(alice.sk, replyCek, makeRumor(alice.pk, '❤', [['e', reply.id]], 7).rumor),
+    ]);
+
+    expect(reactionsTo(conversation, root.id)).toHaveLength(1);
+    expect(reactionsTo(conversation, root.id)[0].content).toBe('+');
+    expect(reactionsTo(conversation, reply.id)).toHaveLength(1);
+    expect(reactionsTo(conversation, reply.id)[0].content).toBe('❤');
+  });
+
+  it("one person's latest reaction is the one that counts", () => {
+    const alice = pair();
+    const bob = pair();
+    const { rumor: root, replyCek } = makeRumor(alice.pk, 'root');
+    const [parent] = wrapPrivateNote(alice.sk, [bob.pk], root);
+    const opened = tryOpenNote(bob.sk, parent)!;
+
+    const reactionOf = (content: string, at: number): Rumor =>
+      ({ ...{ pubkey: bob.pk, created_at: at, kind: 7, tags: [['e', root.id]], content }, id: getEventHash({ pubkey: bob.pk, created_at: at, kind: 7, tags: [['e', root.id]], content }) });
+    // the older one lands later — order on the wire must not matter
+    const conversation = conversationOn(opened, [
+      wrapPrivateReply(bob.sk, replyCek, reactionOf('❤', root.created_at + 20)),
+      wrapPrivateReply(bob.sk, replyCek, reactionOf('+', root.created_at + 10)),
+    ]);
+
+    const toRoot = reactionsTo(conversation, root.id);
+    expect(toRoot).toHaveLength(1);
+    expect(toRoot[0].content).toBe('❤');
+    expect(toRoot[0].pubkey).toBe(bob.pk);
   });
 });

@@ -13,15 +13,22 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EventInfoDialog } from '@/components/EventInfoDialog';
 import { RelayPill, RoutePill } from '@/components/Pills';
+import { EngagementCount } from '@/components/EngagementDialog';
+import { useReactions } from '@/data/hooks/useReactions';
+import { useReposts } from '@/data/hooks/useReposts';
 import { NoteEditor } from '@/components/NoteEditor';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useAsset } from '@/hooks/useAsset';
 import { profileHref, eventHref, npubOf, formatTimestamp } from '@/lib/format';
+import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { clientTag as clientTagOf } from '@/lib/clientTag';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 import { useRouting } from '@/data/hooks/useRouting';
 
+
+/** Event timestamps are whole seconds — the one place this is computed. */
+const nowSec = (): number => Math.floor(Date.now() / 1000);
 
 /** Content/image budget past which a note is collapsed with a fade. */
 const CLAMP_THRESHOLD = 420;
@@ -252,14 +259,12 @@ const Count = ({
   icon,
   count,
   label,
-  testid,
   onClick,
   href,
 }: {
   icon: React.ReactNode;
   count: React.ReactNode;
   label: string;
-  testid?: string;
   onClick?: () => void;
   href?: string;
 }) => {
@@ -272,19 +277,19 @@ const Count = ({
   const cls = 'inline-flex items-center gap-1';
   if (onClick) {
     return (
-      <button type="button" className={`${cls} cursor-pointer hover:text-foreground`} onClick={onClick} aria-label={label} data-testid={testid}>
+      <button type="button" className={`${cls} cursor-pointer hover:text-foreground`} onClick={onClick} aria-label={label} >
         {inner}
       </button>
     );
   }
   if (href) {
     return (
-      <Link to={href} className={`${cls} hover:text-foreground`} aria-label={label} data-testid={testid}>
+      <Link to={href} className={`${cls} hover:text-foreground`} aria-label={label} >
         {inner}
       </Link>
     );
   }
-  return <span className={cls} aria-label={label} data-testid={testid}>{inner}</span>;
+  return <span className={cls} aria-label={label} >{inner}</span>;
 };
 
 const NoteCounts = ({
@@ -292,23 +297,18 @@ const NoteCounts = ({
   engagement,
   linkReplies,
   onReplies,
-  onReact,
-  onRepost,
 }: {
   event: NostrEvent | Rumor;
   engagement: Engagement;
   linkReplies: boolean;
   onReplies?: () => void;
-  /** Present when reacting is available: the count is the button. */
-  onReact?: () => void;
-  onRepost?: () => void;
 }) => {
-  const { replies, reactions, downvotes, reposts, zaps, capped } = engagement;
+  const { replies, zaps, capped } = engagement;
   const href = linkReplies ? eventHref(event.id, event.pubkey) : undefined;
   const count = (n: number) => (n > 0 ? fmt(n, capped) : null);
 
   return (
-    <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
+    <>
       <Count
         icon={<MessageCircle className="size-4" />}
         count={count(replies)}
@@ -316,21 +316,8 @@ const NoteCounts = ({
         onClick={onReplies}
         href={href}
       />
-      <Count
-        icon={<Repeat2 className="size-4" />}
-        count={count(reposts)}
-        label="repost"
-        onClick={onRepost}
-      />
-      <Count
-        icon={<Heart className="size-4" />}
-        count={<>{count(reactions)}{downvotes > 0 && <span>{fmt(downvotes, capped)}</span>}</>}
-        label="react"
-        testid="count-likes"
-        onClick={onReact}
-      />
       <Count icon={<Zap className="size-4" />} count={count(zaps)} label="zaps" />
-    </div>
+    </>
   );
 };
 
@@ -365,7 +352,7 @@ const NoteMeta = ({
  * resolution are public-only (a rumor id is unresolvable on relays, and
  * asking about one leaks the query).
  */
-export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onReplies, onEdit, onDelete }: {
+export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onReplies, onEdit, onDelete, children }: {
   event: NostrEvent | Rumor;
   /** Present when the item is private: the kind 1370/1470 wrapper. */
   wrapper?: NostrEvent;
@@ -379,6 +366,9 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   /** Present when the parent owns deletion (a private note deletes its
    * whole conversation). Falls back to a single-event NIP-09. */
   onDelete?: () => void;
+  /** Extra rows in the action area — private items mount their own
+   * reaction count here (conversation data, not relay data). */
+  children?: React.ReactNode;
 }) => {
   const { config } = useAppContext();
   const showMedia = config.mediaEnabled;
@@ -398,19 +388,34 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
     setEditing(true);
   };
 
-  // Reactions and reposts are the same broadcast with a different kind —
-  // one confirm, same modal, same queue. Signed by the session signer.
-  const confirmEngagement = async (kind: 6 | 7) => {
+  // A repost is a broadcast like everything else — same modal, same
+  // queue, signed by the session signer. Clicking again takes it back.
+  const confirmRepost = async () => {
+    if (reposted) {
+      const mine = reposts.find((r) => r.pubkey === user!.pubkey)!;
+      const deletion = await user!.signer.signEvent({
+        kind: 5, content: '', tags: [['e', mine.id]], created_at: nowSec(),
+      });
+      request({
+        grade: 'public',
+        label: 'repost deletion',
+        preview: 'take your repost back',
+        identityPubkey: user!.pubkey,
+        relays: planRelays({ kind: 'publish', event: deletion }),
+        events: [deletion],
+      });
+      return;
+    }
     const target = event as NostrEvent;
     const engaged = await user!.signer.signEvent({
-      kind, content: kind === 7 ? '+' : '',
+      kind: 6, content: '',
       tags: [['e', target.id], ['p', target.pubkey]],
-      created_at: Math.floor(Date.now() / 1000),
+      created_at: nowSec(),
     });
     request({
       grade: 'public',
-      label: kind === 7 ? 'reaction' : 'repost',
-      preview: `${kind === 7 ? '+ on' : 'repost of'} ${target.id.slice(0, 16)}…`,
+      label: 'repost',
+      preview: `repost of ${target.id.slice(0, 16)}…`,
       identityPubkey: user!.pubkey,
       relays: planRelays({ kind: 'publish', event: engaged }),
       events: [engaged],
@@ -479,6 +484,46 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   ];
   const parent = useEvent(parentId, { author: taggedAuthor, hints: parentHints });
   const engagement = useEngagement(isPrivate ? undefined : event.id);
+  const reactions = useReactions(isPrivate ? undefined : event.id);
+  const reposts = useReposts(isPrivate ? undefined : event.id);
+  const reposted = !!user && reposts.some((r) => r.pubkey === user.pubkey);
+  const reacted = !!user && reactions.some((r) => r.pubkey === user.pubkey);
+
+  // A reaction is a broadcast like everything else: the heart opens the
+  // modal (pre-filled with the chosen emoji), confirmation enqueues. The
+  // heart toggles — engaging again un-reacts via a kind 5 of your own.
+  const react = async (emoji: string) => {
+    if (!user) return;
+    const target = event as NostrEvent;
+    const mine = reactions.find((r) => r.pubkey === user.pubkey);
+    if (mine) {
+      const deletion = await user.signer.signEvent({
+        kind: 5, content: '', tags: [['e', mine.id]], created_at: nowSec(),
+      });
+      request({
+        grade: 'public',
+        label: 'reaction deletion',
+        preview: `take your ${mine.content} back`,
+        identityPubkey: user.pubkey,
+        relays: planRelays({ kind: 'publish', event: deletion }),
+        events: [deletion],
+      });
+      return;
+    }
+    const reaction = await user.signer.signEvent({
+      kind: 7, content: emoji,
+      tags: [['e', target.id], ['p', target.pubkey]],
+      created_at: nowSec(),
+    });
+    request({
+      grade: 'public',
+      label: 'reaction',
+      preview: `${emoji} on ${target.id.slice(0, 16)}…`,
+      identityPubkey: user.pubkey,
+      relays: planRelays({ kind: 'publish', event: reaction }),
+      events: [reaction],
+    });
+  };
   // Prefer the fetched parent's pubkey; fall back to NIP-10 e-tag author or
   // a lone p tag. Never profiles.at(-1).
   const parentPubkey = parent.event?.pubkey ?? taggedAuthor;
@@ -606,15 +651,40 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
           )}
 
           {!isPrivate && (
-            <NoteCounts
-              event={event}
-              engagement={engagement}
-              linkReplies={linkReplies}
-              onReplies={onReplies}
-              onReact={() => void confirmEngagement(7)}
-              onRepost={() => void confirmEngagement(6)}
-            />
+            <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
+              <NoteCounts
+                event={event}
+                engagement={engagement}
+                linkReplies={linkReplies}
+                onReplies={onReplies}
+              />
+              <EngagementCount
+                icon={<Repeat2 className="size-4" />}
+                count={reposts.length}
+                pending={engagement.pending}
+                mine={reposted}
+                tab="reposts"
+                reactions={reactions}
+                reposts={reposts}
+                defaultEmoji=""
+                onEngage={() => void confirmRepost()}
+                ariaLabel="repost"
+              />
+              <EngagementCount
+                icon={<Heart className={cn('size-4', reacted && 'fill-current')} />}
+                count={reactions.length}
+                pending={engagement.pending}
+                mine={reacted}
+                tab="reactions"
+                reactions={reactions}
+                reposts={reposts}
+                defaultEmoji={config.defaultReaction}
+                onEngage={(emoji) => void react(emoji)}
+                ariaLabel="react"
+              />
+            </div>
           )}
+          {children}
           <NoteMeta foundOn={foundOn} route={route} client={clientTag} />
         </div>
       </CardContent>

@@ -14,7 +14,7 @@ import { useRouting } from '@/data/hooks/useRouting';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { store } from '@/data/store';
-import { conversationOf, type OpenedReply } from '@/lib/feedEncryptionRead';
+import { conversationOf, type Conversation, type OpenedReply } from '@/lib/feedEncryptionRead';
 import {
   KIND_PRIVATE_NOTE,
   deletePrivateEvent,
@@ -24,6 +24,7 @@ import {
   wrapPrivateNote,
   wrapPrivateReply,
   type OpenedNote,
+  type Rumor,
 } from '@/lib/feedEncryption';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
@@ -60,6 +61,46 @@ const PrivateFeedBody = () => {
       layers: privateNoteLayers(sk, events[0]),
       events,
       labels: events.map((_, i) => (events.length > 1 ? `private note (${i + 1} of ${events.length})` : 'private note')),
+    });
+  };
+
+  // A private reaction is a kind-7 rumor in the conversation's channel:
+  // wrapped under the reply CEK like a reply, addressed by `e` tag, so
+  // every holder opens it with keys they already have — no new query,
+  // nothing observable on relays beyond one more sealed 1470. Reacting
+  // is a broadcast like everything else: the heart opens the modal,
+  // confirmation enqueues; the emoji comes from the default-reaction
+  // setting or the long-press picker.
+  const react = (parent: OpenedNote, target: Rumor, conversation: Conversation, emoji: string) => {
+    const me = getPublicKey(sk);
+    const mine = conversation.reactions
+      .filter((r) => r.rumor.pubkey === me && r.rumor.tags.find(([n]) => n === 'e')?.[1] === target.id)
+      .sort((a, b) => b.rumor.created_at - a.rumor.created_at)[0];
+    if (mine) {
+      const deletion = deletePrivateEvent(sk, mine.wrapper);
+      request({
+        grade: 'private',
+        label: 'reaction deletion',
+        preview: `take your ${mine.rumor.content} back`,
+        identityPubkey: me,
+        identityNote: 'burner-signed',
+        relays: publishTargets,
+        events: [deletion],
+      });
+      return;
+    }
+    const { rumor } = makeRumor(me, emoji, [['e', target.id]], 7);
+    const event = wrapPrivateReply(sk, parent.replyCek, rumor);
+    request({
+      grade: 'private',
+      label: 'reaction',
+      preview: `${emoji} on ${target.content.slice(0, 64)}`,
+      identityPubkey: me,
+      identityNote: 'burner-signed',
+      relays: publishTargets,
+      extraRelays: discoveryTargets,
+      layers: privateNoteLayers(sk, event, parent.replyCek),
+      events: [event],
     });
   };
 
@@ -186,7 +227,9 @@ const PrivateFeedBody = () => {
           note={item.note}
           history={item.history}
           replies={item.replies}
+          conversation={item.conversation}
           onReply={reply}
+          onReact={(note, target, emoji) => react(note, target, item.conversation, emoji)}
           onEdit={edit}
           onEditReply={editReply}
           onDelete={remove}

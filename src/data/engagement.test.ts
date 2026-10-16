@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { createStore } from './store';
-import { engagementOf, REACTION_CAP, tally } from './engagement';
+import { engagementOf, reactionsOf, REACTION_CAP, tally } from './engagement';
 
 const ALICE = 'a'.repeat(64);
 const BOB = 'b'.repeat(64);
@@ -33,34 +33,15 @@ describe('tally', () => {
     expect(got.replies).toBe(2);
   });
 
-  it('dedupes reactions by pubkey, not event id', () => {
-    const got = tally([
-      event({ id: '2'.repeat(64), kind: 7, pubkey: ALICE, content: '+' }),
-      event({ id: '3'.repeat(64), kind: 7, pubkey: ALICE, content: '+' }),
-      event({ id: '4'.repeat(64), kind: 7, pubkey: BOB, content: '+' }),
-    ]);
-    expect(got.reactions).toBe(2);
-  });
-
-  it('counts NIP-25 "-" as a downvote, not a like', () => {
-    const got = tally([
-      event({ id: '2'.repeat(64), kind: 7, pubkey: ALICE, content: '-' }),
-      event({ id: '3'.repeat(64), kind: 7, pubkey: BOB, content: '+' }),
-    ]);
-    expect(got.downvotes).toBe(1);
-    expect(got.reactions).toBe(1);
-  });
-
-  it('reports the cap as a floor, not a number past what we have', () => {
+  it('reports the reply cap as a floor, not a number past what we have', () => {
     const flood = Array.from({ length: REACTION_CAP }, (_, i) =>
       event({
         id: `${i}`.padStart(64, '0'),
-        kind: 7,
+        kind: 1,
         pubkey: `${i}`.padStart(64, 'a'),
-        content: '+',
       }));
     const got = tally(flood);
-    expect(got.reactions).toBe(REACTION_CAP);
+    expect(got.replies).toBe(REACTION_CAP);
     expect(got.capped).toBe(true);
   });
 });
@@ -75,6 +56,37 @@ describe('engagementOf', () => {
 
     const got = engagementOf(store, TARGET);
     expect(got.replies).toBe(1);
-    expect(got.reactions).toBe(1);
+  });
+});
+
+
+describe('reactionsOf merge', () => {
+  const reaction = (pk: string, content: string, at: number, id: string): NostrEvent => ({
+    id, pubkey: pk, created_at: at, kind: 7, content, tags: [['e', 'e'.repeat(64)]], sig: 'f'.repeat(128),
+  });
+
+  it('keeps my locally-published reaction when relays later serve theirs', () => {
+    const store = createStore();
+    const mine = reaction('a'.repeat(64), '+', 200, '1'.repeat(64));
+    store.ingest([mine], 'wss://mine/');
+    const theirs = [
+      reaction('b'.repeat(64), '+', 100, '2'.repeat(64)),
+      reaction('c'.repeat(64), '❤', 150, '3'.repeat(64)),
+    ];
+    store.ingest(theirs, 'wss://relay/');
+    expect(reactionsOf(store, 'e'.repeat(64)).map((r) => r.pubkey)).toEqual(
+      ['a'.repeat(64), 'c'.repeat(64), 'b'.repeat(64)],
+    );
+  });
+
+  it('a kind 5 served later removes exactly the reaction it names', () => {
+    const store = createStore();
+    const mine = reaction('a'.repeat(64), '+', 200, '1'.repeat(64));
+    store.ingest([mine], 'wss://mine/');
+    store.ingest([{
+      id: '4'.repeat(64), pubkey: 'a'.repeat(64), created_at: 300, kind: 5,
+      content: '', tags: [['e', '1'.repeat(64)]], sig: 'f'.repeat(128),
+    }], 'wss://relay/');
+    expect(reactionsOf(store, 'e'.repeat(64))).toHaveLength(0);
   });
 });

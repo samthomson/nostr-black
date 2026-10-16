@@ -27,19 +27,19 @@ const note: NostrEvent = {
   sig: 's'.repeat(128),
 };
 
-const reaction = (pubkey: string): NostrEvent => ({
+const reply = (pubkey: string): NostrEvent => ({
   id: pubkey.slice(0, 64),
   pubkey,
   created_at: 2,
-  kind: 7,
+  kind: 1,
   tags: [['e', NOTE]],
-  content: '+',
+  content: 'a reply',
   sig: 's'.repeat(128),
 });
 
 const Counts = () => {
-  const { reactions } = useEngagement(NOTE);
-  return <div data-testid="n">{reactions}</div>;
+  const { replies, pending } = useEngagement(NOTE);
+  return <div data-testid="n">{pending ? '…' : replies}</div>;
 };
 
 const settle = async () => {
@@ -55,9 +55,9 @@ beforeEach(() => {
 });
 
 describe('useEngagement', () => {
-  it('updates the reaction count when kind 7s land in the store', async () => {
+  it('updates the reply count when replies land in the store, spinner until settled', async () => {
     store.ingest([note], 'wss://one/');
-    queryRelay.mockResolvedValue([reaction('b'.repeat(64)), reaction('c'.repeat(64))]);
+    queryRelay.mockResolvedValue([reply('b'.repeat(64)), reply('c'.repeat(64))]);
 
     render(<TestApp><Counts /></TestApp>);
     await settle();

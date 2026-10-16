@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { queuedEntries, resetQueue } from '@/data/publish/queue';
+import { store } from '@/data/store';
 import userEvent from '@testing-library/user-event';
-import { finalizeEvent, generateSecretKey, nip19, verifyEvent } from 'nostr-tools';
+import { finalizeEvent, generateSecretKey, getPublicKey, nip19, verifyEvent } from 'nostr-tools';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useLayoutEffect, type ReactNode } from 'react';
 import { TestApp } from '@/test/TestApp';
@@ -105,6 +106,83 @@ describe('Note', () => {
       expect(failed).toHaveLength(1);
       expect(failed[0]!.error).toBe('relay down');
     });
+  });
+
+  it('the count opens who reacted — it never reacts on click', async () => {
+    const alice = generateSecretKey();
+    const bob = generateSecretKey();
+    const target = note(alice, 'react to me');
+    const user = userEvent.setup();
+    // bob's reaction, indexed by the store's ref index
+    store.ingest([finalizeEvent({
+      kind: 7, created_at: target.created_at + 5, content: '+',
+      tags: [['e', target.id], ['p', target.pubkey]],
+    }, bob)], '');
+
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <Note event={target} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    // clicking the count shows the reactor, and enqueues nothing
+    await user.click(await screen.findByTestId('count-react'));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(screen.getByText(nip19.npubEncode(getPublicKey(bob)))).toBeTruthy();
+    expect(publish).not.toHaveBeenCalled();
+    expect(queuedEntries()).toHaveLength(0);
+  });
+
+  it('the heart opens the broadcast modal; confirming enqueues the kind 7', async () => {
+    const alice = generateSecretKey();
+    const target = note(alice, 'react target');
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <Note event={target} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'react' }));
+    await confirmBroadcast(user);
+
+    expect(publish).toHaveBeenCalledTimes(1);
+    const [reaction] = publish.mock.calls[0];
+    expect(reaction.kind).toBe(7);
+    expect(reaction.content).toBe('+');
+    expect(reaction.tags).toContainEqual(['e', target.id]);
+    expect(verifyEvent(reaction)).toBe(true);
+  });
+
+  it('clicking the heart again un-reacts — a kind 5 of your own reaction', async () => {
+    const alice = generateSecretKey();
+    const target = note(alice, 'toggle me');
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <Note event={target} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'react' }));
+    await confirmBroadcast(user);
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
+    // the queue ingested it, so the heart now reads as mine
+    await waitFor(() => expect(screen.getByRole('button', { name: 'react' })).toHaveAttribute('aria-pressed', 'true'));
+    await user.click(screen.getByRole('button', { name: 'react' }));
+    await confirmBroadcast(user);
+
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(2));
+    const [deletion] = publish.mock.calls[1];
+    expect(deletion.kind).toBe(5);
+    expect(deletion.tags).toContainEqual(['e', publish.mock.calls[0][0].id]);
+    expect(deletion.pubkey).toBe(getPublicKey(alice));
   });
 
   it('offers no actions on someone else\'s note', async () => {

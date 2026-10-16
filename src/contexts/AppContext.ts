@@ -16,6 +16,8 @@ export interface AppConfig {
   mediaEnabled: boolean;
   /** Desktop only: media cache budget in MB. */
   mediaCacheMaxMb: number;
+  /** The emoji a plain heart-click broadcasts. */
+  defaultReaction: string;
 }
 
 export interface AppContextType {

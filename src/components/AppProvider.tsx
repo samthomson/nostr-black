@@ -19,6 +19,7 @@ const AppConfigSchema = z.object({
   torEnabled: z.boolean(),
   mediaEnabled: z.boolean(),
   mediaCacheMaxMb: z.number(),
+  defaultReaction: z.string(),
 }) satisfies z.ZodType<AppConfig>;
 
 export function AppProvider(props: AppProviderProps) {
