@@ -1,4 +1,5 @@
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
+import { nowSec } from '@/lib/timestamp';
 import { queryRelayResult, type RelayResult } from '@/net/net';
 import { store, type EventStore } from '@/data/store';
 import { routingContext } from '@/data/context';
@@ -78,7 +79,7 @@ export const PAGE_LIMIT = 50;
 /** Per relay, per page. Higher than the page so one relay can cover it alone. */
 const LIMIT_PER_RELAY = 100;
 
-const NOW = () => Math.floor(Date.now() / 1000);
+const NOW = nowSec;
 
 const emptyState = (): FeedState => ({
   pages: [],

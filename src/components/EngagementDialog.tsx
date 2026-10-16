@@ -123,6 +123,7 @@ export const EngagementCount = ({
   reposts,
   onEngage,
   onChoose,
+  onShow,
   ariaLabel,
 }: {
   icon: React.ReactNode;
@@ -138,6 +139,8 @@ export const EngagementCount = ({
   onEngage: () => void;
   /** Present (reactions) when an emoji picker is offered on long-press. */
   onChoose?: (emoji: string) => void;
+  /** Count click. Defaults to opening the viewer; replies open the note. */
+  onShow?: () => void;
   ariaLabel: string;
 }) => {
   const [viewerOpen, setViewerOpen] = useState(false);
@@ -183,7 +186,7 @@ export const EngagementCount = ({
       <button
         type="button"
         className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
-        onClick={() => setViewerOpen(true)}
+        onClick={() => (onShow ? onShow() : setViewerOpen(true))}
         aria-label={`${ariaLabel}s`}
         data-testid={`count-${ariaLabel}`}
       >

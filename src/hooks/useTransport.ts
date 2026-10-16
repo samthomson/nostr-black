@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react';
+import { nowSec } from '@/lib/timestamp';
 import { useMutation } from '@tanstack/react-query';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { publish, setRoutePreference, getMaxConnections } from '@/net/net';
@@ -25,7 +26,7 @@ export function usePublishRelayList() {
         tags: relays.map((r) =>
           r.read && r.write ? ['r', r.url] : ['r', r.url, r.read ? 'read' : 'write'],
         ),
-        created_at: Math.floor(Date.now() / 1000),
+        created_at: nowSec(),
       });
 
       // Routed against the *draft* list, not the synced one: this event is

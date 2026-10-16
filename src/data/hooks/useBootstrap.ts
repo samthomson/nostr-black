@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { nowSec } from '@/lib/timestamp';
 import { setAuthSigner } from '@/net/net';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useUserState } from '@/hooks/useUserState';
@@ -31,7 +32,7 @@ export const useBootstrap = (): void => {
                 ['relay', relay],
                 ['challenge', challenge],
               ],
-              created_at: Math.floor(Date.now() / 1000),
+              created_at: nowSec(),
             })
         : undefined,
     );

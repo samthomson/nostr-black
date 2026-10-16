@@ -5,6 +5,7 @@
  * https://github.com/nostr-protocol/nips/pull/2488
  */
 import { finalizeEvent, generateSecretKey, getEventHash, getPublicKey, verifyEvent } from 'nostr-tools';
+import { nowSec } from './timestamp';
 import type { UnsignedEvent } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { schnorr } from '@noble/curves/secp256k1.js';
@@ -40,8 +41,7 @@ const CHUNK = 480;
 const utf8 = new TextEncoder();
 const utf8d = new TextDecoder();
 
-const jittered = (): number =>
-  Math.floor(Date.now() / 1000) - Math.floor(Math.random() * 2 * 24 * 3600);
+const jittered = (): number => nowSec() - Math.floor(Math.random() * 2 * 24 * 3600);
 
 export interface Rumor {
   id: string;
@@ -91,7 +91,7 @@ export const makeRumor = (
   const replyCek = randomBytes(32);
   const template: UnsignedEvent = {
     pubkey: authorPk,
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: nowSec(),
     kind,
     tags: [['reply_cek', bytesToHex(replyCek)], ...extraTags],
     content,
@@ -112,7 +112,7 @@ export const makeRevision = (authorPk: string, parent: Rumor, content: string): 
   const kept = parent.tags.filter(([name]) => name !== 'reply_cek' && name !== 'revision_of');
   const template: UnsignedEvent = {
     pubkey: authorPk,
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: nowSec(),
     kind: parent.kind,
     tags: [...kept, ['reply_cek', bytesToHex(parentCek)], ['revision_of', parent.id]],
     content,
@@ -332,7 +332,7 @@ export const wrapConnectionRecord = (
   if (peerIdentityId) tags.push(['c', peerIdentityId]);
   return finalizeEvent({
     kind: KIND_CONNECTION,
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: nowSec(),
     tags,
     content: encodeEnvelope(envelope),
   }, envelopeSk) as NostrEvent;
@@ -351,7 +351,7 @@ export const openConnection = (sk: Uint8Array, event: NostrEvent): ConnectionRec
 export const requestConnection = (sk: Uint8Array, peerPk: string): NostrEvent => {
   const me = getPublicKey(sk);
   const parties = partiesOf(me, peerPk);
-  const created_at = Math.floor(Date.now() / 1000);
+  const created_at = nowSec();
   return wrapConnectionRecord(sk, peerPk, {
     parties,
     created_at,
@@ -372,7 +372,7 @@ export const acceptConnection = (sk: Uint8Array, record: ConnectionRecord): Nost
 };
 
 export const closeConnection = (sk: Uint8Array, record: ConnectionRecord): NostrEvent => {
-  const created_at = Math.floor(Date.now() / 1000);
+  const created_at = nowSec();
   const payload: ConnectionPayload = {
     parties: record.payload.parties,
     created_at,
@@ -394,7 +394,7 @@ export const burnerKeyOf = (sk: Uint8Array, event: NostrEvent): Uint8Array => {
 export const deletePrivateEvent = (sk: Uint8Array, event: NostrEvent): NostrEvent =>
   finalizeEvent({
     kind: 5,
-    created_at: Math.floor(Date.now() / 1000),
+    created_at: nowSec(),
     tags: [['e', event.id]],
     content: '',
   }, burnerKeyOf(sk, event)) as NostrEvent;

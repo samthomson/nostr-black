@@ -92,7 +92,7 @@ const PrivateFeedBody = () => {
       .filter((r) => r.rumor.pubkey === me && r.rumor.tags.find(([n]) => n === 'e')?.[1] === target.id)
       .sort((a, b) => b.rumor.created_at - a.rumor.created_at)[0];
     if (mine) {
-      privateRequest('reaction deletion', `take your ${mine.rumor.content} back`, [
+      privateRequest('reaction deletion', `delete your ${mine.rumor.content} reaction`, [
         deletePrivateEvent(sk, mine.wrapper),
       ]);
       return;

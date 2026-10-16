@@ -72,7 +72,7 @@ describe('Thread', () => {
     expect(screen.getByText('child')).toBeTruthy();
     expect(screen.queryByText('grand')).toBeNull();
 
-    await userEvent.click(screen.getByRole('button', { name: 'replies' }));
+    await userEvent.click(screen.getByRole('button', { name: 'reply' }));
     await settle();
 
     expect(screen.getByText('grand')).toBeTruthy();

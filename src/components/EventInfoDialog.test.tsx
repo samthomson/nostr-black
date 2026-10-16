@@ -155,12 +155,12 @@ describe('Note UI', () => {
     );
 
     expect(await screen.findByTestId('note-counts')).toBeTruthy();
-    expect(screen.getByLabelText('replies')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'reply' })).toBeTruthy();
+    expect(screen.getByTestId('count-reply')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'repost' })).toBeTruthy();
     expect(screen.getByTestId('count-repost')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'react' })).toBeTruthy();
     expect(screen.getByTestId('count-react')).toBeTruthy();
-    expect(screen.getByLabelText('zaps')).toBeTruthy();
   });
 
   it('shows reaction and repost counts from the store', async () => {
@@ -201,8 +201,10 @@ describe('Note UI', () => {
       </TestApp>,
     );
 
-    const link = await screen.findByRole('link', { name: 'replies' });
-    expect(link).toHaveTextContent('1');
+    // the count is a spinner until the engagement want settles, then a
+    // linked number to the note's thread
+    await waitFor(() => expect(screen.getByTestId('count-reply')).toHaveTextContent('1'));
+    const link = screen.getByTestId('count-reply');
     expect(link.getAttribute('href')).toContain('nevent1');
   });
 

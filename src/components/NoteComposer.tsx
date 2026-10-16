@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { nowSec } from '@/lib/timestamp';
 import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools';
 import { rememberBurner } from '@/auth/burners';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -109,5 +110,5 @@ const signedNote = (sk: Uint8Array, content: string): NostrEvent => {
   const tags: string[][] = [];
   const tag = clientTag();
   if (tag) tags.push(['client', tag]);
-  return finalizeEvent({ kind: 1, created_at: Math.floor(Date.now() / 1000), tags, content }, sk);
+  return finalizeEvent({ kind: 1, created_at: nowSec(), tags, content }, sk);
 };

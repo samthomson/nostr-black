@@ -1,13 +1,13 @@
 import { useState } from 'react';
+import { nowSec } from '@/lib/timestamp';
 import { Link } from 'react-router-dom';
 import { nip10, nip19 } from 'nostr-tools';
-import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat2, Trash2, Zap } from 'lucide-react';
+import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat2, Trash2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { Rumor } from '@/lib/feedEncryption';
 import { useProfile } from '@/data/hooks/useProfile';
 import { useEvent } from '@/data/hooks/useEvent';
 import { useEngagement } from '@/data/hooks/useEngagement';
-import type { Engagement } from '@/data/engagement';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -26,9 +26,6 @@ import { clientTag as clientTagOf } from '@/lib/clientTag';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 import { useRouting } from '@/data/hooks/useRouting';
 
-
-/** Event timestamps are whole seconds — the one place this is computed. */
-const nowSec = (): number => Math.floor(Date.now() / 1000);
 
 /** Content/image budget past which a note is collapsed with a fade. */
 const CLAMP_THRESHOLD = 420;
@@ -253,73 +250,51 @@ const ReplyContext = ({
  */
 const fmt = (n: number, capped: boolean): string => `${n}${capped ? '+' : ''}`;
 
-/** One engagement count. The count is the button when a handler is
- * present, a link when only routing exists, plain text otherwise. */
-const Count = ({
-  icon,
-  count,
-  label,
-  onClick,
+/** Replies: same two-part shape, but both halves are the note route —
+ * replies are notes, opened with the existing note-opening UI, never
+ * listed as people. The count still reads as unknown-while-fetching. */
+const ReplyCount = ({
+  replies,
+  pending,
+  capped,
+  onReplies,
   href,
 }: {
-  icon: React.ReactNode;
-  count: React.ReactNode;
-  label: string;
-  onClick?: () => void;
-  href?: string;
-}) => {
-  const inner = (
-    <>
-      {icon}
-      {count}
-    </>
-  );
-  const cls = 'inline-flex items-center gap-1';
-  if (onClick) {
-    return (
-      <button type="button" className={`${cls} cursor-pointer hover:text-foreground`} onClick={onClick} aria-label={label} >
-        {inner}
-      </button>
-    );
-  }
-  if (href) {
-    return (
-      <Link to={href} className={`${cls} hover:text-foreground`} aria-label={label} >
-        {inner}
-      </Link>
-    );
-  }
-  return <span className={cls} aria-label={label} >{inner}</span>;
-};
-
-const NoteCounts = ({
-  event,
-  engagement,
-  linkReplies,
-  onReplies,
-}: {
-  event: NostrEvent | Rumor;
-  engagement: Engagement;
-  linkReplies: boolean;
+  replies: number;
+  pending: boolean;
+  capped: boolean;
   onReplies?: () => void;
-}) => {
-  const { replies, zaps, capped } = engagement;
-  const href = linkReplies ? eventHref(event.id, event.pubkey) : undefined;
-  const count = (n: number) => (n > 0 ? fmt(n, capped) : null);
-
-  return (
-    <>
-      <Count
-        icon={<MessageCircle className="size-4" />}
-        count={count(replies)}
-        label="replies"
-        onClick={onReplies}
-        href={href}
-      />
-      <Count icon={<Zap className="size-4" />} count={count(zaps)} label="zaps" />
-    </>
-  );
-};
+  href?: string;
+}) => (
+  <span className="inline-flex items-center gap-1">
+    <button
+      type="button"
+      className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+      onClick={onReplies}
+      aria-label="reply"
+    >
+      <MessageCircle className="size-4" />
+    </button>
+    {href ? (
+      <Link
+        to={href}
+        className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+        aria-label="replies"
+        data-testid="count-reply"
+      >
+        {pending ? <Loader2 className="size-3 animate-spin" /> : (
+          <span className="text-xs underline underline-offset-2">{replies > 0 ? fmt(replies, capped) : 0}</span>
+        )}
+      </Link>
+    ) : (
+      <span className="text-muted-foreground inline-flex items-center" aria-label="replies" data-testid="count-reply">
+        {pending ? <Loader2 className="size-3 animate-spin" /> : (
+          <span className="text-xs underline underline-offset-2">{replies > 0 ? fmt(replies, capped) : 0}</span>
+        )}
+      </span>
+    )}
+  </span>
+);
 
 const NoteMeta = ({
   foundOn,
@@ -399,7 +374,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
       request({
         grade: 'public',
         label: 'repost deletion',
-        preview: 'take your repost back',
+        preview: 'delete your repost',
         identityPubkey: user!.pubkey,
         relays: planRelays({ kind: 'publish', event: deletion }),
         events: [deletion],
@@ -434,7 +409,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
       const tag = clientTagOf();
       if (tag) tags.push(['client', tag]);
       const deletion = await user!.signer.signEvent({
-        kind: 5, content: '', tags, created_at: Math.floor(Date.now() / 1000),
+        kind: 5, content: '', tags, created_at: nowSec(),
       });
       request({
         grade: 'public',
@@ -503,7 +478,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
       request({
         grade: 'public',
         label: 'reaction deletion',
-        preview: `take your ${mine.content} back`,
+        preview: `delete your ${mine.content} reaction`,
         identityPubkey: user.pubkey,
         relays: planRelays({ kind: 'publish', event: deletion }),
         events: [deletion],
@@ -652,12 +627,15 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
 
           {!isPrivate && (
             <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
-              <NoteCounts
-                event={event}
-                engagement={engagement}
-                linkReplies={linkReplies}
+              <ReplyCount
+                replies={engagement.replies}
+                pending={engagement.pending}
+                capped={engagement.capped}
                 onReplies={onReplies}
+                href={linkReplies ? eventHref(event.id, event.pubkey) : undefined}
               />
+              {/* zaps: no send/receive yet — the row ships without it
+              <Count icon={<Zap className="size-4" />} count={...} label="zaps" /> */}
               <EngagementCount
                 icon={<Repeat2 className="size-4" />}
                 count={reposts.length}
