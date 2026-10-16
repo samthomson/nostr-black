@@ -392,6 +392,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   const [infoOpen, setInfoOpen] = useState(false);
   const [openMedia, setOpenMedia] = useState<number | null>(null);
   const isPrivate = wrapper !== undefined;
+  const grade: PrivacyGrade = isPrivate ? 'private' : 'public';
   const { user } = useCurrentUser();
   const mine = !!user && event.pubkey === user.pubkey;
   const { request, dialog: broadcastDialog } = useBroadcastFlow();
@@ -548,7 +549,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
 
   return (
-    <Card className="py-0">
+    <Card className={cn('py-0', grade === 'private' ? 'bg-privacy-private text-privacy-public' : 'bg-privacy-public text-privacy-private')}>
       <CardContent className="flex gap-3 px-4 py-3">
         <ProfileAvatar
           pubkey={event.pubkey}
@@ -659,7 +660,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
               {!embedded && <MediaGrid urls={media} alt={altText} onOpen={setOpenMedia} />}
             </div>
             {clampable && !expanded && (
-              <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent" />
+              <div className={`pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t ${grade === 'private' ? 'from-privacy-private' : 'from-privacy-public'} to-transparent`} />
             )}
           </div>
 
