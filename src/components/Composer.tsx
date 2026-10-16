@@ -49,7 +49,7 @@ export const Composer = ({ value, onChange, onSubmit, variant }: ComposerProps) 
 
   return (
     <div className={cn(
-      'group rounded-md border border-input shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50',
+      'group rounded-sm border border-input shadow-xs transition-[border-color,box-shadow] focus-within:border-ring focus-within:ring-[3px] focus-within:ring-ring/50',
       card,
     )}>
       <textarea

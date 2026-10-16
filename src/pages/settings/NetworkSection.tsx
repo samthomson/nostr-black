@@ -121,7 +121,7 @@ export const NetworkSection = () => {
 
         <div className="flex gap-2 pt-1">
           <input
-            className="min-w-0 flex-1 rounded-md border bg-transparent px-2 py-1.5 font-mono text-xs"
+            className="min-w-0 flex-1 rounded-sm border bg-transparent px-2 py-1.5 font-mono text-xs"
             placeholder="wss://relay.example.com"
             value={newRelay}
             onChange={(e) => setNewRelay(e.target.value)}
@@ -179,7 +179,7 @@ export const NetworkSection = () => {
           discovery relays — where this app looks up your lists (never feed content)
         </h3>
         <textarea
-          className="min-h-28 w-full rounded-md border bg-transparent p-3 font-mono text-xs"
+          className="min-h-28 w-full rounded-sm border bg-transparent p-3 font-mono text-xs"
           value={draft ?? config.discoveryRelays.join('\n')}
           onChange={(e) => setDraft(e.target.value)}
           spellCheck={false}
@@ -210,7 +210,7 @@ export const NetworkSection = () => {
             circuit costs far more than a socket. read-only until then. */}
         <div className="flex items-center gap-2">
           <input
-            className="w-20 rounded-md border bg-transparent px-2 py-1 font-mono text-xs disabled:opacity-40"
+            className="w-20 rounded-sm border bg-transparent px-2 py-1 font-mono text-xs disabled:opacity-40"
             value={maxConnections}
             disabled
             readOnly

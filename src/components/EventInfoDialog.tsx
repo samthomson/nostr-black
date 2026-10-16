@@ -36,7 +36,7 @@ export const EventInfoDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[85dvh] overflow-y-auto p-0 gap-0 rounded-2xl">
+      <DialogContent className="max-w-[95vw] sm:max-w-2xl max-h-[85dvh] overflow-y-auto p-0 gap-0">
         <DialogHeader className="px-6 pt-6">
           <DialogTitle className="text-lg font-semibold leading-none tracking-tight">
             event info
@@ -110,7 +110,7 @@ export const EventInfoDialog = ({
 
           <div className="space-y-1">
             <p className="text-muted-foreground text-sm">raw</p>
-            <pre className="max-h-64 overflow-auto rounded-md border bg-muted p-3 text-xs leading-relaxed break-all whitespace-pre-wrap">
+            <pre className="max-h-64 overflow-auto rounded-sm border bg-muted p-3 text-xs leading-relaxed break-all whitespace-pre-wrap">
               {JSON.stringify(event, null, 4)}
             </pre>
           </div>

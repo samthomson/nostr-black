@@ -71,7 +71,7 @@ export const BroadcastDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85dvh] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden rounded-sm p-0 sm:max-w-md">
+      <DialogContent className="flex max-h-[85dvh] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="flex shrink-0 flex-row items-center gap-2 pr-10 px-4 pt-4 pb-2">
           <Radio className="size-4" />
           <DialogTitle className="truncate text-sm leading-none font-semibold tracking-tight">

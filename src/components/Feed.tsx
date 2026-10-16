@@ -66,7 +66,7 @@ export const Feed = () => {
       )}
 
       {isLoading && (
-        <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 rounded-md border bg-background/95 px-3 py-2 text-xs text-muted-foreground backdrop-blur">
+        <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 rounded-sm border bg-background/95 px-3 py-2 text-xs text-muted-foreground backdrop-blur">
           <Loader2 className="size-3.5 animate-spin" />
           fetching events{notes.length > 0 ? ` — ${notes.length} so far` : '…'}
         </div>

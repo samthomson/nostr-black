@@ -26,7 +26,7 @@ export const BroadcastQueueDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden rounded-sm p-0 sm:max-w-md">
+      <DialogContent className="max-h-[85dvh] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="flex-row items-center gap-2 px-4 pt-4 pb-3">
           <DialogTitle className="text-sm leading-none font-semibold tracking-tight">
             broadcast queue

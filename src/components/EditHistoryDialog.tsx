@@ -7,10 +7,10 @@ import { cn } from '@/lib/utils';
 /** Intra-line runs: deletions red-struck, additions green. */
 const Mark = ({ seg }: { seg: DiffSegment }) => {
   if (seg.op === 'add') {
-    return <span className="bg-diff-add/20 text-diff-add rounded-xs px-0.5">{seg.text}</span>;
+    return <span className="bg-diff-add/20 text-diff-add rounded-sm px-0.5">{seg.text}</span>;
   }
   if (seg.op === 'del') {
-    return <span className="bg-diff-del/20 text-diff-del rounded-xs px-0.5 line-through">{seg.text}</span>;
+    return <span className="bg-diff-del/20 text-diff-del rounded-sm px-0.5 line-through">{seg.text}</span>;
   }
   return <>{seg.text}</>;
 };

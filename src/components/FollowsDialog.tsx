@@ -23,7 +23,7 @@ export const FollowsDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] max-w-[95vw] gap-0 overflow-hidden rounded-sm p-0 sm:max-w-md">
+      <DialogContent className="max-h-[85dvh] max-w-[95vw] gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="border-b px-4 pt-4 pb-3">
           <DialogTitle className="text-sm font-semibold">
             following {pubkeys.length || '…'}

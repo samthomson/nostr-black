@@ -36,7 +36,7 @@ export function AccountSwitcher() {
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className='w-56 p-2 animate-scale-in'>
-        <DropdownMenuItem asChild className='flex items-center gap-2 cursor-pointer p-2 rounded-md'>
+        <DropdownMenuItem asChild className='flex items-center gap-2 cursor-pointer p-2 rounded-sm'>
           <Link to={`/${npub}`}>
             <ProfileAvatar pubkey={activeUser.pubkey} metadata={metadata} className="size-8" />
             <div className='flex-1 truncate'>
@@ -49,7 +49,7 @@ export function AccountSwitcher() {
 
         <DropdownMenuItem
           onClick={logout}
-          className='flex items-center gap-2 cursor-pointer p-2 rounded-md text-red-500'
+          className='flex items-center gap-2 cursor-pointer p-2 rounded-sm text-red-500'
         >
           <LogOut className='w-4 h-4' />
           <span>log out</span>

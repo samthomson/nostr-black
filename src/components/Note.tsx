@@ -132,13 +132,13 @@ const MediaItem = ({ url, alt }: { url: string; alt: string }) => {
   if (!src) {
     if (error) {
       return (
-        <div className="flex h-20 w-full items-center justify-center rounded-md border border-dashed px-2 text-center font-mono text-[10px] text-red-500">
+        <div className="flex h-20 w-full items-center justify-center rounded-sm border border-dashed px-2 text-center font-mono text-[10px] text-red-500">
           media failed: {error}
         </div>
       );
     }
     return (
-      <div ref={ref} className="flex h-32 w-full items-center justify-center gap-2 rounded-md bg-muted text-xs text-muted-foreground">
+      <div ref={ref} className="flex h-32 w-full items-center justify-center gap-2 rounded-sm bg-muted text-xs text-muted-foreground">
         <Loader2 className="size-4 animate-spin" />
         loading media…
       </div>
@@ -147,13 +147,13 @@ const MediaItem = ({ url, alt }: { url: string; alt: string }) => {
   if (VIDEO_URL.test(url)) {
     return (
       <div ref={ref}>
-        <video src={src} controls preload="metadata" className="max-h-96 w-full rounded-md object-cover" />
+        <video src={src} controls preload="metadata" className="max-h-96 w-full rounded-sm object-cover" />
       </div>
     );
   }
   return (
     <div ref={ref}>
-      <img src={src} alt={alt} className="max-h-96 w-full rounded-md object-cover" />
+      <img src={src} alt={alt} className="max-h-96 w-full rounded-sm object-cover" />
     </div>
   );
 };

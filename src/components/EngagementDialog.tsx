@@ -44,7 +44,7 @@ export const EngagementDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] max-w-[95vw] gap-0 overflow-hidden rounded-sm p-0 sm:max-w-md">
+      <DialogContent className="max-h-[85dvh] max-w-[95vw] gap-0 overflow-hidden p-0 sm:max-w-md">
         <DialogHeader className="border-b px-4 pt-4 pb-3">
           <DialogTitle className="text-sm font-semibold">
             {tab === 'reactions'
@@ -200,7 +200,7 @@ export const EngagementCount = ({
 
       {pickerOpen && (
         <Dialog open onOpenChange={setPickerOpen}>
-          <DialogContent className="max-w-[95vw] rounded-sm p-4 sm:max-w-xs">
+          <DialogContent className="max-w-[95vw] p-4 sm:max-w-xs">
             <DialogHeader className="pb-1">
               <DialogTitle className="text-sm font-semibold">react with</DialogTitle>
             </DialogHeader>

@@ -40,7 +40,7 @@ export const MediaSection = () => {
           </p>
           <div className="flex items-center gap-2">
             <input
-              className="w-20 rounded-md border bg-transparent px-2 py-1 font-mono text-xs"
+              className="w-20 rounded-sm border bg-transparent px-2 py-1 font-mono text-xs"
               value={maxMb}
               onChange={(e) => setMaxMbInput(e.target.value)}
               onBlur={saveCacheMax}

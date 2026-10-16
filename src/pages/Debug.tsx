@@ -254,7 +254,7 @@ const DebugBody = () => {
           <input
             id="test-relay-url"
             defaultValue="wss://relay.samt.st/"
-            className="flex-1 rounded-md border bg-transparent px-2 py-1 font-mono text-xs"
+            className="flex-1 rounded-sm border bg-transparent px-2 py-1 font-mono text-xs"
           />
           <button
             type="button"
