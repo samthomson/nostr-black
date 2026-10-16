@@ -7,7 +7,7 @@ import { useLayoutEffect, type ReactNode } from 'react';
 import { TestApp } from '@/test/TestApp';
 import PrivateFeedPage from '@/pages/PrivateFeed';
 import { useKeystore } from '@/auth/useKeystore';
-import { KIND_PRIVATE_REPLY, acceptConnection, closeConnection, makeRumor, noteIdOf, openConnection, openPrivateReply, requestConnection, wrapPrivateNote, wrapPrivateReply } from '@/lib/feedEncryption';
+import { KIND_PRIVATE_REPLY, acceptConnection, closeConnection, makeRumor, noteIdOf, openConnection, openPrivateNote, openPrivateReply, requestConnection, wrapPrivateNote, wrapPrivateReply } from '@/lib/feedEncryption';
 
 const queryRelay = vi.fn<(url: string, filters: NostrFilter[]) => Promise<NostrEvent[]>>();
 const publish = vi.fn<(event: NostrEvent, relays: string[]) => Promise<void>>();
@@ -297,6 +297,48 @@ describe('PrivateFeedPage', () => {
     await user.click(screen.getByRole('button', { name: 'edit history' }));
     const historyDialog = await screen.findByRole('dialog');
     expect(within(historyDialog).getByText('first reply')).toBeTruthy();
+  });
+
+  it('edits a private note inside the broadcast modal before committing', async () => {
+    const alice = generateSecretKey();
+    const bob = generateSecretKey();
+    const offer = requestConnection(alice, getPublicKey(bob));
+    const accepted = acceptConnection(bob, openConnection(bob, offer));
+
+    queryRelay.mockImplementation(async (_url, filters) => {
+      if (filters[0].kinds?.includes(30378)) return [accepted];
+      return [];
+    });
+
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <PrivateFeedPage />
+        </Unlock>
+      </TestApp>,
+    );
+    await settle();
+    await settle();
+
+    const box = await screen.findByRole('textbox', { name: 'what are you doing?' });
+    await userEvent.setup().type(box, 'secret one');
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'broadcast' }));
+
+    // Same modal contract as the public composer: edit tab first, opens on preview.
+    const tabs = await screen.findAllByRole('tab');
+    expect(tabs[0]).toHaveTextContent('edit');
+    await user.click(screen.getByRole('tab', { name: 'edit' }));
+    const editor = screen.getByRole('textbox', { name: 'edit note' });
+    await user.type(editor, ' two');
+    await confirmBroadcast(user);
+    await settle();
+
+    // The sealed wrapper that went out opens back with the edited content.
+    const wrapper = publish.mock.calls.map(([ev]) => ev).find((ev) => ev.kind === 1370);
+    expect(wrapper).toBeTruthy();
+    expect(openPrivateNote(alice, wrapper!).rumor.content).toBe('secret one two');
+    await waitFor(() => expect(box).toHaveValue(''));
   });
 
   it('a revision still reaches a peer whose connection has since closed', async () => {

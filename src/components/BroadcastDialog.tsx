@@ -1,5 +1,5 @@
 import { Radio } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -33,13 +33,14 @@ export const BroadcastDialog = ({
   onOpenChange,
   grade,
   label,
-  preview,
+  content,
   layers,
   identityPubkey,
   identityNote,
   relays,
   extraRelays,
   controls,
+  onEdit,
   onBroadcast,
   busy = false,
 }: {
@@ -47,13 +48,14 @@ export const BroadcastDialog = ({
   onOpenChange: (open: boolean) => void;
   grade: PrivacyGrade;
   label: string;
-  preview: ReactNode;
+  content: string;
   layers: readonly EventLayer[];
   identityPubkey: string;
   identityNote?: string;
   relays: readonly string[];
   extraRelays?: readonly string[];
   controls?: ReactNode;
+  onEdit?: (content: string) => void;
   onBroadcast: (targets: readonly string[]) => void;
   busy?: boolean;
 }) => {
@@ -61,7 +63,21 @@ export const BroadcastDialog = ({
   const { metadata } = useProfile(burner ? undefined : identityPubkey);
   const displayName = metadata?.display_name || metadata?.name;
   const onTor = useIsTor();
-  const [tab, setTab] = useState<'preview' | 'event'>('preview');
+  // The edit tab only exists when the caller can revise the payload; the
+  // modal still opens on preview — reading before writing.
+  const tabs: readonly ('edit' | 'preview' | 'event')[] = onEdit
+    ? ['edit', 'preview', 'event']
+    : ['preview', 'event'];
+  const [tab, setTab] = useState<'edit' | 'preview' | 'event'>('preview');
+
+  /** Each switch to the edit tab mounts a fresh editor: focus it with the
+   * caret after the last character — appending is the common case. Stable
+   * identity, so live re-previews while typing never move the caret. */
+  const editorRef = useCallback((el: HTMLTextAreaElement | null) => {
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
   const [layer, setLayer] = useState(0);
   const [withDiscovery, setWithDiscovery] = useState(false);
   const targets = withDiscovery && extraRelays
@@ -93,7 +109,7 @@ export const BroadcastDialog = ({
         >
           {/* View switcher: small chips, right-aligned, unobtrusive. */}
           <div className="flex justify-end gap-1 px-3 pt-2">
-            {(['preview', 'event'] as const).map((id) => (
+            {tabs.map((id) => (
               <button
                 key={id}
                 type="button"
@@ -114,9 +130,18 @@ export const BroadcastDialog = ({
           </div>
 
           {/* The note content. */}
-          <div className="max-h-44 overflow-y-auto px-3 pt-1.5 pb-2">
+          <div className="h-44 overflow-y-auto px-3 pt-1.5 pb-2">
             {tab === 'preview' ? (
-              <div className="text-sm break-words whitespace-pre-wrap">{preview}</div>
+              <div className="text-sm break-words whitespace-pre-wrap">{content}</div>
+            ) : tab === 'edit' ? (
+              <textarea
+                ref={editorRef}
+                value={content}
+                onChange={(e) => onEdit!(e.target.value)}
+                aria-label="edit note"
+                spellCheck={false}
+                className="block h-full w-full resize-none bg-transparent text-sm outline-none"
+              />
             ) : (
               <div className="space-y-1.5">
                 {layers.length > 1 && (

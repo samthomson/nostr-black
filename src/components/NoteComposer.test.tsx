@@ -107,4 +107,38 @@ describe('NoteComposer', () => {
     expect(note.pubkey).not.toBe(identity);
     expect(burnersOf(identity)).toContain(note.pubkey);
   });
+
+  it('edits the note inside the broadcast modal, edit tab first, preview default', async () => {
+    const sk = generateSecretKey();
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(sk)}>
+          <NoteComposer />
+        </Unlock>
+      </TestApp>,
+    );
+
+    const box = await screen.findByRole('textbox', { name: "what's happening?" });
+    await user.type(box, 'first');
+    await user.click(screen.getByRole('button', { name: 'broadcast' }));
+
+    // Opens on preview; the tab row starts with edit.
+    await screen.findByRole('tab', { name: 'preview' });
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs[0]).toHaveTextContent('edit');
+    expect(tabs[0]).not.toHaveAttribute('aria-selected', 'true');
+
+    await user.click(screen.getByRole('tab', { name: 'edit' }));
+    const editor = await screen.findByRole('textbox', { name: 'edit note' });
+    await user.type(editor, ' pass');
+
+    // The queued broadcast carries the edited content, and the commit
+    // clears the page draft it was kept in sync with.
+    await confirmBroadcast(user);
+    await waitFor(() => expect(publish).toHaveBeenCalled());
+    const [note] = publish.mock.calls.at(-1)!;
+    expect((note as unknown as { content: string }).content).toBe('first pass');
+    await waitFor(() => expect(box).toHaveValue(''));
+  });
 });

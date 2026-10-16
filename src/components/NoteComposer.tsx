@@ -38,7 +38,7 @@ export const NoteComposer = () => {
     return {
       grade: burner ? 'medium' : 'public',
       label: 'note',
-      preview: content,
+      content,
       identityPubkey: pk ?? user.pubkey,
       identityNote: pk ? 'burner' : undefined,
       relays: publishTargets,
@@ -51,6 +51,10 @@ export const NoteComposer = () => {
           )}
         </div>
       ),
+      onEdit: (next) => {
+        setDraft(next);
+        request(previewOf(next));
+      },
       events: [signedNote(burner ?? sk, content)],
       // The queued broadcast is the commit point: clear the draft and the
       // burner so the next compose starts clean. The burner pubkey is

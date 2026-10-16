@@ -115,7 +115,7 @@ const ConnectionsBody = () => {
     requestBroadcast({
       grade: 'private',
       label: 'connection request',
-      preview: `connect with ${npubOf(peer).slice(0, 20)}… — one signature, awaiting theirs.\nthey accept by entering your npub here and looking you up.`,
+      content: `connect with ${npubOf(peer).slice(0, 20)}… — one signature, awaiting theirs.\nthey accept by entering your npub here and looking you up.`,
       identityPubkey: getPublicKey(sk),
       identityNote: 'connection key',
       relays: myWrite,
@@ -182,7 +182,7 @@ const ConnectionsBody = () => {
                   onClick: () => requestBroadcast({
                     grade: 'private',
                     label: 'connection accept',
-                    preview: `accept ${npubOf(record.peer).slice(0, 20)}… — two signatures, connected`,
+                    content: `accept ${npubOf(record.peer).slice(0, 20)}… — two signatures, connected`,
                     identityPubkey: getPublicKey(sk),
                     identityNote: 'connection key',
                     relays: myWrite,
@@ -227,7 +227,7 @@ const ConnectionsBody = () => {
                 onClick: () => requestBroadcast({
                   grade: 'private',
                   label: 'connection close',
-                  preview: `close the connection with ${npubOf(record.peer).slice(0, 20)}… — forward only`,
+                  content: `close the connection with ${npubOf(record.peer).slice(0, 20)}… — forward only`,
                   identityPubkey: getPublicKey(sk),
                   identityNote: 'connection key',
                   relays: myWrite,

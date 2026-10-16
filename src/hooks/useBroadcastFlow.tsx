@@ -10,7 +10,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 export interface PendingBroadcast {
   grade: PrivacyGrade;
   label: string;
-  preview: ReactNode;
+  content: string;
   identityPubkey: string;
   identityNote?: string;
   relays: readonly string[];
@@ -21,6 +21,9 @@ export interface PendingBroadcast {
   /** Labels per event when there are several (chunks): defaults to label. */
   labels?: readonly string[];
   controls?: ReactNode;
+  /** Present when the payload is revisable text: re-signs/re-wraps and
+   *  re-previews as it changes, so the queued events always match. */
+  onEdit?: (content: string) => void;
   /** Secondary targets behind the discovery toggle. */
   extraRelays?: readonly string[];
   /** Called when the user confirms and the events are enqueued — the
@@ -58,11 +61,12 @@ export const useBroadcastFlow = (): {
       onOpenChange={(open) => { if (!open) setPending(null); }}
       grade={pending.grade}
       label={pending.label}
-      preview={pending.preview}
+      content={pending.content}
       identityPubkey={pending.identityPubkey}
       identityNote={pending.identityNote}
       relays={pending.relays}
       controls={pending.controls}
+      onEdit={pending.onEdit}
       layers={pending.layers ?? pending.events.map((event) => ({ name: 'event', decoded: event }))}
       extraRelays={pending.extraRelays}
 

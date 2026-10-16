@@ -42,14 +42,20 @@ const PrivateFeedBody = () => {
    * goes to our write relays — the one place those facts are stated. */
   const privateRequest = (
     label: string,
-    preview: string,
+    content: string,
     events: readonly NostrEvent[],
-    opts: { layers?: readonly EventLayer[]; extraRelays?: readonly string[]; labels?: readonly string[] } = {},
+    opts: {
+      layers?: readonly EventLayer[];
+      extraRelays?: readonly string[];
+      labels?: readonly string[];
+      onEdit?: (content: string) => void;
+      onEnqueued?: () => void;
+    } = {},
   ): void => {
     request({
       grade: 'private',
       label,
-      preview,
+      content,
       identityPubkey: getPublicKey(sk!),
       identityNote: 'burner-signed',
       relays: publishTargets,
@@ -74,6 +80,14 @@ const PrivateFeedBody = () => {
       extraRelays: discoveryTargets,
       layers: privateNoteLayers(sk, events[0]),
       labels: events.map((_, i) => (events.length > 1 ? `private note (${i + 1} of ${events.length})` : 'private note')),
+      onEdit: (next) => {
+        setDraft(next);
+        post(next);
+      },
+      // Enqueue is the commit point: only now does the page draft clear,
+      // so cancelling the modal hands the text back — same as the public
+      // composer.
+      onEnqueued: () => setDraft(''),
     });
   };
 
@@ -151,7 +165,6 @@ const PrivateFeedBody = () => {
   const submit = () => {
     if (!draft.trim() || connectedPeers.length === 0) return;
     post(draft.trim());
-    setDraft('');
   };
 
   const empty = (text: string) => (
