@@ -1,5 +1,5 @@
 import { ChevronDown, LogOut } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { nip19 } from 'nostr-tools';
 import {
   DropdownMenu,
@@ -22,6 +22,7 @@ export function AccountSwitcher() {
   const { user: activeUser } = useCurrentUser();
   const { metadata } = useProfile(activeUser?.pubkey);
   const { logout } = useKeystore();
+  const navigate = useNavigate();
 
   if (!activeUser) return null;
 
@@ -51,7 +52,7 @@ export function AccountSwitcher() {
         <DropdownMenuSeparator />
 
         <DropdownMenuItem
-          onClick={logout}
+          onClick={() => { logout(); navigate('/', { replace: true }); }}
           className='flex items-center gap-2 cursor-pointer p-2 rounded-sm text-red-500'
         >
           <LogOut className='w-4 h-4' />
