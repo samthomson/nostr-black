@@ -11,7 +11,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EventInfoDialog } from '@/components/EventInfoDialog';
-import { RelayPill, RoutePill } from '@/components/Pills';
+import { Chip, RelayPill, RoutePill } from '@/components/Pills';
 import { EngagementCount } from '@/components/EngagementDialog';
 import { useEngagementFeed } from '@/data/hooks/useEngagementFeed';
 import { NoteEditor } from '@/components/NoteEditor';
@@ -32,12 +32,24 @@ const IMAGE_CLAMP_COUNT = 2;
 
 /** Renders a bech32 id (npub/note/nevent/naddr…) as a link to its route. */
 const NostrRef = ({ bech32 }: { bech32: string }) => {
-  const decoded = nip19.decode(bech32);
-  const pubkey =
-    decoded.type === 'npub' ? decoded.data
-    : decoded.type === 'nprofile' ? decoded.data.pubkey
+  const decoded = (() => {
+    try {
+      return nip19.decode(bech32);
+    } catch {
+      return null;
+    }
+  })();
+
+  const pubkey = decoded
+    ? decoded.type === 'npub' ? decoded.data
+      : decoded.type === 'nprofile' ? decoded.data.pubkey
+      : undefined
     : undefined;
   const { metadata } = useProfile(pubkey);
+
+  // Untrusted event content: a malformed bech32 renders as plain text,
+  // never crashes the whole feed.
+  if (!decoded) return <span>{bech32}</span>;
 
   let label = `${bech32.slice(0, 10)}…`;
   if (decoded.type === 'npub' || decoded.type === 'nprofile') {
@@ -325,7 +337,7 @@ const NoteMeta = ({
  * resolution are public-only (a rumor id is unresolvable on relays, and
  * asking about one leaks the query).
  */
-export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onReplies, onEdit, onDelete, children }: {
+export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onReplies, onEdit, onDelete, edited = false, onEditHistory, children }: {
   event: NostrEvent | Rumor;
   /** Present when the item is private: the kind 1370/1470 wrapper. */
   wrapper?: NostrEvent;
@@ -339,6 +351,10 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   /** Present when the parent owns deletion (a private note deletes its
    * whole conversation). Falls back to a single-event NIP-09. */
   onDelete?: () => void;
+  /** True when the item has superseded versions — renders an 'edited' mark. */
+  edited?: boolean;
+  /** Opens the item's edit history (the parent owns the dialog). */
+  onEditHistory?: () => void;
   /** Extra rows in the action area — private items mount their own
    * reaction count here (conversation data, not relay data). */
   children?: React.ReactNode;
@@ -527,10 +543,19 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
             <span className="text-muted-foreground shrink-0 text-sm">
               {formatTimestamp(event.created_at)}
             </span>
+            {edited && (
+              <button
+                type="button"
+                onClick={onEditHistory}
+                className="text-muted-foreground shrink-0 text-xs hover:underline"
+                aria-label="edit history"
+              >
+                edited
+              </button>
+            )}
             {(kindLabel || quotedViaTag) && (
-              <span className="text-muted-foreground flex shrink-0 items-center gap-1 text-xs">
-                <Repeat2 className="size-3" />
-                {kindLabel ?? 'quoted'}
+              <span className="text-muted-foreground flex shrink-0 items-center">
+                <Chip>{kindLabel ?? 'quoted'}</Chip>
               </span>
             )}
             <Button

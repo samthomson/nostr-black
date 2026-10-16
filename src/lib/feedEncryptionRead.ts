@@ -100,6 +100,8 @@ export const conversationOf = (
 export interface OpenedReply {
   rumor: Rumor;
   wrapper: NostrEvent;
+  /** Superseded versions of this reply, oldest first — empty for an unedited reply. */
+  history?: readonly OpenedReply[];
 }
 
 /**
@@ -108,7 +110,7 @@ export interface OpenedReply {
  * the note for the whole audience — one event, every holder has the
  * reply CEK); **reactions** are kind-7 rumors addressed by `e` tag —
  * they never render as text replies; **replies** are everything else,
- * with the author's reply revisions collapsed per `repliesOn` rules. A
+ * each carrying its own superseded versions as `history`. A
  * forged `revision_of` from another author is just their own reply,
  * never a supersede.
  */
@@ -154,18 +156,27 @@ export const conversationOn = (
   const revisionIds = new Set(chain.map((r) => r.rumor.id));
 
   // Replies: everything else. An author's revision supersedes their own
-  // earlier reply — never anyone else's.
+  // earlier reply — never anyone else's. Each tip carries the superseded
+  // versions as its history, oldest first.
   const rest = nonReactions.filter((r) => !revisionIds.has(r.rumor.id));
-  const superseded = new Set<string>();
-  for (const reply of rest) {
-    const target = revisionOf(reply.rumor);
-    if (!target) continue;
-    const parentReply = rest.find((r) => r.rumor.id === target);
-    if (parentReply && parentReply.rumor.pubkey === reply.rumor.pubkey) superseded.add(target);
-  }
+  const supersededBy = (candidate: OpenedReply): OpenedReply | undefined =>
+    rest.find(
+      (r) => r.rumor.pubkey === candidate.rumor.pubkey && revisionOf(r.rumor) === candidate.rumor.id,
+    );
   const replies = rest
-    .filter((reply) => !superseded.has(reply.rumor.id))
-    .sort((a, b) => a.rumor.created_at - b.rumor.created_at);
+    .filter((r) => !supersededBy(r))
+    .sort((a, b) => a.rumor.created_at - b.rumor.created_at)
+    .map((tip) => {
+      const chain: OpenedReply[] = [];
+      let cursor: OpenedReply | undefined = tip;
+      while (cursor) {
+        chain.unshift(cursor);
+        const target = revisionOf(cursor.rumor);
+        const prev = target ? rest.find((r) => r.rumor.id === target) : undefined;
+        cursor = prev && prev.rumor.pubkey === tip.rumor.pubkey ? prev : undefined;
+      }
+      return chain.length > 1 ? { ...tip, history: chain.slice(0, -1) } : tip;
+    });
 
   return { revisions: chain, replies, reactions };
 };

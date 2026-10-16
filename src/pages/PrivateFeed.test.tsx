@@ -225,11 +225,14 @@ describe('PrivateFeedPage', () => {
     expect(screen.queryByText('original secret')).toBeNull();
     const revision = published().find((ev) => ev.kind === 1470);
     expect(revision).toBeTruthy();
-    // history: the superseded versions hide behind an 'edited' toggle
-    await user.click(screen.getByRole('button', { name: /edited — 2 versions/ }));
-    expect(await screen.findByText(/original secret/)).toBeTruthy();
-    await user.click(screen.getByRole('button', { name: /edited — 2 versions/ }));
-    expect(screen.queryByText(/original secret/)).toBeNull();
+    // history: an 'edited' mark opens the edit-history dialog, which shows
+    // the superseded version as a diff.
+    await user.click(screen.getByRole('button', { name: 'edit history' }));
+    const historyDialog = await screen.findByRole('dialog');
+    expect(within(historyDialog).getByText('edit history')).toBeTruthy();
+    expect(within(historyDialog).getByText('original secret')).toBeTruthy();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     // delete: burner-signed kind 5s for every wrapper of the conversation
     await user.click(screen.getByRole('button', { name: 'delete note' }));
     await confirmBroadcast(user);
@@ -290,6 +293,10 @@ describe('PrivateFeedPage', () => {
     expect(screen.queryByText('first reply')).toBeNull();
     const revision = publish.mock.calls.map(([ev]) => ev).find((ev) => ev.kind === 1470);
     expect(revision).toBeTruthy();
+    // the reply's edit shows as an 'edited' mark opening its history
+    await user.click(screen.getByRole('button', { name: 'edit history' }));
+    const historyDialog = await screen.findByRole('dialog');
+    expect(within(historyDialog).getByText('first reply')).toBeTruthy();
   });
 
   it('a revision still reaches a peer whose connection has since closed', async () => {

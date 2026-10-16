@@ -9,7 +9,7 @@ import { Heart } from 'lucide-react';
 import { useProvenance } from '@/data/hooks/useProvenance';
 import type { OpenedNote, Rumor } from '@/lib/feedEncryption';
 import type { OpenedReply } from '@/lib/feedEncryptionRead';
-import { formatTimestamp } from '@/lib/format';
+import { EditHistoryDialog } from '@/components/EditHistoryDialog';
 import { Button } from '@/components/ui/button';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
@@ -22,6 +22,7 @@ const PrivateItem = ({
   rumor,
   wrapper,
   conversation,
+  versions,
   onReact,
   onEdit,
   onDelete,
@@ -30,7 +31,8 @@ const PrivateItem = ({
   wrapper: NostrEvent;
   /** The whole conversation — reactions are addressed by rumor id. */
   conversation: Conversation;
-  /** Present when reacting is available: broadcast a private reaction. */
+  /** The item's full version chain, oldest first, the rendered rumor last. */
+  versions?: readonly Rumor[];
   /** Present when reacting is available: broadcast a private reaction. */
   onReact?: (target: Rumor, emoji: string) => void;
   onEdit?: (content: string) => void;
@@ -40,31 +42,41 @@ const PrivateItem = ({
   const { user } = useCurrentUser();
   const { config } = useAppContext();
   const reactions = reactionsTo(conversation, rumor.id);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const chain = versions ?? [];
+  const edited = chain.length > 1;
   return (
-    <Note
-      event={rumor}
-      wrapper={wrapper}
-      foundOn={foundOn}
-      route={route}
-      onEdit={onEdit}
-      onDelete={onDelete}
-    >
-      <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm">
-        <EngagementCount
-          icon={<Heart className={cn('size-4', !!user && reactions.some((r) => r.pubkey === user.pubkey) && 'fill-current')} />}
-          count={reactions.length}
-          capped={false}
-          pending={false}
-          mine={!!user && reactions.some((r) => r.pubkey === user.pubkey)}
-          tab="reactions"
-          reactions={reactions as readonly EngagementRow[]}
-          reposts={[]}
-          onEngage={() => onReact?.(rumor, config.defaultReaction)}
-          onChoose={(emoji) => onReact?.(rumor, emoji)}
-          ariaLabel="react"
-        />
-      </div>
-    </Note>
+    <>
+      <Note
+        event={rumor}
+        wrapper={wrapper}
+        foundOn={foundOn}
+        route={route}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        edited={edited}
+        onEditHistory={edited ? () => setHistoryOpen(true) : undefined}
+      >
+        <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm">
+          <EngagementCount
+            icon={<Heart className={cn('size-4', !!user && reactions.some((r) => r.pubkey === user.pubkey) && 'fill-current')} />}
+            count={reactions.length}
+            capped={false}
+            pending={false}
+            mine={!!user && reactions.some((r) => r.pubkey === user.pubkey)}
+            tab="reactions"
+            reactions={reactions as readonly EngagementRow[]}
+            reposts={[]}
+            onEngage={() => onReact?.(rumor, config.defaultReaction)}
+            onChoose={(emoji) => onReact?.(rumor, emoji)}
+            ariaLabel="react"
+          />
+        </div>
+      </Note>
+      {edited && (
+        <EditHistoryDialog versions={chain} open={historyOpen} onOpenChange={setHistoryOpen} />
+      )}
+    </>
   );
 };
 
@@ -111,27 +123,6 @@ const ReplyComposer = ({
   );
 };
 
-/** A note's superseded versions — the edit history, oldest first. */
-const EditHistory = ({ history }: { history: readonly OpenedNote[] }) => {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="text-muted-foreground space-y-1 text-xs">
-      <button
-        type="button"
-        className="underline hover:text-foreground"
-        onClick={() => setOpen(!open)}
-      >
-        edited — {history.length} {history.length === 1 ? 'version' : 'versions'}
-      </button>
-      {open && history.map((item) => (
-        <p key={item.rumor.id} className="whitespace-pre-wrap break-words border-l pl-2">
-          {formatTimestamp(item.rumor.created_at)} — {item.rumor.content}
-        </p>
-      ))}
-    </div>
-  );
-};
-
 /**
  * One private post: the note, its replies, and the composer. Every item —
  * post or reply — renders through the same Note component the public feed
@@ -164,18 +155,19 @@ export const PrivateNote = ({
       rumor={note.rumor}
       wrapper={note.wrapper}
       conversation={conversation}
+      versions={history.map((h) => h.rumor)}
       onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
       onEdit={onEdit ? (content) => onEdit(note, content) : undefined}
       onDelete={onDelete ? () => onDelete(note, history) : undefined}
     />
     <div className="space-y-3 border-l pl-3">
-      {history.length > 0 && <EditHistory history={history} />}
       {replies.map((reply) => (
         <PrivateItem
           key={reply.wrapper.id}
           rumor={reply.rumor}
           wrapper={reply.wrapper}
           conversation={conversation}
+          versions={[...(reply.history?.map((h) => h.rumor) ?? []), reply.rumor]}
           onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
           onEdit={onEditReply ? (content) => onEditReply(note, reply, content) : undefined}
         />

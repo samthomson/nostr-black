@@ -91,6 +91,23 @@ describe('conversationOn', () => {
     ]);
     expect(conversation.revisions.map((r) => r.rumor.content)).toEqual(['v2', 'v3']);
   });
+
+  it("attaches a reply's superseded versions as its history, oldest first", () => {
+    const alice = pair();
+    const bob = pair();
+    const { rumor: root, replyCek } = makeRumor(alice.pk, 'root');
+    const [parent] = wrapPrivateNote(alice.sk, [bob.pk], root);
+    const opened = tryOpenNote(bob.sk, parent)!;
+    const bobV1 = rumorOf(bob.pk, 'reply v1', [['e', root.id]], root.created_at + 10);
+    const bobV2 = rumorOf(bob.pk, 'reply v2', [['e', root.id], ['revision_of', bobV1.id]], root.created_at + 20);
+    const conversation = conversationOn(opened, [
+      wrapPrivateReply(bob.sk, replyCek, bobV1),
+      wrapPrivateReply(bob.sk, replyCek, bobV2),
+    ]);
+    expect(conversation.replies).toHaveLength(1);
+    expect(conversation.replies[0].rumor.content).toBe('reply v2');
+    expect(conversation.replies[0].history?.map((h) => h.rumor.content)).toEqual(['reply v1']);
+  });
 });
 
 describe('private reactions', () => {

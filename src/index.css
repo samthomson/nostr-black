@@ -38,6 +38,8 @@
 
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-diff-add: var(--diff-add);
+  --color-diff-del: var(--diff-del);
 
   --color-border: var(--border);
   --color-input: var(--input);
@@ -93,6 +95,9 @@
 
   --destructive: hsl(0 72% 45%);
   --destructive-foreground: hsl(0 0% 98%);
+  /* Git-diff marks: additions green, deletions red. */
+  --diff-add: hsl(145 70% 45%);
+  --diff-del: hsl(0 72% 52%);
 
   --border: hsl(240 5% 24%);
   --input: hsl(240 5% 24%);
