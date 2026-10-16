@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
 import { nowSec } from '@/lib/timestamp';
-import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools';
+import { generateSecretKey, getPublicKey, finalizeEvent, nip10 } from 'nostr-tools';
 import { rememberBurner } from '@/auth/burners';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useBroadcastFlow, type PendingBroadcast } from '@/hooks/useBroadcastFlow';
@@ -14,11 +14,13 @@ import { clientTag } from '@/lib/clientTag';
 import { DraftAction, DraftSwitch } from '@/components/BroadcastDialog';
 
 /**
- * The public note composer: write, preview, broadcast. The burner toggle
- * lives in the modal and is live — flipping it re-previews (new identity,
- * one grade greyer, re-signed event) before anything is queued.
+ * The public note composer: write, preview, broadcast — a top-level post,
+ * or a reply when `parent` names the note it answers (NIP-10 tags ride
+ * along). The burner toggle lives in the modal and is live — flipping it
+ * re-previews (new identity, one grade greyer, re-signed event) before
+ * anything is queued.
  */
-export const NoteComposer = () => {
+export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
   const { user } = useCurrentUser();
   const sk = useSessionKey();
   const { myWrite } = useRouting();
@@ -44,7 +46,7 @@ export const NoteComposer = () => {
     const pk = burner ? getPublicKey(burner) : null;
     return {
       grade: burner ? 'medium' : 'public',
-      label: 'note',
+      label: parent ? 'reply' : 'note',
       content,
       identityPubkey: pk ?? user.pubkey,
       identityNote: pk ? 'burner' : undefined,
@@ -67,7 +69,7 @@ export const NoteComposer = () => {
         setDraft(next);
         request(previewOf(next));
       },
-      events: [signedNote(burner ?? sk, content)],
+      events: [signedNote(burner ?? sk, content, parent)],
       // The queued broadcast is the commit point: clear the draft and the
       // burner so the next compose starts clean. The burner pubkey is
       // remembered so the feed keeps rendering its notes as yours.
@@ -106,17 +108,28 @@ export const NoteComposer = () => {
         value={draft}
         onChange={setDraft}
         onSubmit={preview}
-        variant="public"
+        variant={parent ? 'reply' : 'post'}
+        grade="public"
       />
       {dialog}
     </>
   );
 };
+/** NIP-10 tags for a reply to `parent`: keep the thread's root, point
+ *  the reply marker at the parent, and carry the author along. */
+const replyTagsOf = (parent: NostrEvent): string[][] => {
+  const parsed = nip10.parse(parent);
+  const root = parsed.root?.id ?? parent.id;
+  const reply = parsed.reply?.id ?? parsed.root?.id;
+  return reply
+    ? [['e', root, '', 'root'], ['e', parent.id, '', 'reply'], ['p', parent.pubkey]]
+    : [['e', parent.id, '', 'root'], ['p', parent.pubkey]];
+};
 
-
-const signedNote = (sk: Uint8Array, content: string): NostrEvent => {
+const signedNote = (sk: Uint8Array, content: string, parent?: NostrEvent): NostrEvent => {
   const tags: string[][] = [];
   const tag = clientTag();
   if (tag) tags.push(['client', tag]);
+  if (parent) tags.push(...replyTagsOf(parent));
   return finalizeEvent({ kind: 1, created_at: nowSec(), tags, content }, sk);
 };

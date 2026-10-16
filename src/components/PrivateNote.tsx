@@ -4,15 +4,14 @@ import { Note, ReplyCount } from '@/components/Note';
 import { nip19 } from 'nostr-tools';
 import { EngagementCount, type EngagementRow } from '@/components/EngagementDialog';
 import { reactionsTo, type Conversation } from '@/lib/feedEncryptionRead';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { Composer } from '@/components/Composer';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Heart } from 'lucide-react';
 import { useProvenance } from '@/data/hooks/useProvenance';
 import type { OpenedNote, Rumor } from '@/lib/feedEncryption';
 import type { OpenedReply } from '@/lib/feedEncryptionRead';
 import { EditHistoryDialog } from '@/components/EditHistoryDialog';
-import { Button } from '@/components/ui/button';
-import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
 
 /**
@@ -69,7 +68,12 @@ const PrivateItem = ({
             feature, not a count. Replies and reactions only. */}
         <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm">
           {noteHref !== undefined && (
-            <ReplyCount replies={replyCount ?? 0} pending={false} capped={false} href={noteHref} />
+            <ReplyCount
+              replies={replyCount ?? 0}
+              pending={false}
+              capped={false}
+              href={noteHref}
+            />
           )}
           <EngagementCount
             icon={<Heart className={cn('size-4', !!user && reactions.some((r) => r.pubkey === user.pubkey) && 'fill-current')} />}
@@ -110,29 +114,13 @@ const ReplyComposer = ({
   };
 
   return (
-    <div className="space-y-1">
-      <div className="flex gap-2">
-        <input
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="reply…"
-          aria-label="reply"
-          className="border-input bg-background h-8 min-w-0 flex-1 rounded-sm border px-2 text-sm"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
-          }}
-        />
-        <Button
-          type="button"
-          variant="privacy"
-          disabled={draft.trim().length === 0}
-          onClick={() => void submit()}
-          className={cn(PRIVACY_BUTTON, PRIVACY.private.className)}
-        >
-          reply
-        </Button>
-      </div>
-    </div>
+    <Composer
+      value={draft}
+      onChange={setDraft}
+      onSubmit={submit}
+      variant="reply"
+      grade="private"
+    />
   );
 };
 

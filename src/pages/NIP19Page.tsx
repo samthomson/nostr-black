@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useEvent } from '@/data/hooks/useEvent';
 import { Note } from '@/components/Note';
 import { Thread } from '@/components/Thread';
+import { NoteComposer } from '@/components/NoteComposer';
 import { Page } from '@/components/Page';
 import { ProfilePage } from '@/pages/Profile';
 import type { DecodeResult } from '@/lib/format';
@@ -55,6 +56,7 @@ const EventPage = ({ identifier }: { identifier: string }) => {
     <div className="space-y-3">
       <Note event={event} linkReplies={false} />
       <Thread parent={event.id} author={event.pubkey} />
+      <NoteComposer parent={event} />
     </div>
   );
 };

@@ -56,11 +56,10 @@ const PrivateFeedBody = () => {
           value={draft}
           onChange={setDraft}
           onSubmit={submit}
-          variant="private"
+          variant="post"
+          grade="private"
         />
       )}
-
-      {pending && posts.length === 0 && <FeedSkeleton />}
       {!pending && connectedPeers.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="px-4 py-3 text-center">
@@ -68,6 +67,7 @@ const PrivateFeedBody = () => {
           </CardContent>
         </Card>
       )}
+      {pending && posts.length === 0 && <FeedSkeleton />}
 
 
       {dialog}

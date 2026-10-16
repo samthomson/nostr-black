@@ -14,9 +14,9 @@ import { EventInfoDialog } from '@/components/EventInfoDialog';
 import { Chip, RelayPill, RoutePill } from '@/components/Pills';
 import { EngagementCount } from '@/components/EngagementDialog';
 import { useEngagementFeed } from '@/data/hooks/useEngagementFeed';
-import { NoteEditor } from '@/components/NoteEditor';
-import { ProfileAvatar } from '@/components/ProfileAvatar';
+import { Composer } from '@/components/Composer';
 import { useAsset } from '@/hooks/useAsset';
+import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { profileHref, eventHref, npubOf, formatTimestamp } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -287,14 +287,24 @@ export const ReplyCount = ({
   href?: string;
 }) => (
   <span className="inline-flex items-center gap-1">
-    <button
-      type="button"
-      className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
-      onClick={onReplies}
-      aria-label="reply"
-    >
-      <MessageCircle className="size-3.5" />
-    </button>
+    {href ? (
+      <Link
+        to={href}
+        className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+        aria-label="open replies"
+      >
+        <MessageCircle className="size-3.5" />
+      </Link>
+    ) : (
+      <button
+        type="button"
+        className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+        onClick={onReplies}
+        aria-label="reply"
+      >
+        <MessageCircle className="size-3.5" />
+      </button>
+    )}
     {replies === 0 && !pending ? (
       <span className="text-muted-foreground inline-flex items-center" aria-label="replies" data-testid="count-reply">
         <span className="text-sm">0</span>
@@ -619,11 +629,13 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
             )}
           </div>
           {editing ? (
-            <NoteEditor
-              draft={draft}
-              onDraft={setDraft}
-              onSave={saveEdit}
+            <Composer
+              value={draft}
+              onChange={setDraft}
+              onSubmit={saveEdit}
               onCancel={() => setEditing(false)}
+              variant="edit"
+              grade={isPrivate ? 'private' : 'public'}
             />
           ) : (
           <>

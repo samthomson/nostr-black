@@ -93,7 +93,7 @@ describe('PrivateThreadPage', () => {
 
     expect(await screen.findByText('root secret')).toBeTruthy();
     expect(screen.getByText('first reply')).toBeTruthy();
-    expect(screen.getByRole('textbox', { name: 'reply' })).toBeTruthy();
+    expect(screen.getByRole('textbox', { name: 'reply…' })).toBeTruthy();
     // The note is alice's — no edit for bob. His own reply is editable.
     expect(screen.getAllByRole('button', { name: 'edit note' })).toHaveLength(1);
   });
@@ -118,7 +118,7 @@ describe('PrivateThreadPage', () => {
     await settle();
 
     const user = userEvent.setup();
-    const box = await screen.findByRole('textbox', { name: 'reply' });
+    const box = await screen.findByRole('textbox', { name: 'reply…' });
     await user.type(box, 'sealed answer');
     await user.click(screen.getByRole('button', { name: 'reply' }));
     await confirmBroadcast(user);
