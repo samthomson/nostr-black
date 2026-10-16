@@ -217,4 +217,14 @@ describe('Note', () => {
     expect(await screen.findByText('the reposted words')).toBeTruthy();
     expect(screen.queryByText(/replying to/)).toBeNull();
   });
+  it('a note with a malformed nostr: reference does not crash', async () => {
+    render(
+      <TestApp>
+        <Note event={note(generateSecretKey(), 'nostr:npub1')} />
+      </TestApp>,
+    );
+
+    // Renders the raw bech32 as plain text instead of throwing in nip19.decode.
+    expect(await screen.findByText('npub1')).toBeTruthy();
+  });
 });
