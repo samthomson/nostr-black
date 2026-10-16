@@ -92,6 +92,9 @@ export interface EventStore {
   getEvent(id: string): NostrEvent | undefined;
   getReplaceable(kind: number, pubkey: string): NostrEvent | undefined;
   getAddressable(kind: number, pubkey: string, d: string): NostrEvent | undefined;
+  /** Every stored version of a replaceable event, newest-first — the
+   * activity timeline (profile/follow/relay changes) reads this. */
+  queryReplaceableHistory(kind: number, pubkey: string): NostrEvent[];
   /** Newest-first, for feed reads. */
   queryByAuthors(authors: readonly string[], kinds: readonly number[], range?: TimeRange): NostrEvent[];
   /** Every stored event of this kind. Reverse lookups (followers) use this. */
@@ -125,6 +128,8 @@ export const createStore = (): EventStore => {
   const watchers = new Set<StoreWatcher>();
   /** target id → ids of events referencing it. */
   const refs = new Map<string, Set<string>>();
+  /** replaceable:kind:pubkey → every version seen, newest-first. */
+  const replaceableHistory = new Map<EntityKey, NostrEvent[]>();
   /** A kind 5 removes its targets from the store — we published the
    * deletion request, so we drop our copy. Relays are the source of
    * truth: if a later query serves the event again, it re-enters the
@@ -174,6 +179,14 @@ export const createStore = (): EventStore => {
     current: EntityState | undefined,
   ): { key: EntityKey; refs: EntityKey[] } | undefined => {
     const key = keyForEvent(event);
+    if (isReplaceable(event.kind)) {
+      const history = replaceableHistory.get(key) ?? [];
+      if (!history.some((e) => e.id === event.id)) {
+        history.push(event);
+        history.sort((a, b) => b.created_at - a.created_at);
+        replaceableHistory.set(key, history);
+      }
+    }
     if (current?.event && !supersedes(event, current.event)) {
       if (current.event.id === event.id) {
         const merged = [...new Set([...(current.foundOn ?? []), ...foundOn])];
@@ -247,6 +260,7 @@ export const createStore = (): EventStore => {
     const held = [...entities.keys()];
     entities.clear();
     refs.clear();
+    replaceableHistory.clear();
     notify(held);
     for (const watcher of [...watchers]) watcher.onClear();
   };
@@ -267,6 +281,10 @@ export const createStore = (): EventStore => {
     getReplaceable: (kind, pubkey) => get(replaceableKey(kind, pubkey)).event,
 
     getAddressable: (kind, pubkey, d) => get(addressableKey(kind, pubkey, d)).event,
+    queryReplaceableHistory: (kind, pubkey) => {
+      const out = replaceableHistory.get(replaceableKey(kind, pubkey)) ?? [];
+      return [...out].sort((a, b) => b.created_at - a.created_at);
+    },
 
     queryByAuthors: (authors, kinds, range = {}) => {
       const wanted = new Set(authors);

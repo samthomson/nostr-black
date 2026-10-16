@@ -35,6 +35,7 @@ export type Want =
   | { type: 'engagement'; target: string }
   | { type: 'thread'; parent: string; author?: string }
   | { type: 'authorNotes'; pubkey: string }
+  | { type: 'authorActivity'; pubkey: string }
   | { type: 'followers'; pubkey: string }
   | { type: 'connections'; derivedIdentityId: string } // our whole graph: kind 30378 by #c = derived_identity_id = H(my_sk ‖ label), known only to us
   | { type: 'connectionOffer'; d: string; offerer: string } // one pair's records: kind 30378 by #d = conn_addr(me, peer); `offerer` outboxes the query to their write relays
@@ -61,6 +62,7 @@ const STALE_MS: Record<Want['type'], number> = {
   engagement: 5 * 60_000,
   thread: 2 * 60_000,
   authorNotes: 5 * 60_000,
+  authorActivity: 5 * 60_000,
   followers: 15 * 60_000,
   connections: 2 * 60_000,
   connectionOffer: 2 * 60_000,
@@ -74,6 +76,9 @@ const DEBOUNCE_MS = 80;
 /** Relays reject enormous filters; split the author list past this. */
 const MAX_AUTHORS = 200;
 export const AUTHOR_NOTES_LIMIT = 50;
+/** Replaceable activity kinds: profile (0), contacts (3), relays (10002). */
+export const ACTIVITY_KINDS = [0, 3, 10002];
+export const ACTIVITY_LIMIT = 20;
 export const FOLLOWER_CAP = 200;
 export const CONNECTION_CAP = 200;
 export const PRIVATE_NOTES_LIMIT = 50;
@@ -119,6 +124,8 @@ export const wantKey = (want: Want): string => {
       return `thread:${want.parent}`;
     case 'authorNotes':
       return `authorNotes:${want.pubkey}`;
+    case 'authorActivity':
+      return `authorActivity:${want.pubkey}`;
     case 'followers':
       return `followers:${want.pubkey}`;
     case 'connections':
@@ -157,6 +164,8 @@ export const wantEntity = (want: Want): EntityKey | undefined => {
       return `thread:${want.parent}`;
     case 'authorNotes':
       return `authorNotes:${want.pubkey}`;
+    case 'authorActivity':
+      return `authorActivity:${want.pubkey}`;
     case 'followers':
       return `followers:${want.pubkey}`;
     case 'connections':
@@ -381,6 +390,9 @@ export const createScheduler = (
     const authorNotes = batch
       .map((q) => q.want)
       .filter((w): w is Extract<Want, { type: 'authorNotes' }> => w.type === 'authorNotes');
+    const authorActivity = batch
+      .map((q) => q.want)
+      .filter((w): w is Extract<Want, { type: 'authorActivity' }> => w.type === 'authorActivity');
     const followers = batch
       .map((q) => q.want)
       .filter((w): w is Extract<Want, { type: 'followers' }> => w.type === 'followers');
@@ -421,6 +433,7 @@ export const createScheduler = (
       engagement.length > 0 ? runEngagementWants(lane, ctx, engagement) : undefined,
       threads.length > 0 ? runThreadWants(lane, ctx, threads) : undefined,
       authorNotes.length > 0 ? runAuthorNotesWants(lane, ctx, authorNotes) : undefined,
+      authorActivity.length > 0 ? runAuthorActivityWants(lane, ctx, authorActivity) : undefined,
       followers.length > 0 ? runFollowerWants(lane, ctx, followers) : undefined,
       connections.length > 0 ? runTagWants(
         lane,
@@ -590,6 +603,31 @@ export const createScheduler = (
         kinds: [...FEED_KINDS],
         authors,
         limit: AUTHOR_NOTES_LIMIT * authors.length,
+      }),
+    );
+  };
+
+  const runAuthorActivityWants = async (
+    lane: Lane,
+    ctx: RoutingContext,
+    wants: Extract<Want, { type: 'authorActivity' }>[],
+  ): Promise<void> => {
+    // Same outbox as notes, but the replaceable kinds — the activity
+    // timeline (profile edits, follow changes, relay changes).
+    const groups: Groups = new Map();
+    for (const want of wants) {
+      const plan = relayPlan({ kind: 'oneAuthor', pubkey: want.pubkey }, ctx);
+      for (const tier of plan.tiers) {
+        for (const [url, authors] of tier.groups) addGroup(groups, url, authors);
+      }
+    }
+    await runGroups(
+      lane,
+      groups,
+      (authors) => ({
+        kinds: ACTIVITY_KINDS,
+        authors,
+        limit: ACTIVITY_LIMIT * authors.length,
       }),
     );
   };
