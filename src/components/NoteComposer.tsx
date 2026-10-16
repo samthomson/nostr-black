@@ -4,7 +4,7 @@ import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools';
 import { rememberBurner } from '@/auth/burners';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useBroadcastFlow, type PendingBroadcast } from '@/hooks/useBroadcastFlow';
-import { Button } from '@/components/ui/button';
+import { Composer } from '@/components/Composer';
 import { useRouting } from '@/data/hooks/useRouting';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
@@ -78,28 +78,12 @@ export const NoteComposer = () => {
 
   return (
     <>
-      <div className="flex gap-2">
-        <textarea
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          placeholder="write a note…"
-          aria-label="write a note"
-          rows={3}
-          className="border-input bg-background min-h-[4.5rem] min-w-0 flex-1 resize-none rounded-sm border px-3 py-2 text-sm"
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && draft.trim()) preview();
-          }}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          disabled={draft.trim().length === 0}
-          onClick={preview}
-          className="self-end rounded-sm"
-        >
-          broadcast
-        </Button>
-      </div>
+      <Composer
+        value={draft}
+        onChange={setDraft}
+        onSubmit={preview}
+        variant="public"
+      />
       {dialog}
     </>
   );

@@ -55,7 +55,7 @@ describe('NoteComposer', () => {
       </TestApp>,
     );
 
-    const box = await screen.findByRole('textbox', { name: 'write a note' });
+    const box = await screen.findByRole('textbox', { name: 'what are you doing?' });
     await user.type(box, 'ship it');
     await user.click(screen.getByRole('button', { name: 'broadcast' }));
     await confirmBroadcast(user);
@@ -75,7 +75,7 @@ describe('NoteComposer', () => {
       </TestApp>,
     );
 
-    const box = await screen.findByRole('textbox', { name: 'write a note' });
+    const box = await screen.findByRole('textbox', { name: 'what are you doing?' });
     await user.type(box, 'stay');
     await user.click(screen.getByRole('button', { name: 'broadcast' }));
     await user.click(await screen.findByRole('button', { name: 'cancel' }));
@@ -96,7 +96,7 @@ describe('NoteComposer', () => {
       </TestApp>,
     );
 
-    const box = await screen.findByRole('textbox', { name: 'write a note' });
+    const box = await screen.findByRole('textbox', { name: 'what are you doing?' });
     await user.type(box, 'anon today');
     await user.click(screen.getByRole('button', { name: 'broadcast' }));
     // burner on: the modal re-previews with the throwaway identity

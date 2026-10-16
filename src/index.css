@@ -83,11 +83,11 @@
   /* Privacy grades — the colour semantics: private is black, public is
      white, greys between. Text on a grade is the inversion (see
      src/lib/privacy.ts). */
-  --privacy-private: hsl(240 6% 4%);
+  --privacy-private: hsl(240 5% 10%);
   --privacy-high: hsl(240 5% 22%);
   --privacy-medium: hsl(240 5% 42%);
   --privacy-low: hsl(240 5% 68%);
-  --privacy-public: hsl(0 0% 98%);
+  --privacy-public: hsl(40 16% 91%);
 
   /* Maroon: the one accent, used sparingly. */
   --maroon: hsl(0 60% 42%);

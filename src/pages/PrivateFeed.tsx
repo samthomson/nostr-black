@@ -7,7 +7,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { Page } from '@/components/Page';
 import { PrivacyTag } from '@/components/PrivacyTag';
 import { PrivateNote } from '@/components/PrivateNote';
-import { Button } from '@/components/ui/button';
+import { Composer } from '@/components/Composer';
 import { Card, CardContent } from '@/components/ui/card';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { usePrivateFeed } from '@/data/hooks/usePrivateFeed';
@@ -28,8 +28,6 @@ import {
   type EventLayer,
   type Rumor,
 } from '@/lib/feedEncryption';
-import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
-import { cn } from '@/lib/utils';
 
 const PrivateFeedBody = () => {
   const sk = useSessionKey();
@@ -174,25 +172,12 @@ const PrivateFeedBody = () => {
       )}
 
       {connectedPeers.length > 0 && (
-        <div className="flex gap-2">
-          <textarea
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="write a private note…"
-            aria-label="write a private note"
-            rows={3}
-            className="border-input bg-background min-h-[4.5rem] min-w-0 flex-1 resize-none rounded-sm border px-3 py-2 text-sm"
-          />
-          <Button
-            type="button"
-            variant="privacy"
-            disabled={draft.trim().length === 0}
-            onClick={submit}
-            className={cn(PRIVACY_BUTTON, 'self-end', PRIVACY.private.className)}
-          >
-            broadcast
-          </Button>
-        </div>
+        <Composer
+          value={draft}
+          onChange={setDraft}
+          onSubmit={submit}
+          variant="private"
+        />
       )}
 
       {dialog}
@@ -212,7 +197,7 @@ const PrivateFeedBody = () => {
         />
       ))}
 
-      {!pending && connectedPeers.length === 0 && empty(
+      {!pending && connectedPeers.length === 0 && posts.length === 0 && empty(
         'no connections yet — add people on the connections page first',
       )}
       {!pending && connectedPeers.length > 0 && posts.length === 0 && empty('no private notes yet')}
