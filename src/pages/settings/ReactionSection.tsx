@@ -1,5 +1,7 @@
 import { useAppContext } from '@/hooks/useAppContext';
 import { EMOJI_CHOICES } from '@/lib/engagementKinds';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { Section } from './Section';
 
 /** The default reaction: what a plain heart-click broadcasts. Hold the
@@ -11,17 +13,19 @@ export const ReactionSection = () => {
     <Section title="default reaction" hint="what a plain heart-click broadcasts">
       <div className="flex flex-wrap gap-1">
         {EMOJI_CHOICES.map((emoji) => (
-          <button
+          <Button
             key={emoji}
-            type="button"
+            variant="ghost"
+            size="sm"
             aria-pressed={config.defaultReaction === emoji}
             onClick={() => updateConfig((current) => ({ ...current, defaultReaction: emoji }))}
-            className={`cursor-pointer rounded-sm px-2.5 py-1 text-base hover:bg-accent ${
-              config.defaultReaction === emoji ? 'bg-foreground/10 ring-1 ring-foreground/40' : ''
-            }`}
+            className={cn(
+              'text-base',
+              config.defaultReaction === emoji && 'bg-foreground/10 ring-1 ring-foreground/40',
+            )}
           >
             {emoji}
-          </button>
+          </Button>
         ))}
       </div>
       <p className="text-muted-foreground text-xs">

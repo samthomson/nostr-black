@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useMediaCache } from '@/hooks/useMediaCache';
+import { Button } from '@/components/ui/button';
 import { Section } from './Section';
 
 export const MediaSection = () => {
@@ -48,13 +49,14 @@ export const MediaSection = () => {
               aria-label="media cache max MB"
             />
             <span className="text-muted-foreground text-xs">MB max — oldest media evicted first</span>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
               onClick={clearCache}
-              className="text-muted-foreground rounded-sm px-3 py-1 text-xs font-medium hover:bg-accent"
             >
               clear cache
-            </button>
+            </Button>
           </div>
         </div>
       )}

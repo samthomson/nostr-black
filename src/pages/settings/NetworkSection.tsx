@@ -4,9 +4,11 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { useUserState } from '@/hooks/useUserState';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { usePublishRelayList, useMaxConnections } from '@/hooks/useTransport';
+import { normalizeRelayUrl } from '@/lib/appRelays';
+import { Button } from '@/components/ui/button';
 import { Section } from './Section';
 
-/** One row of the user's NIP-65 relay list: url + read/write toggles + remove. */
+/** One row of a relay list: url, optional read/write toggles, remove. */
 const RelayRow = ({
   url,
   read,
@@ -16,31 +18,59 @@ const RelayRow = ({
   onRemove,
 }: {
   url: string;
-  read: boolean;
-  write: boolean;
-  onToggleRead: () => void;
-  onToggleWrite: () => void;
+  read?: boolean;
+  write?: boolean;
+  onToggleRead?: () => void;
+  onToggleWrite?: () => void;
   onRemove: () => void;
 }) => (
   <li className="flex items-center gap-3 border-b py-2 last:border-b-0">
     <span className="min-w-0 flex-1 truncate font-mono text-xs" title={url}>{url}</span>
-    <label className="flex shrink-0 cursor-pointer items-center gap-1 text-xs">
-      <input type="checkbox" className="size-3.5 accent-foreground" checked={read} onChange={onToggleRead} />
-      read
-    </label>
-    <label className="flex shrink-0 cursor-pointer items-center gap-1 text-xs">
-      <input type="checkbox" className="size-3.5 accent-foreground" checked={write} onChange={onToggleWrite} />
-      write
-    </label>
-    <button
-      type="button"
+    {onToggleRead && (
+      <label className="flex shrink-0 cursor-pointer items-center gap-1 text-xs">
+        <input type="checkbox" className="size-3.5 accent-foreground" checked={read} onChange={onToggleRead} />
+        read
+      </label>
+    )}
+    {onToggleWrite && (
+      <label className="flex shrink-0 cursor-pointer items-center gap-1 text-xs">
+        <input type="checkbox" className="size-3.5 accent-foreground" checked={write} onChange={onToggleWrite} />
+        write
+      </label>
+    )}
+    <Button
+      variant="ghost"
+      size="icon-xs"
       onClick={onRemove}
       aria-label={`remove ${url}`}
-      className="text-muted-foreground shrink-0 rounded-sm px-1.5 py-1 text-xs hover:bg-accent"
+      className="text-muted-foreground text-xs"
     >
       ×
-    </button>
+    </Button>
   </li>
+);
+
+/** The add-row shared by both relay lists: url input + add button. */
+const AddRelayRow = ({
+  value,
+  onChange,
+  onAdd,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onAdd: () => void;
+}) => (
+  <div className="flex gap-2 pt-1">
+    <input
+      className="min-w-0 flex-1 rounded-sm border bg-transparent px-2 py-1.5 font-mono text-xs"
+      placeholder="wss://relay.example.com"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => e.key === 'Enter' && onAdd()}
+      spellCheck={false}
+    />
+    <Button variant="outline" size="sm" onClick={onAdd}>add</Button>
+  </div>
 );
 
 export const NetworkSection = () => {
@@ -51,27 +81,32 @@ export const NetworkSection = () => {
   const syncedAt = userState.relayMetadata.updatedAt;
   const maxConnections = useMaxConnections();
 
-  const [draft, setDraft] = useState<string | null>(null);
   const [newRelay, setNewRelay] = useState('');
+  const [newDiscovery, setNewDiscovery] = useState('');
   const [publishState, setPublishState] = useState<'idle' | 'publishing' | 'done' | 'error'>('idle');
 
   // Local working copy of the relay list; "publish" writes it to nostr as a
   // fresh kind 10002 and updates config optimistically on success.
   const [relays, setRelays] = useState(userState.relayMetadata.relays);
   const dirty = JSON.stringify(relays) !== JSON.stringify(userState.relayMetadata.relays);
+  // Local working copy of the discovery relays; "save" writes it to config.
+  const [discovery, setDiscovery] = useState(config.discoveryRelays);
+  const discoveryDirty = discovery.join('\n') !== config.discoveryRelays.join('\n');
 
-  const saveDiscovery = () => {
-    const list = (draft ?? '')
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((url) => /^wss?:\/\/\S+$/.test(url));
-    updateConfig((current) => ({ ...current, discoveryRelays: list }));
-    setDraft(null);
+  const addDiscoveryRelay = () => {
+    const url = normalizeRelayUrl(newDiscovery);
+    if (url === undefined || discovery.includes(url)) return;
+    setDiscovery((current) => [...current, url]);
+    setNewDiscovery('');
+  };
+
+  const saveDiscoveryList = () => {
+    updateConfig((current) => ({ ...current, discoveryRelays: discovery }));
   };
 
   const addRelay = () => {
-    const url = newRelay.trim().replace(/\/$/, '') + '/';
-    if (!/^wss:\/\/\S+$/.test(url) || relays.some((r) => r.url === url)) return;
+    const url = normalizeRelayUrl(newRelay);
+    if (url === undefined || relays.some((r) => r.url === url)) return;
     setRelays((current) => [...current, { url, read: true, write: true }]);
     setNewRelay('');
   };
@@ -119,52 +154,37 @@ export const NetworkSection = () => {
           </ul>
         )}
 
-        <div className="flex gap-2 pt-1">
-          <input
-            className="min-w-0 flex-1 rounded-sm border bg-transparent px-2 py-1.5 font-mono text-xs"
-            placeholder="wss://relay.example.com"
-            value={newRelay}
-            onChange={(e) => setNewRelay(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && addRelay()}
-            spellCheck={false}
-          />
-          <button
-            type="button"
-            onClick={addRelay}
-            className="rounded-sm border px-3 py-1.5 text-xs font-medium hover:bg-accent"
-          >
-            add
-          </button>
-        </div>
+        <AddRelayRow value={newRelay} onChange={setNewRelay} onAdd={addRelay} />
 
         <div className="flex items-center gap-2 pt-1">
-          <button
-            type="button"
+          <Button
+            size="sm"
             onClick={publishList}
             disabled={!user || !dirty || publishState === 'publishing'}
-            className="rounded-sm bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40"
           >
             {publishState === 'publishing' ? 'publishing…' : 'publish list'}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
             onClick={() => {
               setRelays(userState.relayMetadata.relays);
               bumpRelaySync();
             }}
-            className="text-muted-foreground flex items-center gap-1 rounded-sm px-3 py-1.5 text-xs font-medium hover:bg-accent"
           >
             <RefreshCw className="size-3" />
             resync
-          </button>
+          </Button>
           {dirty && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
               onClick={() => setRelays(userState.relayMetadata.relays)}
-              className="text-muted-foreground rounded-sm px-3 py-1.5 text-xs font-medium hover:bg-accent"
             >
               discard
-            </button>
+            </Button>
           )}
           {publishState === 'done' && <span className="text-xs text-emerald-600">published</span>}
           {publishState === 'error' && <span className="text-xs text-red-500">publish failed</span>}
@@ -178,28 +198,33 @@ export const NetworkSection = () => {
         <h3 className="pt-4 text-xs font-medium text-muted-foreground">
           discovery relays — where this app looks up your lists (never feed content)
         </h3>
-        <textarea
-          className="min-h-28 w-full rounded-sm border bg-transparent p-3 font-mono text-xs"
-          value={draft ?? config.discoveryRelays.join('\n')}
-          onChange={(e) => setDraft(e.target.value)}
-          spellCheck={false}
-        />
-        {draft !== null && (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={saveDiscovery}
-              className="rounded-sm bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground"
+        {discovery.length === 0 ? (
+          <p className="text-muted-foreground text-sm">(empty)</p>
+        ) : (
+          <ul>
+            {discovery.map((url) => (
+              <RelayRow
+                key={url}
+                url={url}
+                onRemove={() => setDiscovery((current) => current.filter((x) => x !== url))}
+              />
+            ))}
+          </ul>
+        )}
+
+        <AddRelayRow value={newDiscovery} onChange={setNewDiscovery} onAdd={addDiscoveryRelay} />
+
+        {discoveryDirty && (
+          <div className="flex items-center gap-2 pt-1">
+            <Button size="sm" onClick={saveDiscoveryList}>save</Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-muted-foreground"
+              onClick={() => setDiscovery(config.discoveryRelays)}
             >
-              save
-            </button>
-            <button
-              type="button"
-              onClick={() => setDraft(null)}
-              className="text-muted-foreground rounded-sm px-4 py-1.5 text-sm font-medium hover:bg-accent"
-            >
-              cancel
-            </button>
+              discard
+            </Button>
           </div>
         )}
       </Section>
