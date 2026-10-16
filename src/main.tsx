@@ -3,8 +3,7 @@ import { createRoot } from 'react-dom/client';
 // Import polyfills first
 import './lib/polyfills.ts';
 
-import '@fontsource/fragment-mono/400.css';
-import '@fontsource/fragment-mono/400-italic.css';
+// No webfont imports: the app uses the system mono stack (see index.css).
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import App from './App.tsx';

@@ -125,6 +125,10 @@
   color: #000;
 }
 
+/* System mono only: no bundled webfont. A webfont in a textarea hit a
+ * GPU-raster bug on macOS (blank periods, all engines, inputs fine) —
+ * system families render through a healthy path everywhere. */
+
 @layer base {
   *,
   ::after,
@@ -136,6 +140,6 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: "Fragment Mono", ui-monospace, monospace;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 }
