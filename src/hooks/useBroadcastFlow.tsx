@@ -10,7 +10,13 @@ import type { NostrEvent } from '@nostrify/nostrify';
 export interface PendingBroadcast {
   grade: PrivacyGrade;
   label: string;
-  content: string;
+  /** Text payload: shown (and editable when `onEdit` exists) as the
+   *  note body. Omitted by non-text broadcasts, which pass `preview`. */
+  content?: string;
+  /** Structured preview body for non-text broadcasts (profile edits,
+   *  reactions, deletions, connection requests): rendered instead of
+   *  the text tabs. */
+  preview?: ReactNode;
   identityPubkey: string;
   identityNote?: string;
   relays: readonly string[];
@@ -62,6 +68,7 @@ export const useBroadcastFlow = (): {
       grade={pending.grade}
       label={pending.label}
       content={pending.content}
+      preview={pending.preview}
       identityPubkey={pending.identityPubkey}
       identityNote={pending.identityNote}
       relays={pending.relays}

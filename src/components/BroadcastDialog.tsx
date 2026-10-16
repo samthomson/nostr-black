@@ -33,13 +33,14 @@ export const BroadcastDialog = ({
   onOpenChange,
   grade,
   label,
-  content,
   layers,
+  controls,
   identityPubkey,
   identityNote,
   relays,
   extraRelays,
-  controls,
+  content,
+  preview,
   onEdit,
   onBroadcast,
   busy = false,
@@ -48,7 +49,10 @@ export const BroadcastDialog = ({
   onOpenChange: (open: boolean) => void;
   grade: PrivacyGrade;
   label: string;
-  content: string;
+  content?: string;
+  /** Structured preview for non-text broadcasts (profile edits,
+   *  reactions, deletions): rendered instead of the text tabs. */
+  preview?: ReactNode;
   layers: readonly EventLayer[];
   identityPubkey: string;
   identityNote?: string;
@@ -63,11 +67,15 @@ export const BroadcastDialog = ({
   const { metadata } = useProfile(burner ? undefined : identityPubkey);
   const displayName = metadata?.display_name || metadata?.name;
   const onTor = useIsTor();
-  // The edit tab only exists when the caller can revise the payload; the
-  // modal still opens on preview — reading before writing.
-  const tabs: readonly ('edit' | 'preview' | 'event')[] = onEdit
-    ? ['edit', 'preview', 'event']
-    : ['preview', 'event'];
+  // A text payload (content + optional edit tab) and a structured preview
+  // are mutually exclusive: one broadcast, one body. A structured preview
+  // needs no tab switcher at all — it is the body; the raw event stays
+  // one chip away, opt-in like everywhere else.
+  const tabs: readonly ('edit' | 'preview' | 'event')[] = preview
+    ? ['preview', 'event']
+    : onEdit
+      ? ['edit', 'preview', 'event']
+      : ['preview', 'event'];
   const [tab, setTab] = useState<'edit' | 'preview' | 'event'>('preview');
 
   /** Each switch to the edit tab mounts a fresh editor: focus it with the
@@ -128,10 +136,12 @@ export const BroadcastDialog = ({
               </button>
             ))}
           </div>
-
-          {/* The note content. */}
+          {/* The body: a structured preview for non-text broadcasts, the
+              text tabs (edit/preview/event) for text payloads. */}
           <div className="h-44 overflow-y-auto px-3 pt-1.5 pb-2">
-            {tab === 'preview' ? (
+            {preview && tab === 'preview' ? (
+              <div className="text-sm">{preview}</div>
+            ) : tab === 'preview' ? (
               <div className="text-sm break-words whitespace-pre-wrap">{content}</div>
             ) : tab === 'edit' ? (
               <textarea

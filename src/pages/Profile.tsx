@@ -1,18 +1,24 @@
 import { useSeoMeta } from '@unhead/react';
 import { Page } from '@/components/Page';
+import { ProfileEditDialog } from '@/components/ProfileEditDialog';
 import { FollowsDialog } from '@/components/FollowsDialog';
 import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
 import { Note } from '@/components/Note';
+import { ActivityItem } from '@/components/ActivityItem';
 import { useAuthorNotes } from '@/data/hooks/useAuthorNotes';
 import { useFollowers } from '@/data/hooks/useFollowers';
 import { useFollowList, useProfile, useRelayList } from '@/data/hooks/useProfile';
+import { useAuthorActivity } from '@/data/hooks/useAuthorActivity';
+import { useProfilePrivateNotes } from '@/data/hooks/useProfilePrivateNotes';
 import { npubOf } from '@/lib/format';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useAsset } from '@/hooks/useAsset';
 import { Card, CardContent } from '@/components/ui/card';
-import { NoteSkeleton } from '@/components/NoteSkeleton';
-import { useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { FeedSkeleton } from '@/components/NoteSkeleton';
+import { useMemo, useState } from 'react';
+import { Loader2, Pencil } from 'lucide-react';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { Button } from '@/components/ui/button';
 
 /** Banner image through the same media path as avatars. */
 const ProfileBanner = ({ url, onOpen }: { url: string | undefined; onOpen?: () => void }) => {
@@ -69,8 +75,18 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
   const notes = useAuthorNotes(pubkey);
   const follows = useFollowList(pubkey);
   const followers = useFollowers(pubkey);
+  const privateNotes = useProfilePrivateNotes(pubkey);
+  const activity = useAuthorActivity(pubkey);
 
+  const items = useMemo(() => [
+    ...notes.notes.map((event) => ({ id: event.id, ts: event.created_at, kind: 'note' as const, event })),
+    ...privateNotes.notes.map((note) => ({ id: note.wrapper.id, ts: note.rumor.created_at, kind: 'private' as const, note })),
+    ...activity.activity.map((event) => ({ id: event.id, ts: event.created_at, kind: 'activity' as const, event })),
+  ].sort((a, b) => b.ts - a.ts), [notes.notes, privateNotes.notes, activity.activity]);
   const [followsOpen, setFollowsOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const { user } = useCurrentUser();
+  const ownProfile = !!user && user.pubkey === pubkey;
   const displayName = about?.display_name || about?.name || `${npub.slice(0, 10)}…`;
   const uniqueRelays = new Set([...relayList.list.write, ...relayList.list.read]).size;
 
@@ -105,9 +121,22 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
               />
             )}
           </div>
-
           <div className="space-y-1">
-            <p className="truncate text-xl font-semibold">{displayName}</p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="min-w-0 truncate text-xl font-semibold">{displayName}</p>
+              {ownProfile && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setEditOpen(true)}
+                  aria-label="edit profile"
+                >
+                  <Pencil className="size-3.5" />
+                  edit
+                </Button>
+              )}
+            </div>
             {about?.nip05 && (
               <p className="text-muted-foreground truncate text-sm">{about.nip05}</p>
             )}
@@ -149,36 +178,35 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
         </div>
       </div>
 
-      {notes.pending && (
-        <div className="sticky top-0 z-10 -mx-1 flex items-center gap-2 rounded-sm border bg-background/95 px-3 py-2 text-xs text-muted-foreground backdrop-blur">
-          <Loader2 className="size-3.5 animate-spin" />
-          fetching events{notes.notes.length > 0 ? ` — ${notes.notes.length} so far` : '…'}
-        </div>
-      )}
-      {!notes.pending && notes.notes.length > 0 && (
-        <p className="px-1 text-xs text-muted-foreground">{notes.notes.length} notes</p>
+      {(notes.pending || privateNotes.pending || activity.pending) && items.length === 0 && <FeedSkeleton />}
+      {items.length > 0 && (
+        <p className="px-1 text-xs text-muted-foreground">{items.length} items</p>
       )}
 
-      {notes.notes.map((event) => <Note key={event.id} event={event} />)}
+      {items.map((item) =>
+        item.kind === 'note' ? (
+          <Note key={item.id} event={item.event} />
+        ) : item.kind === 'private' ? (
+          <Note key={item.id} event={item.note.rumor} wrapper={item.note.wrapper} />
+        ) : (
+          <ActivityItem key={item.id} event={item.event} />
+        ),
+      )}
 
-      {notes.pending &&
-        Array.from({ length: notes.notes.length > 0 ? 2 : 3 }, (_, i) => (
-          <NoteSkeleton key={`s${i}`} />
-        ))}
-
-      {!notes.pending && notes.notes.length === 0 && (
+      {!notes.pending && !privateNotes.pending && !activity.pending && items.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="px-8 py-12 text-center">
             <p className="text-muted-foreground mx-auto max-w-sm">
               {writeRelays.length === 0
                 ? "couldn't find where this author publishes (no NIP-65 list)"
-                : 'no notes found on their relays'}
+                : 'no activity found on their relays'}
             </p>
           </CardContent>
         </Card>
       )}
 
       <FollowsDialog followList={follows.event} open={followsOpen} onOpenChange={setFollowsOpen} />
+      {ownProfile && <ProfileEditDialog open={editOpen} onOpenChange={setEditOpen} />}
       {openMedia !== null && gallery[openMedia] && (
         <Lightbox
           urls={gallery}

@@ -24,18 +24,21 @@ const PrivateFeedBody = () => {
     );
   }
 
+  // The modal's edit handler re-previews with the same handlers attached —
+  // dropping them on recursion left the modal editor dead after one
+  // keystroke (the in-modal edit bug). Enqueue is the commit point: only
+  // then does the page draft clear, so cancelling hands the text back.
+  const handlers = {
+    onEdit: (next: string) => {
+      setDraft(next);
+      post(next, connectedPeers, handlers);
+    },
+    onEnqueued: () => setDraft(''),
+  };
+
   const submit = () => {
     if (!draft.trim() || connectedPeers.length === 0) return;
-    post(draft.trim(), connectedPeers, {
-      onEdit: (next) => {
-        setDraft(next);
-        post(next, connectedPeers);
-      },
-      // Enqueue is the commit point: only now does the page draft clear,
-      // so cancelling the modal hands the text back — same as the public
-      // composer.
-      onEnqueued: () => setDraft(''),
-    });
+    post(draft.trim(), connectedPeers, handlers);
   };
 
   const empty = (text: string) => (
