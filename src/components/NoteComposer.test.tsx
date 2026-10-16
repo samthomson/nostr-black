@@ -141,4 +141,33 @@ describe('NoteComposer', () => {
     expect((note as unknown as { content: string }).content).toBe('first pass');
     await waitFor(() => expect(box).toHaveValue(''));
   });
+
+  it('editing in the modal keeps the burner identity — never falls back to the real key', async () => {
+    const sk = generateSecretKey();
+    const identity = getPublicKey(sk);
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(sk)}>
+          <NoteComposer />
+        </Unlock>
+      </TestApp>,
+    );
+
+    const box = await screen.findByRole('textbox', { name: "what's happening?" });
+    await user.type(box, 'anon words');
+    await user.click(screen.getByRole('button', { name: 'broadcast' }));
+    await user.click(await screen.findByRole('switch', { name: 'broadcast via a burner' }));
+
+    // Edit the text in the modal after the toggle: the re-preview must
+    // still be signed by the burner, not revert to the real identity.
+    await user.click(screen.getByRole('tab', { name: 'edit' }));
+    await user.type(screen.getByRole('textbox', { name: 'edit note' }), ' more');
+    await confirmBroadcast(user);
+
+    await waitFor(() => expect(publish).toHaveBeenCalled());
+    const [note] = publish.mock.calls.at(-1)!;
+    expect(note.pubkey).not.toBe(identity);
+    expect((note as unknown as { content: string }).content).toBe('anon words more');
+  });
 });

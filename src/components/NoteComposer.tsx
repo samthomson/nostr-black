@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { nowSec } from '@/lib/timestamp';
 import { generateSecretKey, getPublicKey, finalizeEvent } from 'nostr-tools';
 import { rememberBurner } from '@/auth/burners';
@@ -10,7 +11,7 @@ import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { clientTag } from '@/lib/clientTag';
-import { DraftSwitch } from '@/components/BroadcastDialog';
+import { DraftAction, DraftSwitch } from '@/components/BroadcastDialog';
 
 /**
  * The public note composer: write, preview, broadcast. The burner toggle
@@ -25,15 +26,21 @@ export const NoteComposer = () => {
   const [draft, setDraft] = useState('');
   const [burnerSk, setBurnerSk] = useState<Uint8Array | null>(null);
 
+  // The live burner, readable from event handlers that fire after the
+  // pending preview was built (the modal's edit tab). Reading state here
+  // must never see a stale null — that would re-sign as the real identity.
+  const burnerRef = useRef(burnerSk);
+  useEffect(() => { burnerRef.current = burnerSk; }, [burnerSk]);
+
   if (!user || !sk) return null;
   // Broadcast targets are known before preview: our declared write set.
   const publishTargets = myWrite;
 
   /** The current preview for the draft as it stands. `nextBurner`
-   * overrides the state — the toggle knows the value it is switching to
-   * before React has applied it. */
+   * overrides the live value — the toggle/rotate know the key they are
+   * switching to before React has committed it. */
   const previewOf = (content: string, nextBurner?: Uint8Array | null): PendingBroadcast => {
-    const burner = nextBurner !== undefined ? nextBurner : burnerSk;
+    const burner = nextBurner !== undefined ? nextBurner : burnerRef.current;
     const pk = burner ? getPublicKey(burner) : null;
     return {
       grade: burner ? 'medium' : 'public',
@@ -47,7 +54,12 @@ export const NoteComposer = () => {
         <div className="flex flex-wrap items-center gap-4">
           <DraftSwitch on={burner !== null} onToggle={() => toggleBurner(content, burner)} label="burner" ariaLabel="broadcast via a burner" />
           {burner && (
-            <DraftSwitch on={true} onToggle={() => setBurnerSk(generateSecretKey())} label="new burner" ariaLabel="generate a new burner key" />
+            <DraftAction
+              icon={<RefreshCw className="size-3" />}
+              onClick={() => rotateBurner(content)}
+              label="new burner"
+              ariaLabel="generate a new burner key"
+            />
           )}
         </div>
       ),
@@ -65,6 +77,14 @@ export const NoteComposer = () => {
         setBurnerSk(null);
       },
     };
+  };
+
+  /** Rotating the burner re-previews like every other draft change: new
+   * key, re-signed event — never a stale identity on screen. */
+  const rotateBurner = (content: string) => {
+    const next = generateSecretKey();
+    setBurnerSk(next);
+    request(previewOf(content, next));
   };
 
   /** Toggling re-previews in place: new identity, greyer grade,

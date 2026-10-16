@@ -202,10 +202,23 @@ export const BroadcastDialog = ({
 
             <DraftRow label="as">
               <div className="flex min-w-0 flex-wrap items-center gap-1">
-                <Chip>{burner ? 'burner' : (displayName ?? 'anon')}</Chip>
-                <Chip>{shortNpub(identityPubkey, 24)}</Chip>
-                {!burner && identityNote && (
-                  <span className="font-mono text-[10px] leading-none opacity-50">{identityNote}</span>
+                {identityNote === 'burner-signed' ? (
+                  // A sealed broadcast has two faces: relays see a burner,
+                  // the connections who open it see you.
+                  <>
+                    <Chip>burner</Chip>
+                    <span className="font-mono text-[10px] leading-none opacity-50">publicly ·</span>
+                    <Chip>{shortNpub(identityPubkey, 24)}</Chip>
+                    <span className="font-mono text-[10px] leading-none opacity-50">to connections</span>
+                  </>
+                ) : (
+                  <>
+                    <Chip>{burner ? 'burner' : (displayName ?? 'anon')}</Chip>
+                    <Chip>{shortNpub(identityPubkey, 24)}</Chip>
+                    {!burner && identityNote && (
+                      <span className="font-mono text-[10px] leading-none opacity-50">{identityNote}</span>
+                    )}
+                  </>
                 )}
               </div>
               {controls && <div className="w-full">{controls}</div>}
@@ -289,6 +302,33 @@ export const DraftSwitch = ({
       />
     </span>
     <span className="opacity-50">{label}</span>
+  </button>
+);
+
+/**
+ * An action inside the draft (not a state): same size and fg-tint as the
+ * switches and chips, with an icon beside its label.
+ */
+export const DraftAction = ({
+  icon,
+  onClick,
+  label,
+  ariaLabel,
+}: {
+  icon: React.ReactNode;
+  onClick: () => void;
+  label: string;
+  ariaLabel?: string;
+}) => (
+  <button
+    type="button"
+    aria-label={ariaLabel ?? label}
+    onClick={onClick}
+    className="flex cursor-pointer items-center gap-1 rounded-sm px-1.5 py-0.5 font-mono text-[10px] leading-none opacity-80 transition-opacity hover:opacity-100"
+    style={{ backgroundColor: 'color-mix(in srgb, currentColor 8%, transparent)' }}
+  >
+    {icon}
+    {label}
   </button>
 );
 
