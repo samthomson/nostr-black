@@ -279,17 +279,16 @@ describe('Note', () => {
       'https://example.com/a.png',
     );
   });
-  it('renders a longform as title, summary and cover image — never raw markdown', async () => {
+  it('renders a longform as title, stripped body (clamped like a note) and cover — never raw markdown', async () => {
     const event = finalizeEvent({
       kind: 30023,
       created_at: Math.floor(Date.now() / 1000),
       tags: [
         ['d', 'a-longform'],
         ['title', 'the article headline'],
-        ['summary', 'one-paragraph summary of the piece'],
         ['image', 'https://example.com/cover.jpg'],
       ],
-      content: '# raw markdown heading\n\nbody text with **emphasis**',
+      content: `# raw markdown heading\n\n${'a long body paragraph. '.repeat(40)}`,
     }, generateSecretKey());
 
     render(
@@ -299,12 +298,12 @@ describe('Note', () => {
     );
 
     expect(await screen.findByText('the article headline')).toBeTruthy();
-    expect(await screen.findByText('one-paragraph summary of the piece')).toBeTruthy();
-    // the markdown body never leaks into the preview
-    expect(screen.queryByText(/raw markdown heading/)).toBeNull();
+    // markdown markers are stripped; the body shows as prose
+    expect(screen.queryByText(/#/)).toBeNull();
+    expect(screen.getByText(/a long body paragraph/)).toBeTruthy();
+    // long body clamps with a read more, like every note
+    expect(screen.getByRole('button', { name: /read more/ })).toBeTruthy();
     // the cover rides in the media grid, clickable into the lightbox
-    const cover = document.querySelector('img[alt="a-longform"], img[alt="image from a followed author"]');
-    expect(cover).toBeTruthy();
     expect(screen.getAllByRole('button', { name: 'open image' })).toHaveLength(1);
   });
 });

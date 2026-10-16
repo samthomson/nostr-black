@@ -295,8 +295,30 @@ describe('event wants', () => {
     await scheduler.flush();
 
     const calls = queryRelay.mock.calls.filter(([, filters]) => filters[0].ids);
-    expect(calls.map(([url]) => url).sort()).toEqual(['wss://hint/', 'wss://mine/']);
+    // hint + ours + discovery: a bare id without hints can only be found
+    // by asking broadly once the targeted tiers miss.
+    expect(calls.map(([url]) => url).sort()).toEqual(['wss://discovery/', 'wss://hint/', 'wss://mine/']);
     expect(calls.every(([, filters]) => filters[0].ids?.[0] === id)).toBe(true);
+  });
+
+  it('an addressable longform in the store opens by id without any relay round-trip', async () => {
+    const { store } = build();
+    const id = 'a'.repeat(64);
+    const longform: NostrEvent = {
+      id,
+      pubkey: 'b'.repeat(64),
+      kind: 30023,
+      tags: [['d', 'a-longform'], ['title', 'the headline']],
+      content: 'body',
+      created_at: 1,
+      sig: 's',
+    };
+
+    store.ingest([longform], 'wss://feed-relay/');
+    // the feed put it in the store; opening by id must find it there —
+    // keyed addressable, aliased at event:id — with no relay round-trip.
+    expect(store.getEvent(id)).toEqual(longform);
+    expect(store.get(`event:${id}`).foundOn).toEqual(['wss://feed-relay/']);
   });
 });
 

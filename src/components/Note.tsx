@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { nowSec } from '@/lib/timestamp';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { nip10, nip19 } from 'nostr-tools';
 import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat, Trash2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -9,6 +9,7 @@ import { useProfile } from '@/data/hooks/useProfile';
 import { useEvent } from '@/data/hooks/useEvent';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Card, CardContent } from '@/components/ui/card';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
 import { EventInfoDialog } from '@/components/EventInfoDialog';
 import { Chip, RelayPill, RoutePill } from '@/components/Pills';
@@ -19,7 +20,6 @@ import { useAsset } from '@/hooks/useAsset';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { profileHref, eventHref, npubOf, formatTimestamp } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { clientTag as clientTagOf } from '@/lib/clientTag';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
@@ -32,6 +32,14 @@ import { mediaUrls, MEDIA_URL, VIDEO_URL } from '@/lib/mediaUrls';
 const CLAMP_THRESHOLD = 420;
 /** More images than this and the note is collapsed; stacks dominate screens. */
 const IMAGE_CLAMP_COUNT = 2;
+
+/** Markdown reduced to plain prose for preview contexts. */
+const stripMd = (md: string): string => md
+  .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+  .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+  .replace(/^#{1,6}\s+/gm, '')
+  .replace(/[*_`>~]/g, '')
+  .trim();
 /** Link/accent color for a privacy-graded surface: maroon on white
  * (public), primary (near-white) on black (private). */
 const refClass = (grade: PrivacyGrade): string =>
@@ -445,6 +453,17 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
     onEdit(content);
     setEditing(false);
   };
+
+  const navigate = useNavigate();
+  const selfHref = eventHref(event.id, event.pubkey, foundOn ?? []);
+  /** The note body opens the note — unless the click landed on something
+   *  interactive (links, media, actions) or the user is selecting text. */
+  const openSelf = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('a, button')) return;
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) return;
+    if (selfHref) navigate(selfHref);
+  };
   const displayName = metadata?.display_name || metadata?.name;
   const npub = npubOf(event.pubkey);
   const href = profileHref(event.pubkey);
@@ -455,13 +474,12 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const longformTitle = isLongform
     ? event.tags.find(([n]) => n === 'title')?.[1]
     : undefined;
-  // Longform preview: the summary replaces the raw markdown body; the
-  // title renders as a heading and the cover lands in the media grid.
+  // Longform preview: the markdown stripped to prose, clamped like any
+  // other note (fade + read more). The title renders as a heading and
+  // the cover lands in the media grid.
   const renderedText = embedded
     ? embedded.content
-    : (event.kind === 30023
-        ? (event.tags.find(([n]) => n === 'summary')?.[1] ?? event.content)
-        : event.content);
+    : (event.kind === 30023 ? stripMd(event.content) : event.content);
   const clampable =
     !embedded && (renderedText.length > CLAMP_THRESHOLD || allMedia.length > IMAGE_CLAMP_COUNT);
   const kindLabel = KIND_LABELS[event.kind];
@@ -629,7 +647,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
 
           {/* Body: hard max-height with a bottom fade when collapsed — no
               note may dominate the screen, whatever its text or images. */}
-          <div className="relative">
+          <div className="relative cursor-pointer" onClick={openSelf}>
             <div className={clampable && !expanded ? 'max-h-80 overflow-hidden' : ''}>
               {isLongform && longformTitle && (
                 <p className="text-base font-semibold leading-snug">{longformTitle}</p>
@@ -687,7 +705,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
                 pending={feed.pending}
                 capped={feed.capped}
                 onReplies={onReplies}
-                href={linkReplies ? eventHref(event.id, event.pubkey) : undefined}
+                href={linkReplies ? selfHref : undefined}
               />
               {/* zaps: no send/receive yet — the row ships without it
               <Count icon={<Zap className="size-4" />} count={...} label="zaps" /> */}

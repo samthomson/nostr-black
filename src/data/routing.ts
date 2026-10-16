@@ -187,6 +187,10 @@ export const relayPlan = (intent: Intent, ctx: RoutingContext): RelayPlan => {
       tiers.push(uniform(myReadRelays(ctx), [intent.id]));
       const write = authorWrite(ctx, intent.author);
       if (write.length > 0) tiers.push(uniform(write, [intent.id]));
+      // Discovery last: an id without relay hints can only be found by
+      // asking broadly once the targeted tiers miss — longforms and other
+      // kinds published on outboxes we don't have mapped.
+      tiers.push(uniform(clean(ctx.discovery), [intent.id]));
       return { tiers };
     }
 

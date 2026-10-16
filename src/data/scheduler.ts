@@ -259,6 +259,14 @@ export const createScheduler = (
     const key = wantKey(want);
     if (inflight.has(key) || fresh(want)) return;
 
+    // Re-asking a missed event reopens the question: the UI pends while
+    // this run is in flight instead of showing the earlier miss. A miss
+    // is not a verdict — relays back off, connections race cold starts.
+    if (want.type === 'event') {
+      const entity = wantEntity(want);
+      if (entity && target.get(entity).settledAt !== undefined) target.unsettle(entity);
+    }
+
     const queued = pending.get(key);
     if (queued) {
       // Already queued: the most urgent caller wins.

@@ -1,5 +1,7 @@
 import { nip19 } from 'nostr-tools';
 import { useParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { scheduler } from '@/data/scheduler';
 import { useEvent } from '@/data/hooks/useEvent';
 import { Note } from '@/components/Note';
 import { Thread } from '@/components/Thread';
@@ -31,10 +33,22 @@ const EventPage = ({ identifier }: { identifier: string }) => {
   const decoded = nip19.decode(identifier);
   const pointer = pointerOf(decoded);
   const author = decoded.type === 'nevent' ? decoded.data.author : undefined;
+  const [attempt, setAttempt] = useState(0);
   const { event, pending: isLoading } = useEvent(pointer?.id, {
     author,
     hints: pointer?.relays,
   });
+
+  // A miss is not a verdict: relays back off and connections race cold
+  // starts, so re-ask twice before showing the empty state.
+  useEffect(() => {
+    if (!pointer || isLoading || event || attempt >= 2) return;
+    const timer = setTimeout(() => {
+      setAttempt((a) => a + 1);
+      scheduler.want({ type: 'event', id: pointer.id, author, hints: pointer.relays }, 'interactive');
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isLoading, event, attempt, author, pointer]);
 
   if (isLoading) {
     return <NoteSkeleton />;

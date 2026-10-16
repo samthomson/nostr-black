@@ -16,6 +16,8 @@ export const mediaUrls = (event: NostrEvent | Rumor): string[] => {
       const url = [value, ...rest].find((p) => p.startsWith('url '))?.slice(4);
       if (url) urls.push(url);
     }
+    // NIP-23 longform cover — the article's own image tag.
+    if (name === 'image' && value && MEDIA_URL.test(value)) urls.push(value);
   }
   for (const token of event.content.split(/\s+/)) {
     if (/^https?:\/\//.test(token) && MEDIA_URL.test(token)) urls.push(token);

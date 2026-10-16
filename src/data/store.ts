@@ -59,7 +59,6 @@ export interface EntityState {
   readonly foundOn?: readonly string[];
 }
 
-const EMPTY: EntityState = Object.freeze({});
 
 export interface TimeRange {
   since?: number;
@@ -112,6 +111,8 @@ export interface EventStore {
   restore(records: readonly { event: NostrEvent; foundOn: readonly string[] }[]): void;
   /** Mark a fetch as finished for these entities, whether or not it found anything. */
   settle(keys: Iterable<EntityKey>, at?: number): void;
+  /** Re-open a settled entity — the UI pends while the next fetch runs. */
+  unsettle(key: EntityKey): void;
   subscribe(key: EntityKey, onChange: () => void): () => void;
   /**
    * Store-wide mutations. Persist uses this; per-key `subscribe` is for
@@ -121,6 +122,8 @@ export interface EventStore {
   /** Drop everything. Subscribers are told, so nothing renders stale data. */
   clear(): void;
 }
+
+const EMPTY_ENTITY: EntityState = Object.freeze({});
 
 export const createStore = (): EventStore => {
   const entities = new Map<EntityKey, EntityState>();
@@ -203,15 +206,24 @@ export const createStore = (): EventStore => {
       : [...foundOn];
 
     entities.set(key, { event, settledAt: current?.settledAt, foundOn: merged });
-    return { key, refs: indexRefs(event) };
+    // Replaceable/addressable events also live at their id key: opening a
+    // note by id (the thread page) must find the feed's copy in the store
+    // instead of re-resolving it from relays.
+    const refs = indexRefs(event);
+    const idKey = eventKey(event.id);
+    if (idKey !== key) {
+      const byId = entities.get(idKey);
+      entities.set(idKey, { event, settledAt: byId?.settledAt, foundOn: merged });
+      refs.push(idKey);
+    }
+    return { key, refs };
   };
-
-  const get = (key: EntityKey): EntityState => entities.get(key) ?? EMPTY;
 
   const ingest = (events: readonly NostrEvent[], from: string): void => {
     const changed = new Set<EntityKey>();
 
     const refTargets = new Set<EntityKey>();
+
 
     for (const event of events) {
       if (isEphemeral(event.kind)) continue;
@@ -240,10 +252,11 @@ export const createStore = (): EventStore => {
       for (const ref of result.refs) refTargets.add(ref);
       applyDeletion(event, changed);
     }
-
     notify(changed);
     notify(refTargets);
   };
+
+  const get = (key: EntityKey): EntityState => entities.get(key) ?? EMPTY_ENTITY;
 
   const settle = (keys: Iterable<EntityKey>, at: number = Date.now()): void => {
     const changed = new Set<EntityKey>();
@@ -254,6 +267,15 @@ export const createStore = (): EventStore => {
       changed.add(key);
     }
     notify(changed);
+  };
+
+  /** Re-open a settled entity: the next fetch is in flight and the UI
+   *  should pend again rather than show a stale miss. */
+  const unsettle = (key: EntityKey): void => {
+    const current = get(key);
+    if (current.settledAt === undefined) return;
+    entities.set(key, { ...current, settledAt: undefined });
+    notify(new Set([key]));
   };
 
   const clear = (): void => {
@@ -270,6 +292,7 @@ export const createStore = (): EventStore => {
     ingest,
     restore,
     settle,
+    unsettle,
     watch: (listener) => {
       watchers.add(listener);
       return () => watchers.delete(listener);
@@ -304,25 +327,31 @@ export const createStore = (): EventStore => {
 
     queryByKind: (kind) => {
       const out: NostrEvent[] = [];
+      const seen = new Set<string>();
       for (const { event } of entities.values()) {
-        if (event?.kind === kind) out.push(event);
+        // one event can live at two keys (addressable + its id alias)
+        if (event?.kind === kind && !seen.has(event.id)) {
+          seen.add(event.id);
+          out.push(event);
+        }
       }
       return out;
     },
-
     summary: () => {
       let events = 0;
       let replaceable = 0;
       let addressable = 0;
+      const seen = new Set<string>();
       for (const [key, state] of entities) {
-        if (!state.event) continue;
+        if (!state.event || seen.has(state.event.id)) continue;
+        // the id alias is a lookup aid, not a second entity
+        seen.add(state.event.id);
         if (key.startsWith('event:')) events += 1;
         else if (key.startsWith('replaceable:')) replaceable += 1;
         else if (key.startsWith('addressable:')) addressable += 1;
       }
       return { events, replaceable, addressable };
     },
-
     getRefs: (targetId) => refs.get(targetId) ?? new Set<string>(),
 
     subscribe: (key, onChange) => {
