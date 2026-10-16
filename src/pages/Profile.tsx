@@ -4,12 +4,14 @@ import { ProfileEditDialog } from '@/components/ProfileEditDialog';
 import { FollowsDialog } from '@/components/FollowsDialog';
 import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
 import { Note } from '@/components/Note';
+import { PrivateNote } from '@/components/PrivateNote';
 import { ActivityItem } from '@/components/ActivityItem';
 import { useAuthorNotes } from '@/data/hooks/useAuthorNotes';
 import { useFollowers } from '@/data/hooks/useFollowers';
 import { useFollowList, useProfile, useRelayList } from '@/data/hooks/useProfile';
 import { useAuthorActivity } from '@/data/hooks/useAuthorActivity';
 import { useProfilePrivateNotes } from '@/data/hooks/useProfilePrivateNotes';
+import { usePrivateActions } from '@/hooks/usePrivateActions';
 import { npubOf } from '@/lib/format';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useAsset } from '@/hooks/useAsset';
@@ -71,7 +73,7 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
   const { metadata: about, pending: waitingMetadata } = useProfile(pubkey);
   const relayList = useRelayList(pubkey);
   const writeRelays = relayList.list.write;
-
+  const { dialog, reply, react, edit, editReply, remove } = usePrivateActions();
   const notes = useAuthorNotes(pubkey);
   const follows = useFollowList(pubkey);
   const followers = useFollowers(pubkey);
@@ -80,9 +82,9 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
 
   const items = useMemo(() => [
     ...notes.notes.map((event) => ({ id: event.id, ts: event.created_at, kind: 'note' as const, event })),
-    ...privateNotes.notes.map((note) => ({ id: note.wrapper.id, ts: note.rumor.created_at, kind: 'private' as const, note })),
+    ...privateNotes.posts.map((post) => ({ id: post.note.wrapper.id, ts: post.note.rumor.created_at, kind: 'private' as const, post })),
     ...activity.activity.map((event) => ({ id: event.id, ts: event.created_at, kind: 'activity' as const, event })),
-  ].sort((a, b) => b.ts - a.ts), [notes.notes, privateNotes.notes, activity.activity]);
+  ].sort((a, b) => b.ts - a.ts), [notes.notes, privateNotes.posts, activity.activity]);
   const [followsOpen, setFollowsOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const { user } = useCurrentUser();
@@ -187,7 +189,19 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
         item.kind === 'note' ? (
           <Note key={item.id} event={item.event} />
         ) : item.kind === 'private' ? (
-          <Note key={item.id} event={item.note.rumor} wrapper={item.note.wrapper} />
+          <PrivateNote
+            key={item.id}
+            note={item.post.note}
+            history={item.post.history}
+            replies={item.post.replies}
+            conversation={item.post.conversation}
+            open={false}
+            onReply={reply}
+            onReact={(note, target, emoji) => react(note, target, item.post.conversation, emoji)}
+            onEdit={edit}
+            onEditReply={editReply}
+            onDelete={remove}
+          />
         ) : (
           <ActivityItem key={item.id} event={item.event} />
         ),
@@ -207,6 +221,7 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
 
       <FollowsDialog followList={follows.event} open={followsOpen} onOpenChange={setFollowsOpen} />
       {ownProfile && <ProfileEditDialog open={editOpen} onOpenChange={setEditOpen} />}
+      {dialog}
       {openMedia !== null && gallery[openMedia] && (
         <Lightbox
           urls={gallery}
