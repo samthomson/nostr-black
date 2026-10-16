@@ -7,14 +7,14 @@ type ComposerVariant = 'public' | 'private';
 
 const COMPOSER: Record<ComposerVariant, { placeholder: string; ariaLabel: string; grade: PrivacyGrade; card: string }> = {
   public: {
-    placeholder: 'what are you doing?',
-    ariaLabel: 'what are you doing?',
+    placeholder: "what's happening?",
+    ariaLabel: "what's happening?",
     grade: 'public',
     card: 'bg-privacy-public text-privacy-private',
   },
   private: {
-    placeholder: "what's going on?",
-    ariaLabel: "what's going on?",
+    placeholder: 'what are you doing?',
+    ariaLabel: 'what are you doing?',
     grade: 'private',
     card: 'bg-privacy-private text-privacy-public',
   },
