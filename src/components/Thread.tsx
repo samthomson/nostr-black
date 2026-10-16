@@ -16,8 +16,8 @@ export const Thread = ({ parent, author }: { parent: string; author?: string }) 
     return (
       <div className="space-y-3">
         {Array.from({ length: 2 }, (_, i) => (
-          <Card key={i}>
-            <CardContent className="flex gap-3 p-4">
+          <Card key={i} className="py-0">
+            <CardContent className="flex gap-3 px-4 py-3">
               <Skeleton className="size-8 shrink-0 rounded-sm" />
               <div className="w-full space-y-1.5">
                 <Skeleton className="h-2.5 w-20" />

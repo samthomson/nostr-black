@@ -521,8 +521,8 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
 
   return (
-    <Card>
-      <CardContent className="flex gap-3 p-4">
+    <Card className="py-0">
+      <CardContent className="flex gap-3 px-4 py-3">
         <ProfileAvatar
           pubkey={event.pubkey}
           metadata={metadata}
