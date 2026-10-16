@@ -32,12 +32,12 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
 
   const profileTo = user ? profileHref(user.pubkey) : undefined;
   // Privacy is colour: the public feed is white, the private feed black,
-  // encrypted connections near-black; your profile carries no grade.
+  // encrypted connections near-black; your profile is a public page.
   const nav: NavItem[] = [
     { to: '/', label: 'feed', Icon: House, grade: 'public' },
     { to: '/private', label: 'private feed', Icon: Lock, grade: 'private' },
     { to: '/connections', label: 'connections', Icon: Users, grade: 'high' },
-    ...(profileTo ? [{ to: profileTo, label: 'profile', Icon: User }] : []),
+    ...(profileTo ? [{ to: profileTo, label: 'profile', Icon: User, grade: 'public' as const }] : []),
     { to: '/settings', label: 'settings', Icon: Settings },
     { to: '/debug', label: 'debug', Icon: Bug },
   ];
