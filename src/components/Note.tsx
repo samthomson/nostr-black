@@ -651,7 +651,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
                   {referenceId}
                 </Link>
               ) : (
-                <div className="whitespace-pre-wrap break-words text-sm text-foreground/70">
+                <div className="whitespace-pre-wrap break-words text-sm">
                   {renderContent(renderedText)}
                 </div>
               )}
