@@ -60,6 +60,10 @@ export const hostOf = (url: string): string => {
 /** Short `aaaa…bbbb` form for long hex strings. */
 export const shortHex = (hex: string): string => `${hex.slice(0, 8)}…${hex.slice(-4)}`;
 
+/** Middle-clipped `aaaa…bbbb` — both ends stay identifiable (npubs, event ids). */
+export const clipMiddle = (s: string, head = 10, tail = 5): string =>
+  s.length <= head + tail + 1 ? s : `${s.slice(0, head)}…${s.slice(-tail)}`;
+
 /**
  * Feed timestamp: relative, plus absolute for context.
  *   "42s · 8:21pm" (today) — "3h · 8:21pm" — "2d · Tue 5:04pm" — "3w · 12 Mar"
