@@ -132,6 +132,14 @@ export const wantKey = (want: Want): string => {
   }
 };
 
+/**
+ * The synthetic store entity whose settle means "this want's first run
+ * finished" — the only observable for aggregates (engagement, thread):
+ * their data lives in the ref index, not an entity. UI pending-state
+ * reads settle on this key.
+ */
+export const settleOf = (target: string): EntityKey => `engagement:${target}`;
+
 /** The store entity a want settles on. Aggregates use synthetic keys. */
 export const wantEntity = (want: Want): EntityKey | undefined => {
   switch (want.type) {
@@ -144,9 +152,7 @@ export const wantEntity = (want: Want): EntityKey | undefined => {
     case 'addressable':
       return addressableKey(want.kind, want.pubkey, want.d);
     case 'engagement':
-      // Synthetic, like thread: the want settling is the only observable —
-      // the counts themselves live in the ref index, not an entity.
-      return `engagement:${want.target}`;
+      return settleOf(want.target);
     case 'thread':
       return `thread:${want.parent}`;
     case 'authorNotes':

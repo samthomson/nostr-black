@@ -13,9 +13,7 @@ import type { EventStore } from './store';
 /** Direct responses: both reply formats, reactions, reposts, zaps. */
 export const ENGAGEMENT_KINDS = [1, 1111, 6, 16, 7, 9735] as const;
 
-/** Which tallies the UI still shows; reactions and reposts list live
- * (`useReactions` / `useReposts`) rather than count here. */
-export const COUNTED_KINDS = [1, 1111, 9735] as const;
+
 
 /**
  * Per-target fetch cap. Hitting it means the number is a floor — the UI
@@ -75,11 +73,6 @@ export interface Reaction {
   created_at: number;
 }
 
-/**
- * The reactions on one target, deduped the NIP-25 way: one person, many
- * kind 7s — the reader cares about people, so an author's latest
- * reaction is the one that counts. Newest reactors first.
- */
 export interface Repost {
   /** Who reposted. */
   pubkey: string;
@@ -88,18 +81,40 @@ export interface Repost {
   created_at: number;
 }
 
+/** A list with its completeness: `capped` means the fetch that filled
+ * the ref index hit its per-target limit, so what we hold is a floor —
+ * the count must render `N+`, never a precise number we cannot know. */
+export interface EngagementList<T> {
+  items: readonly T[];
+  capped: boolean;
+}
+
+/** True when a relay served exactly the fetch cap — the honest signal
+ * that more may exist beyond what we hold. */
+const hitFetchCap = (events: readonly NostrEvent[]): boolean =>
+  events.length >= REACTION_CAP;
+
 /** The reposts on one target, newest first. */
-export const repostsOf = (target: EventStore, id: string): readonly Repost[] => {
-  const out: Repost[] = [];
+export const repostsOf = (target: EventStore, id: string): EngagementList<Repost> => {
+  const events: NostrEvent[] = [];
   for (const ref of target.getRefs(id)) {
     const event = target.getEvent(ref);
-    if (!event || (event.kind !== 6 && event.kind !== 16)) continue;
-    out.push({ id: event.id, pubkey: event.pubkey, created_at: event.created_at });
+    if (event && (event.kind === 6 || event.kind === 16)) events.push(event);
   }
-  return out.sort((a, b) => b.created_at - a.created_at);
+  return {
+    items: events
+      .sort((a, b) => b.created_at - a.created_at)
+      .map((event) => ({ id: event.id, pubkey: event.pubkey, created_at: event.created_at })),
+    capped: hitFetchCap(events),
+  };
 };
 
-export const reactionsOf = (target: EventStore, id: string): readonly Reaction[] => {
+/**
+ * The reactions on one target, deduped the NIP-25 way: one person, many
+ * kind 7s — the reader cares about people, so an author's latest
+ * reaction is the one that counts. Newest reactors first.
+ */
+export const reactionsOf = (target: EventStore, id: string): EngagementList<Reaction> => {
   const latest = new Map<string, NostrEvent>();
   for (const ref of target.getRefs(id)) {
     const event = target.getEvent(ref);
@@ -107,7 +122,10 @@ export const reactionsOf = (target: EventStore, id: string): readonly Reaction[]
     const held = latest.get(event.pubkey);
     if (!held || event.created_at >= held.created_at) latest.set(event.pubkey, event);
   }
-  return [...latest.values()]
-    .sort((a, b) => b.created_at - a.created_at)
-    .map((event) => ({ id: event.id, pubkey: event.pubkey, content: event.content, created_at: event.created_at }));
+  return {
+    items: [...latest.values()]
+      .sort((a, b) => b.created_at - a.created_at)
+      .map((event) => ({ id: event.id, pubkey: event.pubkey, content: event.content, created_at: event.created_at })),
+    capped: hitFetchCap([...latest.values()]),
+  };
 };

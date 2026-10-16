@@ -7,15 +7,13 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import type { Rumor } from '@/lib/feedEncryption';
 import { useProfile } from '@/data/hooks/useProfile';
 import { useEvent } from '@/data/hooks/useEvent';
-import { useEngagement } from '@/data/hooks/useEngagement';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { EventInfoDialog } from '@/components/EventInfoDialog';
 import { RelayPill, RoutePill } from '@/components/Pills';
 import { EngagementCount } from '@/components/EngagementDialog';
-import { useReactions } from '@/data/hooks/useReactions';
-import { useReposts } from '@/data/hooks/useReposts';
+import { useEngagementFeed } from '@/data/hooks/useEngagementFeed';
 import { NoteEditor } from '@/components/NoteEditor';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useAsset } from '@/hooks/useAsset';
@@ -367,7 +365,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   // queue, signed by the session signer. Clicking again takes it back.
   const confirmRepost = async () => {
     if (reposted) {
-      const mine = reposts.find((r) => r.pubkey === user!.pubkey)!;
+      const mine = feed.reposts.find((r) => r.pubkey === user!.pubkey)!;
       const deletion = await user!.signer.signEvent({
         kind: 5, content: '', tags: [['e', mine.id]], created_at: nowSec(),
       });
@@ -458,11 +456,9 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
     ...(foundOn ?? []),
   ];
   const parent = useEvent(parentId, { author: taggedAuthor, hints: parentHints });
-  const engagement = useEngagement(isPrivate ? undefined : event.id);
-  const reactions = useReactions(isPrivate ? undefined : event.id);
-  const reposts = useReposts(isPrivate ? undefined : event.id);
-  const reposted = !!user && reposts.some((r) => r.pubkey === user.pubkey);
-  const reacted = !!user && reactions.some((r) => r.pubkey === user.pubkey);
+  const feed = useEngagementFeed(isPrivate ? undefined : event.id);
+  const reposted = !!user && feed.reposts.some((r) => r.pubkey === user.pubkey);
+  const reacted = !!user && feed.reactions.some((r) => r.pubkey === user.pubkey);
 
   // A reaction is a broadcast like everything else: the heart opens the
   // modal (pre-filled with the chosen emoji), confirmation enqueues. The
@@ -470,7 +466,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   const react = async (emoji: string) => {
     if (!user) return;
     const target = event as NostrEvent;
-    const mine = reactions.find((r) => r.pubkey === user.pubkey);
+    const mine = feed.reactions.find((r) => r.pubkey === user.pubkey);
     if (mine) {
       const deletion = await user.signer.signEvent({
         kind: 5, content: '', tags: [['e', mine.id]], created_at: nowSec(),
@@ -628,9 +624,9 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
           {!isPrivate && (
             <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
               <ReplyCount
-                replies={engagement.replies}
-                pending={engagement.pending}
-                capped={engagement.capped}
+                replies={feed.replies}
+                pending={feed.pending}
+                capped={feed.capped}
                 onReplies={onReplies}
                 href={linkReplies ? eventHref(event.id, event.pubkey) : undefined}
               />
@@ -638,23 +634,25 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
               <Count icon={<Zap className="size-4" />} count={...} label="zaps" /> */}
               <EngagementCount
                 icon={<Repeat2 className="size-4" />}
-                count={reposts.length}
-                pending={engagement.pending}
+                count={feed.reposts.length}
+                capped={feed.repostsCapped}
+                pending={feed.pending}
                 mine={reposted}
                 tab="reposts"
-                reactions={reactions}
-                reposts={reposts}
+                reactions={feed.reactions}
+                reposts={feed.reposts}
                 onEngage={() => void confirmRepost()}
                 ariaLabel="repost"
               />
               <EngagementCount
                 icon={<Heart className={cn('size-4', reacted && 'fill-current')} />}
-                count={reactions.length}
-                pending={engagement.pending}
+                count={feed.reactions.length}
+                capped={feed.reactionsCapped}
+                pending={feed.pending}
                 mine={reacted}
                 tab="reactions"
-                reactions={reactions}
-                reposts={reposts}
+                reactions={feed.reactions}
+                reposts={feed.reposts}
                 onEngage={() => void react(config.defaultReaction)}
                 onChoose={(emoji) => void react(emoji)}
                 ariaLabel="react"

@@ -53,6 +53,7 @@ const PrivateItem = ({
         <EngagementCount
           icon={<Heart className={cn('size-4', !!user && reactions.some((r) => r.pubkey === user.pubkey) && 'fill-current')} />}
           count={reactions.length}
+          capped={false}
           pending={false}
           mine={!!user && reactions.some((r) => r.pubkey === user.pubkey)}
           tab="reactions"

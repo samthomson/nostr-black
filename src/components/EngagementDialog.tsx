@@ -116,6 +116,7 @@ export const EngagementDialog = ({
 export const EngagementCount = ({
   icon,
   count,
+  capped,
   pending,
   mine,
   tab,
@@ -128,6 +129,8 @@ export const EngagementCount = ({
 }: {
   icon: React.ReactNode;
   count: number;
+  /** The fetch hit its cap — the number is a floor, so it renders `N+`. */
+  capped: boolean;
   /** The engagement want has not finished a run — the number is unknown. */
   pending: boolean;
   /** True when the current user's own engagement is on the note. */
@@ -192,7 +195,7 @@ export const EngagementCount = ({
       >
         {pending
           ? <Loader2 className="size-3 animate-spin" />
-          : <span className="text-xs underline underline-offset-2">{count}</span>}
+          : <span className="text-xs underline underline-offset-2">{capped ? `${count}+` : count}</span>}
       </button>
 
       {pickerOpen && (

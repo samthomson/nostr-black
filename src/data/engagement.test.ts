@@ -74,9 +74,34 @@ describe('reactionsOf merge', () => {
       reaction('c'.repeat(64), '❤', 150, '3'.repeat(64)),
     ];
     store.ingest(theirs, 'wss://relay/');
-    expect(reactionsOf(store, 'e'.repeat(64)).map((r) => r.pubkey)).toEqual(
+    expect(reactionsOf(store, 'e'.repeat(64)).items.map((r) => r.pubkey)).toEqual(
       ['a'.repeat(64), 'c'.repeat(64), 'b'.repeat(64)],
     );
+  });
+
+  it('flags capped when the ref index holds a fetch-cap of reactions — the count is a floor', () => {
+    const store = createStore();
+    const flood = Array.from({ length: REACTION_CAP }, (_, i) => {
+      const pk = String(i).padStart(64, 'a');
+      return {
+        id: `${i}`.padStart(64, '0'), pubkey: pk, created_at: 100 + i, kind: 7,
+        content: '+', tags: [['e', 'e'.repeat(64)]], sig: 'f'.repeat(128),
+      };
+    });
+    store.ingest(flood, 'wss://one/');
+    const got = reactionsOf(store, 'e'.repeat(64));
+    expect(got.items).toHaveLength(REACTION_CAP);
+    expect(got.capped).toBe(true);
+  });
+
+  it('is not capped below the cap — an exact count is honest', () => {
+    const store = createStore();
+    store.ingest([{
+      id: '1'.repeat(64), pubkey: 'a'.repeat(64), created_at: 100, kind: 7,
+      content: '+', tags: [['e', 'e'.repeat(64)]], sig: 'f'.repeat(128),
+    }], 'wss://one/');
+    const got = reactionsOf(store, 'e'.repeat(64));
+    expect(got.capped).toBe(false);
   });
 
   it('a kind 5 served later removes exactly the reaction it names', () => {
@@ -87,6 +112,6 @@ describe('reactionsOf merge', () => {
       id: '4'.repeat(64), pubkey: 'a'.repeat(64), created_at: 300, kind: 5,
       content: '', tags: [['e', '1'.repeat(64)]], sig: 'f'.repeat(128),
     }], 'wss://relay/');
-    expect(reactionsOf(store, 'e'.repeat(64))).toHaveLength(0);
+    expect(reactionsOf(store, 'e'.repeat(64)).items).toHaveLength(0);
   });
 });
