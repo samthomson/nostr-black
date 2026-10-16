@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { createStore } from './store';
-import { engagementOf, reactionsOf, REACTION_CAP, tally } from './engagement';
+import { engagementOf, reactionsOf, REACTION_CAP } from './engagement';
 
 const ALICE = 'a'.repeat(64);
 const BOB = 'b'.repeat(64);
@@ -18,44 +18,57 @@ const event = (over: Partial<NostrEvent> = {}): NostrEvent => ({
   ...over,
 });
 
-describe('tally', () => {
-  it('dedupes replies by event id', () => {
-    const reply = event({ id: '2'.repeat(64), kind: 1 });
-    const got = tally([reply, reply]);
-    expect(got.replies).toBe(1);
-  });
-
-  it('counts NIP-10 and NIP-22 children together', () => {
-    const got = tally([
-      event({ id: '2'.repeat(64), kind: 1 }),
-      event({ id: '3'.repeat(64), kind: 1111 }),
-    ]);
-    expect(got.replies).toBe(2);
-  });
-
-  it('reports the reply cap as a floor, not a number past what we have', () => {
-    const flood = Array.from({ length: REACTION_CAP }, (_, i) =>
-      event({
-        id: `${i}`.padStart(64, '0'),
-        kind: 1,
-        pubkey: `${i}`.padStart(64, 'a'),
-      }));
-    const got = tally(flood);
-    expect(got.replies).toBe(REACTION_CAP);
-    expect(got.capped).toBe(true);
-  });
-});
-
 describe('engagementOf', () => {
-  it('reads whatever the store currently holds for the target', () => {
+  it('counts what the thread shows: direct children only', () => {
     const store = createStore();
+    // A direct reply (marked) and a reaction — one reply.
     store.ingest([
-      event({ id: '2'.repeat(64), kind: 1 }),
+      event({ id: '2'.repeat(64), kind: 1, tags: [['e', 'r'.repeat(64), '', 'root'], ['e', TARGET, '', 'reply']] }),
       event({ id: '3'.repeat(64), kind: 7, pubkey: BOB, content: '+' }),
     ], 'wss://a/');
 
+    expect(engagementOf(store, TARGET).replies).toBe(1);
+  });
+
+  it('a reply-to-a-reply naming this note as root does not inflate the root count', () => {
+    const store = createStore();
+    const child = 'c'.repeat(64);
+    store.ingest([
+      // direct child of TARGET
+      event({ id: child, kind: 1, tags: [['e', TARGET, '', 'reply']] }),
+      // a reply to that child — carries TARGET as *root*, not reply
+      event({ id: 'd'.repeat(64), kind: 1, tags: [['e', TARGET, '', 'root'], ['e', child, '', 'reply']] }),
+    ], 'wss://a/');
+
+    // the thread view shows one direct child; so must the count
+    expect(engagementOf(store, TARGET).replies).toBe(1);
+    // and the deep reply counts under its actual parent
+    expect(engagementOf(store, child).replies).toBe(1);
+  });
+
+  it('counts NIP-10 and NIP-22 children together', () => {
+    const store = createStore();
+    store.ingest([
+      event({ id: '2'.repeat(64), kind: 1 }),
+      event({ id: '3'.repeat(64), kind: 1111 }),
+    ], 'wss://a/');
+    expect(engagementOf(store, TARGET).replies).toBe(2);
+  });
+
+  it('reports the reply cap as a floor, not a number past what we have', () => {
+    const store = createStore();
+    store.ingest(
+      Array.from({ length: REACTION_CAP }, (_, i) =>
+        event({
+          id: `${i}`.padStart(64, '0'),
+          kind: 1,
+          pubkey: `${i}`.padStart(64, 'a'),
+        })),
+      'wss://a/',
+    );
     const got = engagementOf(store, TARGET);
-    expect(got.replies).toBe(1);
+    expect(got.replies).toBe(REACTION_CAP);
+    expect(got.capped).toBe(true);
   });
 });
 

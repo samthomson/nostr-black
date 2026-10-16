@@ -1,5 +1,6 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { EventStore } from './store';
+import { childrenOf } from './thread';
 
 /**
  * Counts derived from the ref index.
@@ -36,31 +37,26 @@ export const EMPTY_ENGAGEMENT: Engagement = Object.freeze({
   capped: false,
 });
 
-/** Tally a set of events that all reference the same target. */
-export const tally = (events: readonly NostrEvent[]): Engagement => {
-  const replies = new Set<string>();
-  const zaps = new Set<string>();
-
-  for (const event of events) {
-    if (event.kind === 1 || event.kind === 1111) replies.add(event.id);
-    else if (event.kind === 9735) zaps.add(event.id);
-  }
-
-  return {
-    replies: replies.size,
-    zaps: zaps.size,
-    capped: replies.size >= REACTION_CAP,
-  };
-};
-
-/** Live tally from whatever the store currently holds for this id. */
+/** Live counts for one note, from the ref index.
+ *
+ * Replies use the thread's own definition — `childrenOf`, the NIP-10
+ * direct-child check — so the number on a note is always exactly what
+ * opening it shows. A reply-to-a-reply carries the thread root's id in
+ * its root marker and lands in this note's ref index anyway; counting
+ * raw references would inflate every root with its grandchildren, which
+ * is the "count says 3, thread shows 2" bug. Deep replies are not lost:
+ * they render under the note they actually reply to, one click deeper.
+ */
 export const engagementOf = (target: EventStore, id: string): Engagement => {
-  const events: NostrEvent[] = [];
+  let zaps = 0;
   for (const ref of target.getRefs(id)) {
     const event = target.getEvent(ref);
-    if (event) events.push(event);
+    if (event?.kind === 9735) zaps++;
   }
-  return events.length === 0 ? EMPTY_ENGAGEMENT : tally(events);
+  const replies = childrenOf(target, id).length;
+  return replies === 0 && zaps === 0
+    ? EMPTY_ENGAGEMENT
+    : { replies, zaps, capped: replies >= REACTION_CAP };
 };
 
 export interface Reaction {
