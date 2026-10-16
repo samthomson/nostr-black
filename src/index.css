@@ -104,19 +104,23 @@
   --ring: hsl(240 5% 40%);
 }
 
-/* The redacted brand: blacked out until selected — then inverted. */
+/* The redacted brand: blacked out until peeked (magnifier) or selected. */
 .brand-mark {
   background: #000;
-  color: transparent;
-  /* WebKit (WKWebView/Tauri) text-fill can override color — pin it. */
-  -webkit-text-fill-color: transparent;
   border-radius: var(--radius-sm);
   /* No horizontal padding — padding made the black bar wider than the
      glyphs (selection looked like trailing spaces). */
   padding: 0;
   user-select: text;
+  cursor: none;
 }
-.brand-mark::selection {
+.brand-mark-text {
+  color: #fff;
+  -webkit-mask-image: radial-gradient(circle at var(--reveal-x, -100%) var(--reveal-y, -100%), #000 0, #000 0.3em, transparent 0.6em);
+  mask-image: radial-gradient(circle at var(--reveal-x, -100%) var(--reveal-y, -100%), #000 0, #000 0.3em, transparent 0.6em);
+}
+.brand-mark::selection,
+.brand-mark-text::selection {
   background: #fff;
   color: #000;
 }
