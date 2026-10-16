@@ -41,10 +41,18 @@ const PrivateFeedBody = () => {
     post(draft.trim(), connectedPeers, handlers);
   };
 
-  const empty = (text: string) => (
+  const empty = (text: string, action?: { to: string; label: string }) => (
     <Card className="border-dashed">
       <CardContent className="px-8 py-12 text-center">
         <p className="text-muted-foreground mx-auto max-w-sm">{text}</p>
+        {action && (
+          <Link
+            to={action.to}
+            className="text-foreground mt-4 inline-flex cursor-pointer items-center justify-center rounded-sm border px-3 py-2 text-sm font-medium hover:bg-accent"
+          >
+            {action.label}
+          </Link>
+        )}
       </CardContent>
     </Card>
   );
@@ -60,15 +68,11 @@ const PrivateFeedBody = () => {
           grade="private"
         />
       )}
-      {!pending && connectedPeers.length === 0 && (
-        <Card className="border-dashed">
-          <CardContent className="px-4 py-3 text-center">
-            <p className="text-muted-foreground text-sm">only once you've connected with people can you make private posts</p>
-          </CardContent>
-        </Card>
-      )}
       {pending && posts.length === 0 && <FeedSkeleton />}
-
+      {!pending && connectedPeers.length === 0 && empty(
+        "only once you've connected with people can you make private posts",
+        { to: '/connections', label: 'add connections' },
+      )}
 
       {dialog}
 
@@ -88,11 +92,8 @@ const PrivateFeedBody = () => {
         />
       ))}
 
-      {!pending && connectedPeers.length > 0 && posts.length === 0 && empty('no private notes yet')}
-      {connectedPeers.length === 0 && (
-        <p className="text-center text-xs">
-          <Link to="/connections" className="underline">connections</Link>
-        </p>
+      {!pending && connectedPeers.length > 0 && posts.length === 0 && empty(
+        'no private notes yet — start the first one above',
       )}
     </div>
   );
