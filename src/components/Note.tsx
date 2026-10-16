@@ -285,7 +285,11 @@ const ReplyCount = ({
     >
       <MessageCircle className="size-3.5" />
     </button>
-    {href ? (
+    {replies === 0 && !pending ? (
+      <span className="text-muted-foreground inline-flex items-center" aria-label="replies" data-testid="count-reply">
+        <span className="text-sm">0</span>
+      </span>
+    ) : href ? (
       <Link
         to={href}
         className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
@@ -293,13 +297,13 @@ const ReplyCount = ({
         data-testid="count-reply"
       >
         {pending ? <Loader2 className="size-3 animate-spin" /> : (
-          <span className="text-sm underline underline-offset-2">{replies > 0 ? fmt(replies, capped) : 0}</span>
+          <span className="text-sm underline underline-offset-2">{fmt(replies, capped)}</span>
         )}
       </Link>
     ) : (
       <span className="text-muted-foreground inline-flex items-center" aria-label="replies" data-testid="count-reply">
         {pending ? <Loader2 className="size-3 animate-spin" /> : (
-          <span className="text-sm underline underline-offset-2">{replies > 0 ? fmt(replies, capped) : 0}</span>
+          <span className="text-sm underline underline-offset-2">{fmt(replies, capped)}</span>
         )}
       </span>
     )}

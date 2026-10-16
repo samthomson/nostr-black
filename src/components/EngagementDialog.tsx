@@ -186,17 +186,23 @@ export const EngagementCount = ({
       >
         {icon}
       </button>
-      <button
-        type="button"
-        className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
-        onClick={() => (onShow ? onShow() : setViewerOpen(true))}
-        aria-label={`${ariaLabel}s`}
-        data-testid={`count-${ariaLabel}`}
-      >
-        {pending
-          ? <Loader2 className="size-3 animate-spin" />
-          : <span className="text-sm underline underline-offset-2">{capped ? `${count}+` : count}</span>}
-      </button>
+      {count === 0 && !pending ? (
+        <span className="text-muted-foreground inline-flex items-center" data-testid={`count-${ariaLabel}`}>
+          <span className="text-sm">0</span>
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+          onClick={() => (onShow ? onShow() : setViewerOpen(true))}
+          aria-label={`${ariaLabel}s`}
+          data-testid={`count-${ariaLabel}`}
+        >
+          {pending
+            ? <Loader2 className="size-3 animate-spin" />
+            : <span className="text-sm underline underline-offset-2">{capped ? `${count}+` : count}</span>}
+        </button>
+      )}
 
       {pickerOpen && (
         <Dialog open onOpenChange={setPickerOpen}>
