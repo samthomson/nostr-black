@@ -17,7 +17,7 @@ export const BetaBanner = () => {
       role="status"
       className="bg-foreground text-background relative flex h-6 shrink-0 items-center justify-center gap-2 px-8 text-xs leading-none font-semibold tracking-wide"
     >
-      <span>beta af — expect breakage</span>
+      <span>beta af — fasten your seatbelt</span>
       <button
         type="button"
         aria-label="dismiss"
