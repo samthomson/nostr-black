@@ -22,7 +22,10 @@ import { cn } from '@/lib/utils';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { clientTag as clientTagOf } from '@/lib/clientTag';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
+import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
 import { useRouting } from '@/data/hooks/useRouting';
+import type { PrivacyGrade } from '@/lib/privacy';
+import { mediaUrls, MEDIA_URL, VIDEO_URL } from '@/lib/mediaUrls';
 
 
 /** Content/image budget past which a note is collapsed with a fade. */
@@ -106,28 +109,12 @@ const renderContent = (content: string) =>
       return token;
     });
 
-const VIDEO_URL = /\.(mp4|webm|mov)(\?[^#\s]*)?$/i;
-const MEDIA_URL = /\.(jpe?g|png|gif|webp|avif|mp4|webm|mov)(\?[^#\s]*)?$/i;
-
-const mediaUrls = (event: NostrEvent | Rumor): string[] => {
-  const urls: string[] = [];
-  for (const [name, value, ...rest] of event.tags) {
-    if (name === 'url' && value && MEDIA_URL.test(value)) urls.push(value);
-    if (name === 'imeta') {
-      const url = [value, ...rest].find((p) => p.startsWith('url '))?.slice(4);
-      if (url) urls.push(url);
-    }
-  }
-  for (const token of event.content.split(/\s+/)) {
-    if (/^https?:\/\//.test(token) && MEDIA_URL.test(token)) urls.push(token);
-  }
-  return [...new Set(urls)];
-};
 
 /** One media item from an event: <img> or <video> (with controls), fetched
  * through the transport layer via useAsset. Failures are visible — a media
- * layer that fails silently is undebuggable. */
-const MediaItem = ({ url, alt }: { url: string; alt: string }) => {
+ * layer that fails silently is undebuggable. Images with `onOpen` zoom into
+ * the note's lightbox. */
+const MediaItem = ({ url, alt, onOpen }: { url: string; alt: string; onOpen?: () => void }) => {
   const { url: src, error, ref } = useAsset(url);
   if (!src) {
     if (error) {
@@ -153,7 +140,13 @@ const MediaItem = ({ url, alt }: { url: string; alt: string }) => {
   }
   return (
     <div ref={ref}>
-      <img src={src} alt={alt} className="max-h-96 w-full rounded-sm object-cover" />
+      {onOpen ? (
+        <LightboxTrigger label="open image" onOpen={onOpen} className="w-full">
+          <img src={src} alt={alt} className="max-h-96 w-full rounded-sm object-cover" />
+        </LightboxTrigger>
+      ) : (
+        <img src={src} alt={alt} className="max-h-96 w-full rounded-sm object-cover" />
+      )}
     </div>
   );
 };
@@ -200,24 +193,41 @@ const AuthorLink = ({ pubkey }: { pubkey: string }) => {
 /** Compact rendering of a reposted/quoted event. */
 /** The media grid — the one layout for a note's images/videos, used by
  * the note body and embedded notes alike. */
-const MediaGrid = ({ urls, alt }: { urls: readonly string[]; alt: string }) => {
+const MediaGrid = ({ urls, alt, onOpen }: { urls: readonly string[]; alt: string; onOpen?: (index: number) => void }) => {
   if (urls.length === 0) return null;
   return (
     <div className={`mt-1 gap-1 ${urls.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
-      {urls.map((url) => <MediaItem key={url} url={url} alt={alt} />)}
+      {urls.map((url, i) => (
+        <MediaItem key={url} url={url} alt={alt} onOpen={onOpen ? () => onOpen(i) : undefined} />
+      ))}
     </div>
   );
 };
 
-const EmbeddedNote = ({ event }: { event: NostrEvent }) => (
-  <blockquote className="space-y-1 border-l-2 border-muted-foreground/30 pl-3">
-    <AuthorLink pubkey={event.pubkey} />
-    <div className="whitespace-pre-wrap break-words text-sm">
-      {renderContent(event.content)}
-    </div>
-    <MediaGrid urls={mediaUrls(event)} alt={event.tags.find(([n]) => n === 'alt')?.[1] ?? 'embedded media'} />
-  </blockquote>
-);
+const EmbeddedNote = ({ event, grade }: { event: NostrEvent; grade: PrivacyGrade }) => {
+  const [openMedia, setOpenMedia] = useState<number | null>(null);
+  const urls = mediaUrls(event);
+  const alt = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'embedded media';
+  return (
+    <blockquote className="space-y-1 border-l-2 border-muted-foreground/30 pl-3">
+      <AuthorLink pubkey={event.pubkey} />
+      <div className="whitespace-pre-wrap break-words text-sm">
+        {renderContent(event.content)}
+      </div>
+      <MediaGrid urls={urls} alt={alt} onOpen={setOpenMedia} />
+      {openMedia !== null && urls[openMedia] && (
+        <Lightbox
+          urls={urls}
+          index={openMedia}
+          onIndex={setOpenMedia}
+          onClose={() => setOpenMedia(null)}
+          alt={alt}
+          grade={grade}
+        />
+      )}
+    </blockquote>
+  );
+};
 
 /** Reply affordance: names the author of the parent event (the person
  * actually replied to). Prefers the loaded parent event's pubkey; until
@@ -368,6 +378,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   const { metadata, pending: authorPending } = useProfile(event.pubkey);
   const [expanded, setExpanded] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [openMedia, setOpenMedia] = useState<number | null>(null);
   const isPrivate = wrapper !== undefined;
   const { user } = useCurrentUser();
   const mine = !!user && event.pubkey === user.pubkey;
@@ -392,7 +403,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
       request({
         grade: 'public',
         label: 'repost deletion',
-        preview: 'delete your repost',
+        content: 'delete your repost',
         identityPubkey: user!.pubkey,
         relays: planRelays({ kind: 'publish', event: deletion }),
         events: [deletion],
@@ -408,7 +419,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
     request({
       grade: 'public',
       label: 'repost',
-      preview: `repost of ${target.id.slice(0, 16)}…`,
+      content: `repost of ${target.id.slice(0, 16)}…`,
       identityPubkey: user!.pubkey,
       relays: planRelays({ kind: 'publish', event: engaged }),
       events: [engaged],
@@ -432,7 +443,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
       request({
         grade: 'public',
         label: 'deletion',
-        preview: 'delete this event from your relays',
+        content: 'delete this event from your relays',
         identityPubkey: (event as NostrEvent).pubkey,
         relays: planRelays({ kind: 'publish', event: deletion }),
         events: [deletion],
@@ -497,7 +508,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
       request({
         grade: 'public',
         label: 'reaction deletion',
-        preview: `delete your ${mine.content} reaction`,
+        content: `delete your ${mine.content} reaction`,
         identityPubkey: user.pubkey,
         relays: planRelays({ kind: 'publish', event: deletion }),
         events: [deletion],
@@ -512,7 +523,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
     request({
       grade: 'public',
       label: 'reaction',
-      preview: `${emoji} on ${target.id.slice(0, 16)}…`,
+      content: `${emoji} on ${target.id.slice(0, 16)}…`,
       identityPubkey: user.pubkey,
       relays: planRelays({ kind: 'publish', event: reaction }),
       events: [reaction],
@@ -536,11 +547,11 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-baseline gap-2">
             {href ? (
-              <Link to={href} className="truncate text-sm font-medium hover:underline">
+              <Link to={href} className="truncate text-sm font-bold hover:underline">
                 {displayName ?? `${npub.slice(0, 10)}…`}
               </Link>
             ) : (
-              <span className="truncate text-sm font-medium">
+              <span className="truncate text-sm font-bold">
                 {displayName ?? `${npub.slice(0, 10)}…`}
               </span>
             )}
@@ -611,7 +622,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
             />
           )}
           {parentId && parent.event && (
-            <EmbeddedNote event={parent.event} />
+            <EmbeddedNote event={parent.event} grade={isPrivate ? 'private' : 'public'} />
           )}
 
           {/* Body: hard max-height with a bottom fade when collapsed — no
@@ -619,7 +630,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
           <div className="relative">
             <div className={clampable && !expanded ? 'max-h-80 overflow-hidden' : ''}>
               {embedded ? (
-                <EmbeddedNote event={embedded} />
+                <EmbeddedNote event={embedded} grade={isPrivate ? 'private' : 'public'} />
               ) : quotedViaTag ? (
                 <Link
                   to={eventHref(referenceId, event.pubkey) ?? '/'}
@@ -628,12 +639,12 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
                   {referenceId}
                 </Link>
               ) : (
-                <div className="whitespace-pre-wrap break-words text-sm">
+                <div className="whitespace-pre-wrap break-words text-sm text-foreground/70">
                   {renderContent(renderedText)}
                 </div>
               )}
 
-              {!embedded && <MediaGrid urls={media} alt={altText} />}
+              {!embedded && <MediaGrid urls={media} alt={altText} onOpen={setOpenMedia} />}
             </div>
             {clampable && !expanded && (
               <div className="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-background to-transparent" />
@@ -695,8 +706,18 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
           <NoteMeta foundOn={foundOn} route={route} client={clientTag} />
         </div>
       </CardContent>
-
       {broadcastDialog}
+
+      {openMedia !== null && media[openMedia] && (
+        <Lightbox
+          urls={media}
+          index={openMedia}
+          onIndex={setOpenMedia}
+          onClose={() => setOpenMedia(null)}
+          alt={altText}
+          grade={isPrivate ? 'private' : 'public'}
+        />
+      )}
       {/* No wrapper means the item is public, so event is signed. */}
       <EventInfoDialog event={wrapper ?? (event as NostrEvent)} foundOn={foundOn} open={infoOpen} onOpenChange={setInfoOpen} />
     </Card>

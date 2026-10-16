@@ -227,4 +227,36 @@ describe('Note', () => {
     // Renders the raw bech32 as plain text instead of throwing in nip19.decode.
     expect(await screen.findByText('npub1')).toBeTruthy();
   });
+  it('opens a lightbox with all note images from a feed image click', async () => {
+    const user = userEvent.setup();
+    const event = note(
+      generateSecretKey(),
+      'two pics https://example.com/a.png and https://example.com/b.png',
+    );
+
+    render(
+      <TestApp>
+        <Note event={event} />
+      </TestApp>,
+    );
+
+    // Both images render inline; clicking either opens the lightbox on it.
+    const openers = await screen.findAllByRole('button', { name: 'open image' });
+    expect(openers).toHaveLength(2);
+    await user.click(openers[1]);
+
+    const dialog = screen.getByRole('dialog');
+    expect(dialog.querySelector('img:not([aria-hidden])')).toHaveAttribute(
+      'src',
+      'https://example.com/b.png',
+    );
+    expect(screen.getAllByRole('button', { name: /^image \d$/ })).toHaveLength(2);
+    expect(screen.queryByTestId('lightbox-counter')).toBeNull();
+
+    await user.click(screen.getByRole('button', { name: 'previous image' }));
+    expect(screen.getByRole('dialog').querySelector('img:not([aria-hidden])')).toHaveAttribute(
+      'src',
+      'https://example.com/a.png',
+    );
+  });
 });

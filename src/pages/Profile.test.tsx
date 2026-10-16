@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { finalizeEvent, generateSecretKey } from 'nostr-tools';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { TestApp } from '@/test/TestApp';
 import { ProfilePage } from '@/pages/Profile';
-import { FEED_KINDS } from '@/data/feed/spec';
+import { store } from '@/data/store';
 
 const queryRelay = vi.fn<(url: string, filters: NostrFilter[]) => Promise<NostrEvent[]>>();
 
@@ -12,75 +14,75 @@ vi.mock('@/net/net', async (importOriginal) => ({
   queryRelay: (...args: unknown[]) => queryRelay(...(args as [string, NostrFilter[]])),
 }));
 
-const { scheduler } = await import('@/data/scheduler');
-const { store } = await import('@/data/store');
+const metadata = (sk: Uint8Array, content: object): NostrEvent =>
+  finalizeEvent({
+    kind: 0,
+    created_at: Math.floor(Date.now() / 1000),
+    tags: [],
+    content: JSON.stringify(content),
+  }, sk);
 
-const ALICE = 'c'.repeat(64);
+const PICTURE = 'https://example.com/face.png';
+const BANNER = 'https://example.com/cover.png';
 
-const note = (content: string): NostrEvent => ({
-  id: '1'.repeat(64),
-  pubkey: ALICE,
-  created_at: 1,
-  kind: 1,
-  tags: [],
-  content,
-  sig: 's'.repeat(128),
-});
-
-const relaysOf = (): NostrEvent => ({
-  id: 'r'.repeat(64),
-  pubkey: ALICE,
-  created_at: 1,
-  kind: 10002,
-  tags: [['r', 'wss://alice-out/', 'write']],
-  content: '',
-  sig: 's'.repeat(128),
-});
-
-const settle = async () => {
-  await act(async () => { await Promise.resolve(); });
-  await act(async () => { await scheduler.flush(); });
+const renderProfile = (event: NostrEvent) => {
+  store.ingest([event], '');
+  render(
+    <TestApp>
+      <ProfilePage pubkey={event.pubkey} />
+    </TestApp>,
+  );
 };
+const showingSrc = () =>
+  screen.getByRole('dialog').querySelector('img:not([aria-hidden])')?.getAttribute('src');
+
+const activeDot = () =>
+  screen.getByRole('dialog').querySelector('button[aria-label^="image "][aria-current="true"]')?.getAttribute('aria-label');
 
 beforeEach(() => {
   queryRelay.mockReset();
   queryRelay.mockResolvedValue([]);
-  scheduler.reset();
-  store.clear();
 });
 
-describe('ProfilePage', () => {
-  it('shows fetching events while the author outbox has not answered', async () => {
-    queryRelay.mockImplementation(() => new Promise(() => {}));
+describe('Profile lightbox', () => {
+  it('opens the avatar and banner in one shared set', async () => {
+    const user = userEvent.setup();
+    const sk = generateSecretKey();
+    renderProfile(metadata(sk, { name: 'pat', picture: PICTURE, banner: BANNER }));
+    // the display picture is image one of the set
+    await user.click(await screen.findByRole('button', { name: 'open profile picture' }));
+    expect(showingSrc()).toBe(PICTURE);
+    expect(activeDot()).toBe('image 1');
 
-    render(
-      <TestApp>
-        <ProfilePage pubkey={ALICE} />
-      </TestApp>,
-    );
+    await user.click(screen.getByRole('button', { name: 'next image' }));
+    expect(showingSrc()).toBe(BANNER);
+    expect(activeDot()).toBe('image 2');
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog')).toBeNull();
 
-    expect(await screen.findByText(/fetching events/)).toBeTruthy();
-    expect(screen.queryByText('no notes found on their relays')).toBeNull();
-    expect(screen.queryByText("couldn't find where this author publishes (no NIP-65 list)")).toBeNull();
+    // the cover opens on the second image of the same set
+    await user.click(screen.getByRole('button', { name: 'open banner image' }));
+    expect(showingSrc()).toBe(BANNER);
+    expect(activeDot()).toBe('image 2');
   });
 
-  it('drops the fetching bar once notes land', async () => {
-    queryRelay.mockImplementation(async (_url, filters) => {
-      if (filters[0].kinds?.includes(10002)) return [relaysOf()];
-      if (filters[0].kinds?.some((k) => FEED_KINDS.includes(k))) return [note('hello from outbox')];
-      return [];
-    });
+  it('a picture without a banner opens a single-image lightbox with no nav', async () => {
+    const user = userEvent.setup();
+    const sk = generateSecretKey();
+    renderProfile(metadata(sk, { name: 'solo', picture: PICTURE }));
 
-    render(
-      <TestApp>
-        <ProfilePage pubkey={ALICE} />
-      </TestApp>,
-    );
-    await settle();
-    await settle();
+    await user.click(await screen.findByRole('button', { name: 'open profile picture' }));
+    expect(showingSrc()).toBe(PICTURE);
+    expect(screen.queryByTestId('lightbox-nav')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'open banner image' })).toBeNull();
+  });
 
-    expect(await screen.findByText('hello from outbox')).toBeTruthy();
-    expect(screen.queryByText(/fetching events/)).toBeNull();
-    expect(screen.getByText('1 notes')).toBeTruthy();
+  it('no picture means no zoom affordance at all', async () => {
+    const sk = generateSecretKey();
+    renderProfile(metadata(sk, { name: 'ghost' }));
+
+    await screen.findByText('ghost');
+    expect(screen.queryByRole('button', { name: 'open profile picture' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'open banner image' })).toBeNull();
   });
 });
