@@ -61,7 +61,7 @@ const Landing = () => {
   const activeStep: Step = step === 'tor' && onTor === true ? 'login' : step;
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-6 px-4 py-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center">
+    <div className="flex min-h-full flex-col items-center justify-center gap-6 px-4 py-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center">
       <MovingBackground />
       {/* Soft scrim so the copy reads over the animated grid without a
           hard container — the grid fades toward the text. */}

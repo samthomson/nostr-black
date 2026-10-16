@@ -87,7 +87,7 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   );
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background">
+    <div className="flex h-full flex-col overflow-hidden bg-background">
       {/* Mobile header */}
       <header className="flex shrink-0 items-center gap-2 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-2 md:hidden">
         <button

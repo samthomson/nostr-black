@@ -13,6 +13,7 @@ import { UserStateProvider } from '@/components/UserStateProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { QueryDevtools } from '@/components/QueryDevtools';
+import { BetaBanner } from '@/components/BetaBanner';
 import { DataProvider } from '@/data/DataProvider';
 import AppRouter from './AppRouter';
 
@@ -69,9 +70,14 @@ const AppRoot = () => {
   return (
     <TooltipProvider>
       <Toaster />
-      <Suspense>
-        <AppRouter />
-      </Suspense>
+      <div className="flex h-dvh flex-col">
+        <BetaBanner />
+        <div className="min-h-0 flex-1">
+          <Suspense>
+            <AppRouter />
+          </Suspense>
+        </div>
+      </div>
     </TooltipProvider>
   );
 };
