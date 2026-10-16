@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { nowSec } from '@/lib/timestamp';
 import { Link } from 'react-router-dom';
 import { nip10, nip19 } from 'nostr-tools';
-import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat2, Trash2 } from 'lucide-react';
+import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat, Trash2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { Rumor } from '@/lib/feedEncryption';
 import { useProfile } from '@/data/hooks/useProfile';
@@ -283,7 +283,7 @@ const ReplyCount = ({
       onClick={onReplies}
       aria-label="reply"
     >
-      <MessageCircle className="size-4" />
+      <MessageCircle className="size-3.5" />
     </button>
     {href ? (
       <Link
@@ -293,13 +293,13 @@ const ReplyCount = ({
         data-testid="count-reply"
       >
         {pending ? <Loader2 className="size-3 animate-spin" /> : (
-          <span className="text-xs underline underline-offset-2">{replies > 0 ? fmt(replies, capped) : 0}</span>
+          <span className="text-sm underline underline-offset-2">{replies > 0 ? fmt(replies, capped) : 0}</span>
         )}
       </Link>
     ) : (
       <span className="text-muted-foreground inline-flex items-center" aria-label="replies" data-testid="count-reply">
         {pending ? <Loader2 className="size-3 animate-spin" /> : (
-          <span className="text-xs underline underline-offset-2">{replies > 0 ? fmt(replies, capped) : 0}</span>
+          <span className="text-sm underline underline-offset-2">{replies > 0 ? fmt(replies, capped) : 0}</span>
         )}
       </span>
     )}
@@ -661,7 +661,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
               {/* zaps: no send/receive yet — the row ships without it
               <Count icon={<Zap className="size-4" />} count={...} label="zaps" /> */}
               <EngagementCount
-                icon={<Repeat2 className="size-4" />}
+                icon={<Repeat className="size-3.5" />}
                 count={feed.reposts.length}
                 capped={feed.repostsCapped}
                 pending={feed.pending}

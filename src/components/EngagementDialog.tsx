@@ -195,7 +195,7 @@ export const EngagementCount = ({
       >
         {pending
           ? <Loader2 className="size-3 animate-spin" />
-          : <span className="text-xs underline underline-offset-2">{capped ? `${count}+` : count}</span>}
+          : <span className="text-sm underline underline-offset-2">{capped ? `${count}+` : count}</span>}
       </button>
 
       {pickerOpen && (
