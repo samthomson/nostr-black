@@ -196,4 +196,25 @@ describe('Note', () => {
     expect(screen.queryByRole('button', { name: 'delete note' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'edit note' })).toBeNull();
   });
+  it('a repost is never worded as a reply', async () => {
+    const alice = generateSecretKey();
+    const target = note(alice, 'the reposted words');
+    const repost = finalizeEvent({
+      kind: 6,
+      created_at: target.created_at + 5,
+      content: '',
+      tags: [['e', target.id], ['p', target.pubkey]],
+    }, generateSecretKey());
+    // the repost target lives on the store, so the reposted note renders inline
+    store.ingest([target], '');
+
+    render(
+      <TestApp>
+        <Note event={repost} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByText('the reposted words')).toBeTruthy();
+    expect(screen.queryByText(/replying to/)).toBeNull();
+  });
 });

@@ -440,6 +440,9 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   const clampable =
     renderedText.length > CLAMP_THRESHOLD || allMedia.length > IMAGE_CLAMP_COUNT;
   const kindLabel = KIND_LABELS[event.kind];
+  // Reposts (6/16) point their e tag at the reposted note, not a reply
+  // parent — they embed that note but never read as a reply.
+  const isRepost = event.kind === 6 || event.kind === 16;
   const referenceId = embedded?.id ?? event.tags.find(([n]) => n === 'q')?.[1];
   const quotedViaTag = !embedded && referenceId !== undefined;
   // A reply carries its parent in e tags — nip10.parse resolves root/reply
@@ -571,7 +574,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
             />
           ) : (
           <>
-          {parentId && (
+          {parentId && !isRepost && (
             <ReplyContext
               parentPubkey={parentPubkey}
               settled={!parent.pending}
