@@ -12,6 +12,7 @@ import { AppProvider } from '@/components/AppProvider';
 import { UserStateProvider } from '@/components/UserStateProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
+import { FEED_KINDS } from '@/data/feed/spec';
 import { QueryDevtools } from '@/components/QueryDevtools';
 import { BetaBanner } from '@/components/BetaBanner';
 import { DataProvider } from '@/data/DataProvider';
@@ -38,6 +39,7 @@ const defaultConfig: AppConfig = {
   discoveryRelays: DEFAULT_DISCOVERY_RELAYS,
   torEnabled: true,
   mediaEnabled: true,
+  feedKinds: [...FEED_KINDS],
   defaultReaction: '+',
   mediaCacheMaxMb: 1024,
 };

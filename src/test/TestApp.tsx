@@ -8,6 +8,7 @@ import { AppConfig } from '@/contexts/AppContext';
 import { UserState } from '@/contexts/UserStateContext';
 import { UserStateProvider } from '@/components/UserStateProvider';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
+import { FEED_KINDS } from '@/data/feed/spec';
 import { DataProvider } from '@/data/DataProvider';
 import { store } from '@/data/store';
 import { scheduler } from '@/data/scheduler';
@@ -48,6 +49,7 @@ export function TestApp({ children, userState }: TestAppProps) {
     discoveryRelays: DEFAULT_DISCOVERY_RELAYS,
     torEnabled: true,
     mediaEnabled: true,
+    feedKinds: [...FEED_KINDS],
     defaultReaction: "+",
     mediaCacheMaxMb: 1024,
   };

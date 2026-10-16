@@ -18,6 +18,7 @@ const AppConfigSchema = z.object({
   discoveryRelays: z.array(z.url()),
   torEnabled: z.boolean(),
   mediaEnabled: z.boolean(),
+  feedKinds: z.array(z.number()),
   mediaCacheMaxMb: z.number(),
   defaultReaction: z.string(),
 }) satisfies z.ZodType<AppConfig>;

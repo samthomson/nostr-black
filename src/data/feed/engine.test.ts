@@ -65,7 +65,7 @@ const build = (
 
   const spec: FeedSpec = {
     id: 'test',
-    kinds: [1],
+    kinds: () => [1],
     authors: () => [ALICE, BOB],
     routing: 'outbox',
     ...over,
@@ -259,6 +259,24 @@ describe('sealed pages', () => {
     expect(query).not.toHaveBeenCalled();
     expect(rendered(engine)).toEqual([]);
   });
+  it('does not fetch at all when the spec has no kinds', async () => {
+    const { engine, query } = build({ 'wss://a/': { events: [note(500)] } }, {
+      kinds: () => [],
+    });
+
+    await engine.loadMore();
+    expect(query).not.toHaveBeenCalled();
+    expect(rendered(engine)).toEqual([]);
+  });
+
+  it('drops events of other kinds even when the relay serves them anyway', async () => {
+    const repost = { ...note(500), kind: 6 };
+    const { engine } = build({ 'wss://a/': { events: [repost] } });
+
+    await engine.loadMore();
+    expect(rendered(engine)).toEqual([]);
+  });
+
 
   it('asks each relay only about the authors that declared it', async () => {
     const { engine, query } = build({ 'wss://a/': { events: [note(500)] } });

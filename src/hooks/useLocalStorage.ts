@@ -25,13 +25,18 @@ export function useLocalStorage<T>(
   });
 
   const setValue = (value: T | ((prev: T) => T)) => {
-    try {
-      const valueToStore = value instanceof Function ? value(state) : value;
-      setState(valueToStore);
-      localStorage.setItem(key, serialize(valueToStore));
-    } catch (error) {
-      console.warn(`Failed to save ${key} to localStorage:`, error);
-    }
+    // Functional update: read the latest committed state, never the value
+    // this closure was created with. `updateConfig` is memoized with [] so
+    // a stale `state` here would silently drop every other config field.
+    setState((prev) => {
+      const next = value instanceof Function ? value(prev) : value;
+      try {
+        localStorage.setItem(key, serialize(next));
+      } catch (error) {
+        console.warn(`Failed to save ${key} to localStorage:`, error);
+      }
+      return next;
+    });
   };
 
   // Sync with localStorage changes from other tabs

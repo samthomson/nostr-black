@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { clearFeeds, feedEngine, syncFeedAuthors } from './registry';
+import { clearFeeds, feedEngine, syncFeedAuthors, syncFeedKinds } from './registry';
 
 const A = 'a'.repeat(64);
 const B = 'b'.repeat(64);
@@ -47,6 +47,28 @@ describe('feed registry', () => {
     engine.subscribe(() => (resets += 1));
 
     syncFeedAuthors('home', [B, A]);
+    expect(resets).toBe(0);
+  });
+
+  it('drops sealed pages when the kind list changes', () => {
+    const engine = feedEngine('home');
+    syncFeedKinds('home', [1, 6]);
+
+    let resets = 0;
+    engine.subscribe(() => (resets += 1));
+
+    syncFeedKinds('home', [1]);
+    expect(resets).toBe(1);
+  });
+
+  it('does not reset for the same kinds in a different order', () => {
+    const engine = feedEngine('home');
+    syncFeedKinds('home', [1, 6]);
+
+    let resets = 0;
+    engine.subscribe(() => (resets += 1));
+
+    syncFeedKinds('home', [6, 1]);
     expect(resets).toBe(0);
   });
 

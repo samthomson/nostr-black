@@ -9,7 +9,8 @@ import type { NostrEvent } from '@nostrify/nostrify';
  */
 export interface FeedSpec {
   id: string;
-  kinds: number[];
+  /** Read fresh each fetch — kind toggles change under a live feed. */
+  kinds: () => readonly number[];
   /** Read fresh each fetch — the follow list changes under a live feed. */
   authors: () => readonly string[];
   /** `outbox` routes by each author's kind 10002; `explicit` uses `relays`. */
@@ -22,9 +23,12 @@ export interface FeedSpec {
 /** Notes, reposts (6/16), pictures, video, files, long-form. */
 export const FEED_KINDS = [1, 6, 16, 20, 21, 1063, 30023];
 
-export const followsFeed = (authors: () => readonly string[]): FeedSpec => ({
+export const followsFeed = (
+  authors: () => readonly string[],
+  kinds: () => readonly number[] = () => FEED_KINDS,
+): FeedSpec => ({
   id: 'follows',
-  kinds: FEED_KINDS,
+  kinds,
   authors,
   routing: 'outbox',
 });

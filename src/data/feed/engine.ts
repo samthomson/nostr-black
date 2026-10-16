@@ -150,6 +150,15 @@ export const createFeedEngine = (spec: FeedSpec, deps: EngineDeps = {}): FeedEng
     window: Pick<NostrFilter, 'until' | 'since'>,
     lane: Lane,
   ): Promise<RelayResponse[]> => {
+    // An empty kind set can match nothing. Asking anyway sends an
+    // ambiguous `kinds: []` REQ — some relays read that as "no
+    // constraint" and answer with everything.
+    if (spec.kinds().length === 0) {
+      lastAsked = [];
+      leftover = undefined;
+      leftoverKind = undefined;
+      return [];
+    }
     const collected: RelayResult[] = [];
     const plan = [...groups(ctx)];
     lastAsked = plan.map(([url]) => url);
@@ -161,7 +170,7 @@ export const createFeedEngine = (spec: FeedSpec, deps: EngineDeps = {}): FeedEng
       const release = await limiter.acquire(jobLane);
       try {
         const result = await query(url, [{
-          kinds: spec.kinds,
+          kinds: [...spec.kinds()],
           authors,
           limit: LIMIT_PER_RELAY,
           ...window,
@@ -201,12 +210,15 @@ export const createFeedEngine = (spec: FeedSpec, deps: EngineDeps = {}): FeedEng
     return collected.slice();
   };
 
-  /** A relay may answer with anyone; the spec decides whose notes count. */
-  const onlySpecAuthors = (responses: RelayResponse[]): RelayResponse[] => {
-    const allowed = new Set(spec.authors());
+  /** A relay may answer with anyone — and may ignore a kinds filter it
+   * doesn't like (an empty kinds list reads as "no constraint" on some
+   * relays). The spec decides what counts: author AND kind. */
+  const onlySpecEvents = (responses: RelayResponse[]): RelayResponse[] => {
+    const authors = new Set(spec.authors());
+    const kinds = new Set(spec.kinds());
     return responses.map((r) => ({
       ...r,
-      events: r.events.filter((e) => allowed.has(e.pubkey)),
+      events: r.events.filter((e) => authors.has(e.pubkey) && kinds.has(e.kind)),
     }));
   };
 
@@ -218,7 +230,7 @@ export const createFeedEngine = (spec: FeedSpec, deps: EngineDeps = {}): FeedEng
     const authors = spec.authors();
     if (authors.length === 0) return false;
 
-    const events = target.queryByAuthors(authors, spec.kinds).slice(0, PAGE_LIMIT);
+    const events = target.queryByAuthors(authors, spec.kinds()).slice(0, PAGE_LIMIT);
     if (events.length === 0) return false;
 
     const oldest = events[events.length - 1].created_at;
@@ -285,7 +297,7 @@ export const createFeedEngine = (spec: FeedSpec, deps: EngineDeps = {}): FeedEng
       // Pagination is prefetch so leftover first-page REQs cannot sit on
       // the 8 interactive slots that counts and the next click need.
       const lane: Lane = preview ? 'interactive' : 'prefetch';
-      const responses = onlySpecAuthors(await fanOut(ctx, { until: state.cursor }, lane));
+      const responses = onlySpecEvents(await fanOut(ctx, { until: state.cursor }, lane));
       leftoverKind = leftover ? 'page' : undefined;
       applySealed(
         sealPage(withUnanswered(responses), LIMIT_PER_RELAY),
@@ -310,7 +322,7 @@ export const createFeedEngine = (spec: FeedSpec, deps: EngineDeps = {}): FeedEng
     const already = rendered();
     const buffered = new Set(state.pending.map((e) => e.id));
     const fresh = target
-      .queryByAuthors(authors, spec.kinds, { since: state.ceiling + 1 })
+      .queryByAuthors(authors, spec.kinds(), { since: state.ceiling + 1 })
       .filter((event) => !already.has(event.id) && !buffered.has(event.id));
     if (fresh.length === 0) return false;
 
@@ -349,7 +361,7 @@ export const createFeedEngine = (spec: FeedSpec, deps: EngineDeps = {}): FeedEng
     }
     if (leftoverKind === 'page' && state.pages.length === 1) {
       applySealed(
-        sealPage(onlySpecAuthors(lastCollected), LIMIT_PER_RELAY),
+        sealPage(onlySpecEvents(lastCollected), LIMIT_PER_RELAY),
         true,
         Date.now(),
       );

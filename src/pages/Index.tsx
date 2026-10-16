@@ -14,6 +14,7 @@ import { useIsDesktop } from '@/hooks/useTransport';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Feed } from '@/components/Feed';
+import { FeedKindMenu } from '@/components/FeedKindMenu';
 import { Page } from '@/components/Page';
 import { TorGate } from '@/components/TorGate';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -190,7 +191,10 @@ const Index = () => {
 
   return (
     <TorGate>
-      <Page title={<PrivacyTag grade="public">public feed</PrivacyTag>}>
+      <Page
+        title={<PrivacyTag grade="public">public feed</PrivacyTag>}
+        actions={<FeedKindMenu />}
+      >
         <NoteComposer />
         <Feed />
       </Page>

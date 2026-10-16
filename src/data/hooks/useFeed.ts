@@ -4,7 +4,7 @@ import { useUserState } from '@/hooks/useUserState';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useEntities, useEntity } from '@/data/hooks/useEntity';
-import { feedEngine, syncFeedAuthors } from '@/data/feed/registry';
+import { feedEngine, syncFeedAuthors, syncFeedKinds } from '@/data/feed/registry';
 import { useMyBurners } from '@/auth/burners';
 import type { FeedState } from '@/data/feed/engine';
 
@@ -31,6 +31,9 @@ export const useFeed = (): Feed => {
   const { state: userState, relaySyncedAt } = useUserState();
   const { user } = useCurrentUser();
   const { config } = useAppContext();
+  // Enabled feed kinds come from config; the header dropdown toggles them.
+  const feedKinds = config.feedKinds;
+  const kindsKey = [...feedKinds].sort((a, b) => a - b).join(',');
   const self = user?.pubkey;
   const followKey = userState.follows.pubkeys.join(',');
   // Own burner pubkeys count as "you": their notes are yours and must
@@ -87,6 +90,10 @@ export const useFeed = (): Feed => {
     syncFeedAuthors(FOLLOWS, authors);
   }, [authors, authorKey]);
 
+  useEffect(() => {
+    syncFeedKinds(FOLLOWS, feedKinds);
+  }, [feedKinds]);
+
   // Asking before routing is known means asking nobody. Asking again after
   // a page that reached nobody means asking nobody twice, so the trigger
   // is "never attempted", not "nothing on screen". Disk comes first: if
@@ -94,7 +101,7 @@ export const useFeed = (): Feed => {
   const topRequested = useRef('');
   useEffect(() => {
     topRequested.current = '';
-  }, [authorKey]);
+  }, [authorKey, kindsKey]);
 
   useEffect(() => {
     if (authorKey.length === 0 || state.loading) return;
