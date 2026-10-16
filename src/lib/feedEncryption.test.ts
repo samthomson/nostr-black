@@ -4,6 +4,7 @@ import {
   KIND_CONNECTION,
   KIND_PRIVATE_NOTE,
   KIND_PRIVATE_REPLY,
+  KIND_SEAL,
   acceptConnection,
   burnerKeyOf,
   closeConnection,
@@ -14,6 +15,7 @@ import {
   openConnection,
   openPrivateNote,
   openPrivateReply,
+  privateNoteLayers,
   replyCekOf,
   requestConnection,
   wrapPrivateNote,
@@ -124,6 +126,44 @@ describe('NIP-FE private notes', () => {
     expect(openPrivateReply(replyCek, event).tags).toContainEqual(['revision_of', rumor.id]);
   });
 
+});
+
+describe('private note layers (display decode)', () => {
+  it('decodes a 1370 note into wrapper, seal and rumour — envelope elided', () => {
+    const alice = pair();
+    const { rumor } = makeRumor(alice.pk, 'layered');
+    const [wrapper] = wrapPrivateNote(alice.sk, [], rumor);
+
+    const layers = privateNoteLayers(alice.sk, wrapper);
+    expect(layers.map((l) => l.name)).toEqual(['wrapper', 'seal', 'rumour']);
+    expect(layers[0].decoded).toMatchObject({ kind: KIND_PRIVATE_NOTE, content: '‹envelope›' });
+    expect(layers[1].decoded).toMatchObject({ kind: KIND_SEAL });
+    expect(layers[2].decoded).toMatchObject({ content: 'layered' });
+  });
+
+  it('decodes a 1470 reply through the conversation CEK — no slots to open', () => {
+    const alice = pair();
+    const { rumor: parent } = makeRumor(alice.pk, 'root');
+    const [note] = wrapPrivateNote(alice.sk, [], parent);
+    const replyCek = openPrivateNote(alice.sk, note).replyCek;
+    const { rumor: replyRumor } = makeRumor(alice.pk, 'a reply', [['e', parent.id]]);
+    const wrapper = wrapPrivateReply(alice.sk, replyCek, replyRumor);
+
+    const layers = privateNoteLayers(alice.sk, wrapper, replyCek);
+    expect(layers[2].decoded).toMatchObject({ content: 'a reply' });
+  });
+
+  it('shows earlier layers when a later one cannot open — never blank', () => {
+    const alice = pair();
+    const eve = pair();
+    const { rumor } = makeRumor(alice.pk, 'secret');
+    const [wrapper] = wrapPrivateNote(alice.sk, [], rumor);
+
+    const layers = privateNoteLayers(eve.sk, wrapper);
+    expect(layers[0].decoded).toMatchObject({ kind: KIND_PRIVATE_NOTE });
+    expect(layers[1].decoded).toBe('‹undecodable›');
+    expect(layers[2].decoded).toBe('‹undecodable›');
+  });
 });
 
 describe('NIP-FE connections', () => {

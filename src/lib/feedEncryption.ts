@@ -24,6 +24,7 @@ import {
   sealAuthorKey,
   sealEnvelope,
   sealSlotless,
+  type FbEnvelope,
 } from './falseBottom';
 
 export const KIND_SEAL = 124;
@@ -221,6 +222,52 @@ export const openPrivateReply = (replyCek: Uint8Array, event: NostrEvent): Rumor
   const seal = JSON.parse(utf8d.decode(openSlotless(replyCek, envelope))) as NostrEvent;
   return unwrapRumor(replyCek, seal);
 };
+
+/** One decode level of a private event, for display in the broadcast
+ * modal's event tab. */
+export interface EventLayer {
+  /** Level name: wrapper / seal / rumour. */
+  name: string;
+  /** The decoded event at this level — parsed objects, not b64 blobs. */
+  decoded: unknown;
+}
+
+/**
+ * The decode levels of a private wrapper, for display: the outer event
+ * (envelope elided), the seal, the rumour. Both shapes — a 1370 note
+ * opens its author slot for the CEK; a 1470 reply is slotless under the
+ * conversation's reply CEK. Each level that fails to open says so;
+ * earlier levels still show.
+ */
+export const privateNoteLayers = (
+  sk: Uint8Array,
+  wrapper: NostrEvent,
+  replyCek?: Uint8Array,
+): readonly EventLayer[] => {
+  const layers: EventLayer[] = [
+    { name: 'wrapper', decoded: { ...wrapper, content: '‹envelope›' } },
+  ];
+  try {
+    const envelope = parseEnvelope(wrapper.content);
+    const { cek, payload } = wrapper.kind === KIND_PRIVATE_NOTE
+      ? openEnvelopeWithCek(sk, wrapper.pubkey, envelope)
+      : slotlessReply(replyCek, envelope);
+    const seal = JSON.parse(utf8d.decode(payload)) as NostrEvent;
+    layers.push({ name: 'seal', decoded: seal });
+    layers.push({ name: 'rumour', decoded: unwrapRumor(cek, seal) });
+  } catch {
+    layers.push({ name: 'seal', decoded: '‹undecodable›' });
+    layers.push({ name: 'rumour', decoded: '‹undecodable›' });
+  }
+  return layers;
+};
+
+/** A 1470 has no slots — its CEK is the conversation's reply key. */
+const slotlessReply = (replyCek: Uint8Array | undefined, envelope: FbEnvelope): { cek: Uint8Array; payload: Uint8Array } => {
+  if (!replyCek) throw new Error('reply CEK required for a 1470');
+  return { cek: replyCek, payload: openSlotless(replyCek, envelope) };
+};
+
 
 const partiesOf = (a: string, b: string): [string, string] =>
   a < b ? [a, b] : [b, a];

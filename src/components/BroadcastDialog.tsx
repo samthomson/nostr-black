@@ -16,14 +16,7 @@ import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
 import type { PrivacyGrade } from '@/lib/privacy';
 import type { ReactNode } from 'react';
-
-/** One decode level of a private event, pre-encoding. */
-export interface EventLayer {
-  /** Tab name: 'wrapper', 'seal', 'rumour'… */
-  name: string;
-  /** The decoded event at this layer — parsed JSON, not b64 blobs. */
-  decoded: unknown;
-}
+import type { EventLayer } from '@/lib/feedEncryption';
 
 /**
  * The one broadcast modal. Structure:

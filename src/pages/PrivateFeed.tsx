@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
 import { Loader2 } from 'lucide-react';
 import { getPublicKey } from 'nostr-tools';
-import type { NostrEvent } from '@nostrify/nostrify';
 import { Page } from '@/components/Page';
 import { PrivacyTag } from '@/components/PrivacyTag';
 import { PrivateNote } from '@/components/PrivateNote';
@@ -13,10 +12,7 @@ import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { usePrivateFeed } from '@/data/hooks/usePrivateFeed';
 import { useRouting } from '@/data/hooks/useRouting';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
-import type { EventLayer } from '@/components/BroadcastDialog';
-import { decryptCt, openEnvelopeWithCek, parseEnvelope } from '@/lib/falseBottom';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
-import { openPrivateNote } from '@/lib/feedEncryption';
 import { store } from '@/data/store';
 import { conversationOf, type OpenedReply } from '@/lib/feedEncryptionRead';
 import {
@@ -24,41 +20,13 @@ import {
   deletePrivateEvent,
   makeRevision,
   makeRumor,
+  privateNoteLayers,
   wrapPrivateNote,
   wrapPrivateReply,
   type OpenedNote,
 } from '@/lib/feedEncryption';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
-
-/**
- * The decoded layers of one private wrapper: the outer event (envelope
- * elided), the author seal, and the rumour — each fully decoded via the
- * app's own opening path.
- */
-const noteLayers = (sk: Uint8Array, wrapper: NostrEvent | undefined): readonly EventLayer[] | undefined => {
-  if (!wrapper) return undefined;
-  let seal: NostrEvent | undefined;
-  let rumour: unknown;
-  try {
-    const opened = openPrivateNote(sk, wrapper);
-    const envelope = parseEnvelope(wrapper.content);
-    const { cek, payload } = openEnvelopeWithCek(sk, wrapper.pubkey, envelope);
-    void cek; void payload; void opened;
-    // The seal is the JSON inside ct; recover it by re-encrypting is
-    // wrong — instead decode through the seal's own key: the ct is
-    // AEAD(CEK, seal JSON) and we hold the CEK from the slot.
-    seal = JSON.parse(new TextDecoder().decode(decryptCt(cek, envelope.ct))) as NostrEvent;
-    rumour = opened.rumor;
-  } catch {
-    // layers are best-effort
-  }
-  return [
-    { name: 'wrapper', decoded: { ...wrapper, content: '‹envelope›' } },
-    { name: 'seal', decoded: seal ?? '‹undecodable›' },
-    { name: 'rumour', decoded: rumour ?? '‹undecodable›' },
-  ];
-};
 
 const PrivateFeedBody = () => {
   const sk = useSessionKey();
@@ -89,7 +57,7 @@ const PrivateFeedBody = () => {
       identityNote: 'burner-signed',
       relays: publishTargets,
       extraRelays: discoveryTargets,
-      layers: noteLayers(sk, events[0]),
+      layers: privateNoteLayers(sk, events[0]),
       events,
       labels: events.map((_, i) => (events.length > 1 ? `private note (${i + 1} of ${events.length})` : 'private note')),
     });
@@ -97,6 +65,7 @@ const PrivateFeedBody = () => {
 
   const reply = (parent: OpenedNote, content: string) => {
     const { rumor } = makeRumor(getPublicKey(sk), content, [['e', parent.rumor.id]]);
+    const event = wrapPrivateReply(sk, parent.replyCek, rumor);
     request({
       grade: 'private',
       label: 'private reply',
@@ -105,7 +74,8 @@ const PrivateFeedBody = () => {
       identityNote: 'burner-signed',
       relays: publishTargets,
       extraRelays: discoveryTargets,
-      events: [wrapPrivateReply(sk, parent.replyCek, rumor)],
+      layers: privateNoteLayers(sk, event, parent.replyCek),
+      events: [event],
     });
   };
 
@@ -114,6 +84,7 @@ const PrivateFeedBody = () => {
     // the key, so one revision covers the whole audience — no slots,
     // no aliases, no connection state.
     const revision = makeRevision(getPublicKey(sk), parent.rumor, content);
+    const event = wrapPrivateReply(sk, parent.replyCek, revision);
     request({
       grade: 'private',
       label: 'revision',
@@ -122,11 +93,13 @@ const PrivateFeedBody = () => {
       identityNote: 'burner-signed',
       relays: publishTargets,
       extraRelays: discoveryTargets,
-      events: [wrapPrivateReply(sk, parent.replyCek, revision)],
+      layers: privateNoteLayers(sk, event, parent.replyCek),
+      events: [event],
     });
   };
   const editReply = (parent: OpenedNote, reply: OpenedReply, content: string) => {
     const revision = makeRevision(getPublicKey(sk), reply.rumor, content);
+    const event = wrapPrivateReply(sk, parent.replyCek, revision);
     request({
       grade: 'private',
       label: 'reply revision',
@@ -135,7 +108,8 @@ const PrivateFeedBody = () => {
       identityNote: 'burner-signed',
       relays: publishTargets,
       extraRelays: discoveryTargets,
-      events: [wrapPrivateReply(sk, parent.replyCek, revision)],
+      layers: privateNoteLayers(sk, event, parent.replyCek),
+      events: [event],
     });
   };
 

@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { ReactNode } from 'react';
-import { BroadcastDialog, type EventLayer } from '@/components/BroadcastDialog';
+import { BroadcastDialog } from '@/components/BroadcastDialog';
+import type { EventLayer } from '@/lib/feedEncryption';
 import { enqueue } from '@/data/publish/queue';
 import type { PrivacyGrade } from '@/lib/privacy';
 import type { NostrEvent } from '@nostrify/nostrify';
