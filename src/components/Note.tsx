@@ -273,7 +273,7 @@ const fmt = (n: number, capped: boolean): string => `${n}${capped ? '+' : ''}`;
 /** Replies: same two-part shape, but both halves are the note route —
  * replies are notes, opened with the existing note-opening UI, never
  * listed as people. The count still reads as unknown-while-fetching. */
-const ReplyCount = ({
+export const ReplyCount = ({
   replies,
   pending,
   capped,
@@ -310,6 +310,18 @@ const ReplyCount = ({
           <span className="text-sm underline underline-offset-2">{fmt(replies, capped)}</span>
         )}
       </Link>
+    ) : onReplies ? (
+      <button
+        type="button"
+        onClick={onReplies}
+        className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+        aria-label="replies"
+        data-testid="count-reply"
+      >
+        {pending ? <Loader2 className="size-3 animate-spin" /> : (
+          <span className="text-sm underline underline-offset-2">{fmt(replies, capped)}</span>
+        )}
+      </button>
     ) : (
       <span className="text-muted-foreground inline-flex items-center" aria-label="replies" data-testid="count-reply">
         {pending ? <Loader2 className="size-3 animate-spin" /> : (

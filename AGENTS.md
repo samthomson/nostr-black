@@ -49,6 +49,7 @@ Plan of record: `README.md`.
 - json is always formatted with 4-space indentation
 - structure by domain with clear module boundaries. deterministic pure functions live once in `src/lib` and slot into complex call sites, so the complex places hold less code and read easily
 - one concern per file: e.g. AppRouter is just routes, templates live in their own component
+- reuse before you build: before writing any new component/hook/util, find the existing one that already does the job and extend it. the same ui or logic implemented twice — public vs private feed, feed vs thread, page vs page — is a bug: factor the shared behaviour into one component and use it everywhere. surfaces must behave identically unless the difference is deliberate and load-bearing, never an accident of copy-paste
 
 ## Tests & validation
 

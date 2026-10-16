@@ -9,7 +9,9 @@ import DebugPage from "./pages/Debug";
 import CrashPage from "./pages/Crash";
 import SettingsPage from "./pages/Settings";
 import ConnectionsPage from "./pages/Connections";
+import PublicFeedPage from "./pages/PublicFeed";
 import PrivateFeedPage from "./pages/PrivateFeed";
+import { PrivateThreadPage } from "./pages/PrivateThread";
 import NotFound from "./pages/NotFound";
 
 /** App surfaces behind the login gate: logged out redirects to the
@@ -18,7 +20,9 @@ const GATED: readonly { path: string; element: ReactNode }[] = [
   { path: "/settings/*", element: <SettingsPage /> },
   { path: "/debug", element: <DebugPage /> },
   { path: "/connections", element: <ConnectionsPage /> },
-  { path: "/private", element: <PrivateFeedPage /> },
+  { path: "/public-feed", element: <PublicFeedPage /> },
+  { path: "/private-feed", element: <PrivateFeedPage /> },
+  { path: "/private-feed/:nip19", element: <PrivateThreadPage /> },
   { path: "/:nip19", element: <NIP19Page /> },
 ];
 

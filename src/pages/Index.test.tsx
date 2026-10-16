@@ -10,6 +10,7 @@ import { closeDatabase, deleteDatabase } from '@/data/persist/db';
 import { resetUseIsTor } from '@/hooks/useEgress';
 
 import Index from './Index';
+import PublicFeed from './PublicFeed';
 import { TestApp } from '@/test/TestApp';
 
 const USER = 'u'.repeat(64);
@@ -157,7 +158,7 @@ describe('Index outbox feed (logged in)', () => {
 
     render(
       <TestApp userState={{ follows: { pubkeys: [A, B], updatedAt: 1 } }}>
-        <Index />
+        <PublicFeed />
       </TestApp>,
     );
 
@@ -184,7 +185,7 @@ describe('Index outbox feed (logged in)', () => {
 
     render(
       <TestApp userState={{ follows: { pubkeys: [A], updatedAt: 1 } }}>
-        <Index />
+        <PublicFeed />
       </TestApp>,
     );
 
@@ -198,7 +199,7 @@ describe('Index outbox feed (logged in)', () => {
   it('shows the not-following state for an empty contact list, without querying notes', async () => {
     render(
       <TestApp userState={{ follows: { pubkeys: [], updatedAt: 1 } }}>
-        <Index />
+        <PublicFeed />
       </TestApp>,
     );
 
@@ -226,7 +227,7 @@ describe('Index outbox feed (logged in)', () => {
 
     render(
       <TestApp userState={{ follows: { pubkeys: [A], updatedAt: 1 } }}>
-        <Index />
+        <PublicFeed />
       </TestApp>,
     );
 
@@ -241,7 +242,7 @@ describe('Index outbox feed (logged in)', () => {
 
     render(
       <TestApp userState={{ follows: { pubkeys: [A], updatedAt: 1 } }}>
-        <Index />
+        <PublicFeed />
       </TestApp>,
     );
     expect(await screen.findByText('followed note', {}, { timeout: 3000 })).toBeTruthy();
@@ -261,7 +262,7 @@ describe('Index outbox feed (logged in)', () => {
   it('shows follow-list-not-found when no kind 3 exists, and never claims zero follows', async () => {
     render(
       <TestApp>
-        <Index />
+        <PublicFeed />
       </TestApp>,
     );
 

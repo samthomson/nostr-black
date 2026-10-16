@@ -10,7 +10,7 @@ import { npubOf } from '@/lib/format';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useAsset } from '@/hooks/useAsset';
 import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { NoteSkeleton } from '@/components/NoteSkeleton';
 import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 
@@ -163,15 +163,7 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
 
       {notes.pending &&
         Array.from({ length: notes.notes.length > 0 ? 2 : 3 }, (_, i) => (
-          <Card key={`s${i}`}>
-            <CardContent className="flex gap-3 p-4">
-              <Skeleton className="size-8 shrink-0 rounded-sm" />
-              <div className="w-full space-y-1.5">
-                <Skeleton className="h-2.5 w-20" />
-                <Skeleton className="h-2.5 w-full" />
-              </div>
-            </CardContent>
-          </Card>
+          <NoteSkeleton key={`s${i}`} />
         ))}
 
       {!notes.pending && notes.notes.length === 0 && (

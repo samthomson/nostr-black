@@ -101,12 +101,18 @@ describe('PrivateFeedPage', () => {
     await settle();
 
     expect(await screen.findByText('secret from alice')).toBeTruthy();
-    expect(await screen.findByText('secret reply from bob')).toBeTruthy();
-    // Post and reply both render as standard feed items: one info button each.
-    // Recipient view: no edit affordance on someone else's note — the only
-    // edit button is bob's, on his own reply. Same for delete.
-    expect(screen.getAllByRole('button', { name: 'edit note' })).toHaveLength(1);
-    expect(screen.getAllByRole('button', { name: 'delete note' })).toHaveLength(1);
+    // Closed in the feed, like the public feed: no reply text, no composer.
+    expect(screen.queryByText('secret reply from bob')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'reply' })).toBeNull();
+
+    // The reply count routes to the note's thread page — same opening
+    // gesture as the public feed.
+    const count = await waitFor(() => {
+      const el = screen.getByTestId('count-reply');
+      expect(el.tagName).toBe('A');
+      return el;
+    });
+    expect(count.getAttribute('href')).toBe(`/private-feed/${nip19.neventEncode({ id: rumor.id, author: rumor.pubkey, relays: [] })}`);
 
     // The info dialog shows the wrapper — the event relays hold — not the rumor.
     const user = userEvent.setup();
@@ -246,58 +252,6 @@ describe('PrivateFeedPage', () => {
     expect(await screen.findByText(/no private notes yet/)).toBeTruthy();
   });
 
-  it('lets a reply author edit their reply', async () => {
-    const alice = generateSecretKey();
-    const bob = generateSecretKey();
-    const offer = requestConnection(alice, getPublicKey(bob));
-    const accepted = acceptConnection(bob, openConnection(bob, offer));
-    const { rumor, replyCek } = makeRumor(getPublicKey(alice), 'root note');
-    const [note] = wrapPrivateNote(alice, [getPublicKey(bob)], rumor);
-    const replyRumor = makeRumor(getPublicKey(bob), 'first reply', [['e', rumor.id]]).rumor;
-    const reply = wrapPrivateReply(bob, replyCek, replyRumor);
-
-    queryRelay.mockImplementation(async (_url, filters) => {
-      if (filters[0].kinds?.includes(30378)) return [accepted];
-      if (filters[0]['#f']) return [note];
-      if (filters[0]['#n']) return [reply];
-      return [];
-    });
-
-    render(
-      <TestApp>
-        <Unlock nsec={nip19.nsecEncode(bob)}>
-          <PrivateFeedPage />
-        </Unlock>
-      </TestApp>,
-    );
-    await settle();
-    await settle();
-    await settle();
-
-    expect(await screen.findByText('first reply')).toBeTruthy();
-    const user = userEvent.setup();
-
-    // The note is alice's — no edit for bob. His own reply is editable.
-    const editButtons = screen.getAllByRole('button', { name: 'edit note' });
-    expect(editButtons).toHaveLength(1);
-
-    await user.click(editButtons[0]);
-    const box = screen.getByRole('textbox', { name: 'edit note' });
-    await user.clear(box);
-    await user.type(box, 'edited reply');
-    await user.click(screen.getByRole('button', { name: 'save' }));
-    await confirmBroadcast(user);
-    await settle();
-
-    expect(await screen.findByText('edited reply')).toBeTruthy();
-    expect(screen.queryByText('first reply')).toBeNull();
-    const revision = publish.mock.calls.map(([ev]) => ev).find((ev) => ev.kind === 1470);
-    expect(revision).toBeTruthy();
-    // the reply's edit shows as an 'edited' mark opening its history
-    await user.click(screen.getByRole('button', { name: 'edit history' }));
-    const historyDialog = await screen.findByRole('dialog');
-    expect(within(historyDialog).getByText('first reply')).toBeTruthy();
-  });
 
   it('edits a private note inside the broadcast modal before committing', async () => {
     const alice = generateSecretKey();

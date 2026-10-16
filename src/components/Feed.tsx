@@ -3,7 +3,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { ArrowUp, Loader2 } from 'lucide-react';
 import { Note } from '@/components/Note';
 import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { NoteSkeleton } from '@/components/NoteSkeleton';
 import { useFeed } from '@/data/hooks/useFeed';
 import { useProvenance } from '@/data/hooks/useProvenance';
 import { useVisibility } from '@/data/hooks/useVisibility';
@@ -81,16 +81,7 @@ export const Feed = () => {
 
       {isLoading &&
         Array.from({ length: notes.length > 0 ? 2 : 5 }, (_, i) => (
-          <Card key={`s${i}`}>
-            <CardContent className="flex gap-3 p-4">
-              <Skeleton className="size-8 shrink-0 rounded-sm" />
-              <div className="w-full space-y-1.5">
-                <Skeleton className="h-2.5 w-20" />
-                <Skeleton className="h-2.5 w-full" />
-                <Skeleton className="h-2.5 w-3/5" />
-              </div>
-            </CardContent>
-          </Card>
+          <NoteSkeleton key={`s${i}`} />
         ))}
 
       {notes.length > 0 && !exhausted && (

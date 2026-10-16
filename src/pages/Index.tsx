@@ -3,7 +3,6 @@ import { Loader2 } from 'lucide-react';
 import { BrandMark } from '@/components/BrandMark';
 import { MovingBackground } from '@/components/MovingBackground';
 import { PrivacyTag } from '@/components/PrivacyTag';
-import { NoteComposer } from '@/components/NoteComposer';
 import { LoginForm } from '@/components/auth/LoginForm';
 import { Button } from '@/components/ui/button';
 import { useIsTor } from '@/hooks/useEgress';
@@ -13,10 +12,6 @@ import { cn } from '@/lib/utils';
 import { useIsDesktop } from '@/hooks/useTransport';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Feed } from '@/components/Feed';
-import { FeedKindMenu } from '@/components/FeedKindMenu';
-import { Page } from '@/components/Page';
-import { TorGate } from '@/components/TorGate';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 type Step = 'start' | 'tor' | 'login';
@@ -188,18 +183,8 @@ const Index = () => {
   // Sent here by the gate while logged out: go back where you were going.
   if (from && from !== '/') return <Navigate to={from} replace />;
 
-
-  return (
-    <TorGate>
-      <Page
-        title={<PrivacyTag grade="public">public feed</PrivacyTag>}
-        actions={<FeedKindMenu />}
-      >
-        <NoteComposer />
-        <Feed />
-      </Page>
-    </TorGate>
-  );
+  // Logged in, the landing has done its job — the app is the feeds.
+  return <Navigate to="/public-feed" replace />;
 };
 
 export default Index;

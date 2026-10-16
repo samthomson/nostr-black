@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
-import { Note } from '@/components/Note';
+import { Note, ReplyCount } from '@/components/Note';
+import { nip19 } from 'nostr-tools';
 import { EngagementCount, type EngagementRow } from '@/components/EngagementDialog';
 import { reactionsTo, type Conversation } from '@/lib/feedEncryptionRead';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -23,6 +24,8 @@ const PrivateItem = ({
   wrapper,
   conversation,
   versions,
+  replyCount,
+  noteHref,
   onReact,
   onEdit,
   onDelete,
@@ -33,6 +36,9 @@ const PrivateItem = ({
   conversation: Conversation;
   /** The item's full version chain, oldest first, the rendered rumor last. */
   versions?: readonly Rumor[];
+  /** Present on the root post in the feed: routes to the thread page. */
+  replyCount?: number;
+  noteHref?: string;
   /** Present when reacting is available: broadcast a private reaction. */
   onReact?: (target: Rumor, emoji: string) => void;
   onEdit?: (content: string) => void;
@@ -57,7 +63,14 @@ const PrivateItem = ({
         edited={edited}
         onEditHistory={edited ? () => setHistoryOpen(true) : undefined}
       >
+        {/* Deliberate divergence from the public counts row: no repost.
+            A public kind 6 would leak the sealed rumor, and "reposting"
+            privately means re-wrapping for another connection — a share
+            feature, not a count. Replies and reactions only. */}
         <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm">
+          {noteHref !== undefined && (
+            <ReplyCount replies={replyCount ?? 0} pending={false} capped={false} href={noteHref} />
+          )}
           <EngagementCount
             icon={<Heart className={cn('size-4', !!user && reactions.some((r) => r.pubkey === user.pubkey) && 'fill-current')} />}
             count={reactions.length}
@@ -124,15 +137,18 @@ const ReplyComposer = ({
 };
 
 /**
- * One private post: the note, its replies, and the composer. Every item —
- * post or reply — renders through the same Note component the public feed
- * uses; replies indent under it, thread-style.
+ * One private post, behaving exactly like a public one: in the feed it
+ * shows just the note with a reply count that routes to its thread page;
+ * opened (the thread page), the replies indent under it thread-style and
+ * the reply composer appears. Every item — post or reply — renders through
+ * the same Note component the public feed uses.
  */
 export const PrivateNote = ({
   note,
   history,
   replies,
   conversation,
+  open,
   onReply,
   onReact,
   onEdit,
@@ -144,6 +160,8 @@ export const PrivateNote = ({
   replies: readonly OpenedReply[];
   /** The conversation's reactions, addressed at the note or any reply. */
   conversation: Conversation;
+  /** Thread mode: replies and composer are rendered. */
+  open: boolean;
   onReply: (parent: OpenedNote, content: string) => void;
   onReact?: (parent: OpenedNote, target: Rumor, emoji: string) => void;
   onEdit?: (parent: OpenedNote, content: string) => void;
@@ -156,23 +174,27 @@ export const PrivateNote = ({
       wrapper={note.wrapper}
       conversation={conversation}
       versions={history.map((h) => h.rumor)}
+      replyCount={replies.length}
+      noteHref={open ? undefined : `/private-feed/${nip19.neventEncode({ id: note.rumor.id, author: note.rumor.pubkey, relays: [] })}`}
       onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
       onEdit={onEdit ? (content) => onEdit(note, content) : undefined}
       onDelete={onDelete ? () => onDelete(note, history) : undefined}
     />
-    <div className="space-y-3 border-l pl-3">
-      {replies.map((reply) => (
-        <PrivateItem
-          key={reply.wrapper.id}
-          rumor={reply.rumor}
-          wrapper={reply.wrapper}
-          conversation={conversation}
-          versions={[...(reply.history?.map((h) => h.rumor) ?? []), reply.rumor]}
-          onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
-          onEdit={onEditReply ? (content) => onEditReply(note, reply, content) : undefined}
-        />
-      ))}
-      <ReplyComposer parent={note} onReply={onReply} />
-    </div>
+    {open && (
+      <div className="space-y-3 border-l pl-3">
+        {replies.map((reply) => (
+          <PrivateItem
+            key={reply.wrapper.id}
+            rumor={reply.rumor}
+            wrapper={reply.wrapper}
+            conversation={conversation}
+            versions={[...(reply.history?.map((h) => h.rumor) ?? []), reply.rumor]}
+            onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
+            onEdit={onEditReply ? (content) => onEditReply(note, reply, content) : undefined}
+          />
+        ))}
+        <ReplyComposer parent={note} onReply={onReply} />
+      </div>
+    )}
   </div>
 );

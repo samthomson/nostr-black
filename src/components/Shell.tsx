@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bug, House, Lock, Menu, Settings, User, Users, X } from 'lucide-react';
+import { Bug, House, Lock, Menu, Settings, User, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { LoginArea } from '@/components/auth/LoginArea';
@@ -34,9 +34,8 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   // Privacy is colour: the public feed is white, the private feed black,
   // encrypted connections near-black; your profile is a public page.
   const nav: NavItem[] = [
-    { to: '/', label: 'feed', Icon: House, grade: 'public' },
-    { to: '/private', label: 'private feed', Icon: Lock, grade: 'private' },
-    { to: '/connections', label: 'connections', Icon: Users, grade: 'high' },
+    { to: '/public-feed', label: 'feed', Icon: House, grade: 'public' },
+    { to: '/private-feed', label: 'private feed', Icon: Lock, grade: 'private' },
     ...(profileTo ? [{ to: profileTo, label: 'profile', Icon: User, grade: 'public' as const }] : []),
     { to: '/settings', label: 'settings', Icon: Settings },
     { to: '/debug', label: 'debug', Icon: Bug },
@@ -152,7 +151,6 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
           >
             <BrandMark />
           </Link>
-
           {navBlock()}
 
           <div className="mt-auto pt-4">

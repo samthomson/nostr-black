@@ -7,7 +7,7 @@ import { Page } from '@/components/Page';
 import { ProfilePage } from '@/pages/Profile';
 import type { DecodeResult } from '@/lib/format';
 import { Card, CardContent } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { NoteSkeleton } from '@/components/NoteSkeleton';
 import NotFound from './NotFound';
 
 /** Resolves a decoded pointer to (id, relay hints) for fetching. */
@@ -36,18 +36,7 @@ const EventPage = ({ identifier }: { identifier: string }) => {
   });
 
   if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="flex gap-3 p-4">
-          <Skeleton className="size-8 shrink-0 rounded-sm" />
-          <div className="w-full space-y-1.5">
-            <Skeleton className="h-2.5 w-20" />
-            <Skeleton className="h-2.5 w-full" />
-            <Skeleton className="h-2.5 w-3/5" />
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return <NoteSkeleton />;
   }
 
   if (!event) {
