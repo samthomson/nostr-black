@@ -53,10 +53,12 @@ const EventPage = ({ identifier }: { identifier: string }) => {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <Note event={event} linkReplies={false} />
       <Thread parent={event.id} author={event.pubkey} />
-      <NoteComposer parent={event} />
+      <div className="border-l pl-3">
+        <NoteComposer parent={event} />
+      </div>
     </div>
   );
 };

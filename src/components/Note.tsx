@@ -32,9 +32,14 @@ import { mediaUrls, MEDIA_URL, VIDEO_URL } from '@/lib/mediaUrls';
 const CLAMP_THRESHOLD = 420;
 /** More images than this and the note is collapsed; stacks dominate screens. */
 const IMAGE_CLAMP_COUNT = 2;
+/** Link/accent color for a privacy-graded surface: maroon on white
+ * (public), primary (near-white) on black (private). */
+const refClass = (grade: PrivacyGrade): string =>
+  grade === 'public' ? 'text-maroon' : 'text-primary';
+
 
 /** Renders a bech32 id (npub/note/nevent/naddr…) as a link to its route. */
-const NostrRef = ({ bech32 }: { bech32: string }) => {
+const NostrRef = ({ bech32, grade }: { bech32: string; grade: PrivacyGrade }) => {
   const decoded = (() => {
     try {
       return nip19.decode(bech32);
@@ -62,7 +67,7 @@ const NostrRef = ({ bech32 }: { bech32: string }) => {
   }
 
   return (
-    <Link to={`/${bech32}`} className="text-primary underline underline-offset-2">
+    <Link to={`/${bech32}`} className={cn(refClass(grade), 'underline underline-offset-2')}>
       @{label}
     </Link>
   );
@@ -74,24 +79,24 @@ const NostrRef = ({ bech32 }: { bech32: string }) => {
  * the note's media grid — one way to render images, not two. Never uses
  * innerHTML — event content is untrusted (see AGENTS.md).
  */
-const renderContent = (content: string) =>
+const renderContent = (content: string, grade: PrivacyGrade) =>
   content
     .split(/(nostr:[a-z0-9]+|@(?:npub|nprofile|note|nevent|naddr)1[a-z0-9]+|https?:\/\/[^\s]+|#[\p{L}\p{N}_]+)/gu)
     .filter(Boolean)
     .filter((token) => !(token.startsWith('http') && MEDIA_URL.test(token)))
     .map((token, i) => {
       if (token.startsWith('nostr:')) {
-        return <NostrRef key={i} bech32={token.slice(6)} />;
+        return <NostrRef key={i} bech32={token.slice(6)} grade={grade} />;
       }
       if (/^@(npub|nprofile|note|nevent|naddr)1/.test(token)) {
-        return <NostrRef key={i} bech32={token.slice(1)} />;
+        return <NostrRef key={i} bech32={token.slice(1)} grade={grade} />;
       }
       if (/^https?:\/\//.test(token)) {
         return (
           <a
             key={i}
             href={token}
-            className="text-primary underline underline-offset-2 break-all"
+            className={cn(refClass(grade), 'underline underline-offset-2 break-all')}
             rel="noopener noreferrer nofollow"
             target="_blank"
           >
@@ -101,7 +106,7 @@ const renderContent = (content: string) =>
       }
       if (token.startsWith('#')) {
         return (
-          <span key={i} className="text-primary">
+          <span key={i} className={refClass(grade)}>
             {token}
           </span>
         );
@@ -114,8 +119,9 @@ const renderContent = (content: string) =>
  * through the transport layer via useAsset. Failures are visible — a media
  * layer that fails silently is undebuggable. Images with `onOpen` zoom into
  * the note's lightbox. */
-const MediaItem = ({ url, alt, onOpen }: { url: string; alt: string; onOpen?: () => void }) => {
+const MediaItem = ({ url, alt, onOpen, tile = false }: { url: string; alt: string; onOpen?: () => void; tile?: boolean }) => {
   const { url: src, error, ref } = useAsset(url);
+  const frame = tile ? 'aspect-square w-full rounded-sm object-cover' : 'max-h-96 w-full rounded-sm object-cover';
   if (!src) {
     if (error) {
       return (
@@ -134,7 +140,7 @@ const MediaItem = ({ url, alt, onOpen }: { url: string; alt: string; onOpen?: ()
   if (VIDEO_URL.test(url)) {
     return (
       <div ref={ref}>
-        <video src={src} controls preload="metadata" className="max-h-96 w-full rounded-sm object-cover" />
+        <video src={src} controls preload="metadata" className={frame} />
       </div>
     );
   }
@@ -142,10 +148,10 @@ const MediaItem = ({ url, alt, onOpen }: { url: string; alt: string; onOpen?: ()
     <div ref={ref}>
       {onOpen ? (
         <LightboxTrigger label="open image" onOpen={onOpen} className="w-full">
-          <img src={src} alt={alt} className="max-h-96 w-full rounded-sm object-cover" />
+          <img src={src} alt={alt} className={frame} />
         </LightboxTrigger>
       ) : (
-        <img src={src} alt={alt} className="max-h-96 w-full rounded-sm object-cover" />
+        <img src={src} alt={alt} className={frame} />
       )}
     </div>
   );
@@ -170,64 +176,20 @@ const repostedEvent = (event: NostrEvent | Rumor): NostrEvent | null => {
   }
 };
 
-/** Author block: name linking to the profile route. */
-const AuthorLink = ({ pubkey }: { pubkey: string }) => {
-  const { metadata } = useProfile(pubkey);
-  const displayName = metadata?.display_name || metadata?.name;
-  const npub = npubOf(pubkey);
-  const href = profileHref(pubkey);
-
-  return (
-    <span className="truncate text-sm">
-      {href ? (
-        <Link to={href} className="font-medium hover:underline">
-          {displayName ?? `${npub.slice(0, 10)}…`}
-        </Link>
-      ) : (
-        displayName ?? `${npub.slice(0, 10)}…`
-      )}
-    </span>
-  );
-};
-
-/** Compact rendering of a reposted/quoted event. */
 /** The media grid — the one layout for a note's images/videos, used by
  * the note body and embedded notes alike. */
 const MediaGrid = ({ urls, alt, onOpen }: { urls: readonly string[]; alt: string; onOpen?: (index: number) => void }) => {
   if (urls.length === 0) return null;
+  const tile = urls.length > 1;
   return (
-    <div className={`mt-1 gap-1 ${urls.length > 1 ? 'grid grid-cols-2' : 'flex'}`}>
+    <div className={`mt-1 gap-1 ${tile ? 'grid grid-cols-2' : 'flex'}`}>
       {urls.map((url, i) => (
-        <MediaItem key={url} url={url} alt={alt} onOpen={onOpen ? () => onOpen(i) : undefined} />
+        <MediaItem key={url} url={url} alt={alt} tile={tile} onOpen={onOpen ? () => onOpen(i) : undefined} />
       ))}
     </div>
   );
 };
 
-const EmbeddedNote = ({ event, grade }: { event: NostrEvent; grade: PrivacyGrade }) => {
-  const [openMedia, setOpenMedia] = useState<number | null>(null);
-  const urls = mediaUrls(event);
-  const alt = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'embedded media';
-  return (
-    <blockquote className="space-y-1 border-l-2 border-muted-foreground/30 pl-3">
-      <AuthorLink pubkey={event.pubkey} />
-      <div className="whitespace-pre-wrap break-words text-sm">
-        {renderContent(event.content)}
-      </div>
-      <MediaGrid urls={urls} alt={alt} onOpen={setOpenMedia} />
-      {openMedia !== null && urls[openMedia] && (
-        <Lightbox
-          urls={urls}
-          index={openMedia}
-          onIndex={setOpenMedia}
-          onClose={() => setOpenMedia(null)}
-          alt={alt}
-          grade={grade}
-        />
-      )}
-    </blockquote>
-  );
-};
 
 /** Reply affordance: names the author of the parent event (the person
  * actually replied to). Prefers the loaded parent event's pubkey; until
@@ -373,13 +335,16 @@ const NoteMeta = ({
  * resolution are public-only (a rumor id is unresolvable on relays, and
  * asking about one leaks the query).
  */
-export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onReplies, onEdit, onDelete, edited = false, onEditHistory, children }: {
+export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showContext = true, onReplies, onEdit, onDelete, edited = false, onEditHistory, children }: {
   event: NostrEvent | Rumor;
   /** Present when the item is private: the kind 1370/1470 wrapper. */
   wrapper?: NostrEvent;
   foundOn?: string[];
   route?: 'tor' | 'direct';
   linkReplies?: boolean;
+  /** Feed-only: render the replied-to parent inline. Thread pages pass
+   * false — the parent is already above, so replies read as replies. */
+  showContext?: boolean;
   onReplies?: () => void;
   /** Present when the item is editable (private notes): publish a
    * revision with this content. */
@@ -486,19 +451,28 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
   const embedded = repostedEvent(event);
   const media = showMedia ? mediaUrls(event) : [];
   const allMedia = showMedia ? [...media, ...(embedded ? mediaUrls(embedded) : [])] : [];
+  const isLongform = !embedded && event.kind === 30023;
+  const longformTitle = isLongform
+    ? event.tags.find(([n]) => n === 'title')?.[1]
+    : undefined;
+  // Longform preview: the summary replaces the raw markdown body; the
+  // title renders as a heading and the cover lands in the media grid.
   const renderedText = embedded
     ? embedded.content
     : (event.kind === 30023
-        ? (event.tags.find(([n]) => n === 'title')?.[1] ?? event.content)
+        ? (event.tags.find(([n]) => n === 'summary')?.[1] ?? event.content)
         : event.content);
   const clampable =
-    renderedText.length > CLAMP_THRESHOLD || allMedia.length > IMAGE_CLAMP_COUNT;
+    !embedded && (renderedText.length > CLAMP_THRESHOLD || allMedia.length > IMAGE_CLAMP_COUNT);
   const kindLabel = KIND_LABELS[event.kind];
   // Reposts (6/16) point their e tag at the reposted note, not a reply
   // parent — they embed that note but never read as a reply.
   const isRepost = event.kind === 6 || event.kind === 16;
-  const referenceId = embedded?.id ?? event.tags.find(([n]) => n === 'q')?.[1];
-  const quotedViaTag = !embedded && referenceId !== undefined;
+  const quoteTag = !embedded ? event.tags.find(([n]) => n === 'q') : undefined;
+  const quotedId = quoteTag?.[1];
+  const quotedAuthor = quoteTag?.[3];
+  const quotedRelays = quoteTag?.[2] ? [quoteTag[2]] : [];
+  const quotedViaTag = quoteTag !== undefined;
   // A reply carries its parent in e tags — nip10.parse resolves root/reply
   // markers (and legacy positional tags). The replied-to *person* is the
   // author of the reply-target event — never "last p tag" (p tags are
@@ -513,6 +487,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
     ...(foundOn ?? []),
   ];
   const parent = useEvent(parentId, { author: taggedAuthor, hints: parentHints });
+  const quoted = useEvent(quotedId, { author: quotedAuthor, hints: quotedRelays });
   const feed = useEngagementFeed(isPrivate ? undefined : event.id);
   const reposted = !!user && feed.reposts.some((r) => r.pubkey === user.pubkey);
   const reacted = !!user && feed.reactions.some((r) => r.pubkey === user.pubkey);
@@ -592,7 +567,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
               </button>
             )}
             {(kindLabel || quotedViaTag) && (
-              <span className="text-muted-foreground flex shrink-0 items-center">
+              <span className="flex shrink-0 items-center">
                 <Chip>{kindLabel ?? 'quoted'}</Chip>
               </span>
             )}
@@ -639,42 +614,58 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, onRep
             />
           ) : (
           <>
-          {parentId && !isRepost && (
+          {showContext && parentId && !isRepost && (
             <ReplyContext
               parentPubkey={parentPubkey}
               settled={!parent.pending}
               loaded={!!parent.event}
             />
           )}
-          {parentId && parent.event && (
-            <EmbeddedNote event={parent.event} grade={isPrivate ? 'private' : 'public'} />
+          {showContext && parentId && parent.event && (
+            <div className="mb-3">
+              <Note event={parent.event} showContext={false} />
+            </div>
           )}
 
           {/* Body: hard max-height with a bottom fade when collapsed — no
               note may dominate the screen, whatever its text or images. */}
           <div className="relative">
             <div className={clampable && !expanded ? 'max-h-80 overflow-hidden' : ''}>
-              {embedded ? (
-                <EmbeddedNote event={embedded} grade={isPrivate ? 'private' : 'public'} />
-              ) : quotedViaTag ? (
-                <Link
-                  to={eventHref(referenceId, event.pubkey) ?? '/'}
-                  className="text-muted-foreground block truncate border-l-2 border-muted-foreground/30 pl-3 text-sm hover:underline"
-                >
-                  {referenceId}
-                </Link>
-              ) : (
-                <div className="whitespace-pre-wrap break-words text-sm">
-                  {renderContent(renderedText)}
+              {isLongform && longformTitle && (
+                <p className="text-base font-semibold leading-snug">{longformTitle}</p>
+              )}
+              {!embedded && (
+                <div className="mt-1 whitespace-pre-wrap break-words text-sm">
+                  {renderContent(renderedText, grade)}
                 </div>
               )}
-
               {!embedded && <MediaGrid urls={media} alt={altText} onOpen={setOpenMedia} />}
             </div>
             {clampable && !expanded && (
               <div className={`pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t ${grade === 'private' ? 'from-privacy-private' : 'from-privacy-public'} to-transparent`} />
             )}
           </div>
+
+          {embedded && (
+            <div className="mt-3">
+              <Note event={embedded} showContext={false} />
+            </div>
+          )}
+
+          {quotedViaTag && (
+            quoted.event ? (
+              <div className="mt-3">
+                <Note event={quoted.event} showContext={false} />
+              </div>
+            ) : (
+              <Link
+                to={quotedId ? (eventHref(quotedId, quotedAuthor ?? event.pubkey) ?? '/') : '/'}
+                className="text-muted-foreground mt-1.5 block truncate rounded-sm border p-2.5 text-sm hover:underline"
+              >
+                quoting {quotedId?.slice(0, 16)}…
+              </Link>
+            )
+          )}
 
           {clampable && (
             <Button

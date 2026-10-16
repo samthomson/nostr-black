@@ -26,7 +26,7 @@ const ThreadBranch = ({ event }: { event: NostrEvent }) => {
 
   return (
     <div className="space-y-3">
-      <Note event={event} linkReplies={false} onReplies={() => setOpen((value) => !value)} />
+      <Note event={event} linkReplies={false} showContext={false} onReplies={() => setOpen((value) => !value)} />
       {open && <Thread parent={event.id} author={event.pubkey} />}
     </div>
   );

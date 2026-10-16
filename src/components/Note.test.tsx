@@ -217,6 +217,26 @@ describe('Note', () => {
     expect(await screen.findByText('the reposted words')).toBeTruthy();
     expect(screen.queryByText(/replying to/)).toBeNull();
   });
+  it('renders the replied-to parent as a full note when it is in the store', async () => {
+    const parent = note(generateSecretKey(), 'the parent words');
+    const reply = finalizeEvent({
+      kind: 1,
+      created_at: parent.created_at + 5,
+      tags: [['e', parent.id, '', 'reply'], ['p', parent.pubkey]],
+      content: 'my reply',
+    }, generateSecretKey());
+    store.ingest([parent], '');
+
+    render(
+      <TestApp>
+        <Note event={reply} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByText('my reply')).toBeTruthy();
+    expect(screen.getByText('the parent words')).toBeTruthy();
+    expect(screen.queryByText(/replying to/)).toBeTruthy();
+  });
   it('a note with a malformed nostr: reference does not crash', async () => {
     render(
       <TestApp>
@@ -258,5 +278,33 @@ describe('Note', () => {
       'src',
       'https://example.com/a.png',
     );
+  });
+  it('renders a longform as title, summary and cover image — never raw markdown', async () => {
+    const event = finalizeEvent({
+      kind: 30023,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [
+        ['d', 'a-longform'],
+        ['title', 'the article headline'],
+        ['summary', 'one-paragraph summary of the piece'],
+        ['image', 'https://example.com/cover.jpg'],
+      ],
+      content: '# raw markdown heading\n\nbody text with **emphasis**',
+    }, generateSecretKey());
+
+    render(
+      <TestApp>
+        <Note event={event} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByText('the article headline')).toBeTruthy();
+    expect(await screen.findByText('one-paragraph summary of the piece')).toBeTruthy();
+    // the markdown body never leaks into the preview
+    expect(screen.queryByText(/raw markdown heading/)).toBeNull();
+    // the cover rides in the media grid, clickable into the lightbox
+    const cover = document.querySelector('img[alt="a-longform"], img[alt="image from a followed author"]');
+    expect(cover).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'open image' })).toHaveLength(1);
   });
 });
