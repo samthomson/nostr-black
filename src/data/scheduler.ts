@@ -29,6 +29,7 @@ import { KIND_CONNECTION, KIND_PRIVATE_NOTE, KIND_PRIVATE_REPLY } from '@/lib/fe
 export type Want =
   | { type: 'profile'; pubkey: string }
   | { type: 'relayList'; pubkey: string }
+  | { type: 'blossomServers'; pubkey: string } // the user's kind 10006 blossom server list (BUD-02)
   | { type: 'followList'; pubkey: string }
   | { type: 'event'; id: string; author?: string; hints?: readonly string[] }
   | { type: 'addressable'; kind: number; pubkey: string; d: string }
@@ -44,11 +45,12 @@ export type Want =
 
 export type { Lane };
 
-export type ReplaceableWantType = 'profile' | 'relayList' | 'followList';
+export type ReplaceableWantType = 'profile' | 'relayList' | 'blossomServers' | 'followList';
 
 const REPLACEABLE_KIND: Record<ReplaceableWantType, number> = {
   profile: 0,
   relayList: 10002,
+  blossomServers: 10006,
   followList: 3,
 };
 
@@ -57,6 +59,7 @@ const STALE_MS: Record<Want['type'], number> = {
   profile: 15 * 60_000,
   relayList: 60 * 60_000,
   followList: 15 * 60_000,
+  blossomServers: 24 * 60 * 60_000,
   event: Number.POSITIVE_INFINITY,
   addressable: 15 * 60_000,
   engagement: 5 * 60_000,
@@ -112,6 +115,7 @@ export const wantKey = (want: Want): string => {
   switch (want.type) {
     case 'profile':
     case 'relayList':
+    case 'blossomServers':
     case 'followList':
       return `${want.type}:${want.pubkey}`;
     case 'event':
@@ -152,6 +156,7 @@ export const wantEntity = (want: Want): EntityKey | undefined => {
   switch (want.type) {
     case 'profile':
     case 'relayList':
+    case 'blossomServers':
     case 'followList':
       return replaceableKey(REPLACEABLE_KIND[want.type], want.pubkey);
     case 'event':
@@ -266,7 +271,6 @@ export const createScheduler = (
       const entity = wantEntity(want);
       if (entity && target.get(entity).settledAt !== undefined) target.unsettle(entity);
     }
-
     const queued = pending.get(key);
     if (queued) {
       // Already queued: the most urgent caller wins.
@@ -275,6 +279,7 @@ export const createScheduler = (
     }
 
     pending.set(key, { want, lane });
+    console.log("ENQUEUE:", key, "type:", want.type);
     if (timer === undefined) timer = setTimeout(() => void flush(), DEBOUNCE_MS);
   };
 
@@ -381,6 +386,7 @@ export const createScheduler = (
 
     const profiles = byType('profile');
     const relayLists = byType('relayList');
+    const blossomServers = byType('blossomServers');
 
     const follows = byType('followList');
     const events = batch
@@ -427,6 +433,12 @@ export const createScheduler = (
       relayLists.length > 0
         ? runGroups(lane, relayListGroups(ctx, relayLists), (authors) => ({
             kinds: [REPLACEABLE_KIND.relayList],
+            authors,
+          }))
+        : undefined,
+      blossomServers.length > 0
+        ? runGroups(lane, relayListGroups(ctx, blossomServers), (authors) => ({
+            kinds: [REPLACEABLE_KIND.blossomServers],
             authors,
           }))
         : undefined,

@@ -41,6 +41,8 @@ export const BroadcastDialog = ({
   extraRelays,
   content,
   preview,
+  uploads,
+  error,
   onEdit,
   onBroadcast,
   busy = false,
@@ -58,6 +60,11 @@ export const BroadcastDialog = ({
   identityNote?: string;
   relays: readonly string[];
   extraRelays?: readonly string[];
+  /** Deferred blossom uploads, stated in the config rows: they run on
+   *  confirm, before the events build from the returned urls. */
+  uploads?: { count: number; server: string };
+  /** A failed deferred upload — the modal stays open with the reason. */
+  error?: string | null;
   controls?: ReactNode;
   onEdit?: (content: string) => void;
   onBroadcast: (targets: readonly string[]) => void;
@@ -196,6 +203,17 @@ export const BroadcastDialog = ({
               <RoutePill route={onTor ? 'tor' : 'direct'} />
             </DraftRow>
 
+            {uploads && (
+              <DraftRow label="upload">
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
+                  <span className="font-mono text-[10px] leading-none">
+                    {uploads.count} image{uploads.count === 1 ? '' : 's'} →
+                  </span>
+                  <RelayPill url={uploads.server} />
+                </div>
+              </DraftRow>
+            )}
+
             <DraftRow label="relays">
               <div className="flex min-w-0 flex-wrap gap-1">
                 {relays.map((url) => <RelayPill key={url} url={url} />)}
@@ -235,6 +253,12 @@ export const BroadcastDialog = ({
             </DraftRow>
           </div>
         </div>
+
+        {error && (
+          <p className="text-red-500 shrink-0 px-4 pt-2 font-mono text-[10px] leading-relaxed">
+            upload failed: {error}
+          </p>
+        )}
 
         {/* The modal's own footer — separated from the draft by real
             space, not a border. */}

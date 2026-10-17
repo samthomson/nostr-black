@@ -8,14 +8,26 @@ import { TestApp } from '@/test/TestApp';
 import PrivateFeedPage from '@/pages/PrivateFeed';
 import { useKeystore } from '@/auth/useKeystore';
 import { KIND_PRIVATE_REPLY, acceptConnection, closeConnection, makeRumor, noteIdOf, openConnection, openPrivateNote, openPrivateReply, requestConnection, wrapPrivateNote, wrapPrivateReply } from '@/lib/feedEncryption';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { decryptImage, mediaImagesOf } from '@/lib/fileMessage';
+import type { UploadedBlob } from '@/net/blossom';
 
 const queryRelay = vi.fn<(url: string, filters: NostrFilter[]) => Promise<NostrEvent[]>>();
 const publish = vi.fn<(event: NostrEvent, relays: string[]) => Promise<void>>();
+const uploadBlob = vi.fn<(bytes: Uint8Array, type: string, signWith: Uint8Array) => Promise<UploadedBlob>>();
+const fetchBlob = vi.fn<(url: string) => Promise<Uint8Array>>();
 
 vi.mock('@/net/net', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/net/net')>()),
   queryRelay: (...args: unknown[]) => queryRelay(...(args as [string, NostrFilter[]])),
   publish: (...args: unknown[]) => publish(...(args as [NostrEvent, string[]])),
+}));
+
+vi.mock('@/net/blossom', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/net/blossom')>()),
+  blossomUpload: (...args: unknown[]) => uploadBlob(...(args as [Uint8Array, string, Uint8Array])),
+  blossomBytes: (url: string) => fetchBlob(url),
 }));
 
 const { scheduler } = await import('@/data/scheduler');
@@ -55,6 +67,7 @@ beforeEach(() => {
   queryRelay.mockResolvedValue([]);
   publish.mockReset();
   publish.mockResolvedValue(undefined);
+  uploadBlob.mockReset();
 });
 
 describe('PrivateFeedPage', () => {
@@ -114,13 +127,14 @@ describe('PrivateFeedPage', () => {
     });
     expect(count.getAttribute('href')).toBe(`/private-feed/${nip19.neventEncode({ id: rumor.id, author: rumor.pubkey, relays: [] })}`);
 
-    // The info dialog shows the wrapper — the event relays hold — not the rumor.
+    // The info dialog points at the wrapper — the event relays hold —
+    // and decodes it layer by layer: wrapper, seal, rumour.
     const user = userEvent.setup();
     await user.click(screen.getAllByRole('button', { name: 'event info' })[0]);
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('event info')).toBeTruthy();
     expect(within(dialog).getByText('1370')).toBeTruthy();
-    expect(within(dialog).queryByText(/secret from alice/)).toBeNull();
+    expect(within(dialog).getByText(/rumour/)).toBeTruthy();
   });
 
   it('private reactions: the count opens who reacted; reacting broadcasts a sealed 1470', async () => {
@@ -340,5 +354,89 @@ describe('PrivateFeedPage', () => {
     const revision = publish.mock.calls.map(([ev]) => ev).find((ev) => ev.kind === 1470);
     expect(revision).toBeTruthy();
     expect(revision!.tags).toContainEqual(['n', noteIdOf(replyCek)]);
+  });
+
+  it('sends staged images as imeta tags on the note itself — ciphertext uploaded only once the modal confirms', async () => {
+    const alice = generateSecretKey();
+    const bob = generateSecretKey();
+    const offer = requestConnection(alice, getPublicKey(bob));
+    const accepted = acceptConnection(bob, openConnection(bob, offer));
+
+    queryRelay.mockImplementation(async (_url, filters) => {
+      if (filters[0].kinds?.includes(30378)) return [accepted];
+      return [];
+    });
+    uploadBlob.mockResolvedValue({ sha256: 'ab'.repeat(32), url: 'https://cdn.example/staged.png', size: 64 });
+
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <PrivateFeedPage />
+        </Unlock>
+      </TestApp>,
+    );
+    await settle();
+    await settle();
+
+    const user = userEvent.setup();
+    const box = await screen.findByRole('textbox', { name: 'what are you doing?' });
+    await user.type(box, 'with a picture');
+    const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(picker).toBeTruthy();
+    await user.upload(picker!, new File([new Uint8Array([9, 8, 7])], 'pic.png', { type: 'image/png' }));
+    // the staged image previews in the composer's thumbnail strip
+    expect(document.querySelector('img.size-16')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'broadcast' }));
+    // nothing leaves before the modal confirms — the upload line states it
+    const modal = await screen.findByRole('dialog');
+    expect(uploadBlob).not.toHaveBeenCalled();
+    expect(modal.textContent).toContain('1 image');
+    // the feed fetches the ciphertext as soon as the note re-renders —
+    // serve whatever the upload actually sent
+    fetchBlob.mockImplementation(async () => uploadBlob.mock.calls[0]![0]);
+    await confirmBroadcast(user);
+    await settle();
+
+    // only ciphertext left the device, and only now
+    expect(uploadBlob).toHaveBeenCalledTimes(1);
+    const [sentBytes] = uploadBlob.mock.calls[0]!;
+    expect(sentBytes).not.toEqual(new Uint8Array([9, 8, 7]));
+
+    // one event per note: the 1370 set is the whole broadcast — an
+    // attached image adds nothing beyond what a text note produces
+    const published = publish.mock.calls.map(([ev]) => ev);
+    expect(published.map((ev) => ev.kind)).toEqual([1370]);
+    const noteWrapper = published.find((ev) => ev.kind === 1370)!;
+
+    const openedNote = openPrivateNote(alice, noteWrapper);
+    expect(openedNote.rumor.kind).toBe(1);
+    expect(openedNote.rumor.content).toBe('with a picture');
+    // the image rides its note: one imeta tag pointing at the uploaded
+    // ciphertext, x and ox committing to it and the plaintext, its
+    // decryption-key the conversation CEK that opens it
+    const images = mediaImagesOf(openedNote.rumor);
+    expect(images).toHaveLength(1);
+    expect(images[0]!.url).toBe('https://cdn.example/staged.png');
+    expect(images[0]!.mime).toBe('image/png');
+    expect(images[0]!.x).toBe(bytesToHex(sha256(sentBytes)));
+    expect(images[0]!.ox).toBe(bytesToHex(sha256(new Uint8Array([9, 8, 7]))));
+    expect(images[0]!.key).toBe(bytesToHex(openedNote.replyCek));
+    expect(decryptImage(images[0]!.key, images[0]!.nonce, sentBytes)).toEqual(new Uint8Array([9, 8, 7]));
+
+    // the feed re-renders the note with its decrypted image
+    const shown = await waitFor(() => {
+      const found = [...document.querySelectorAll('img.max-h-96')];
+      expect(found).toHaveLength(1);
+      return found[0]!;
+    });
+    expect(shown.getAttribute('src')).toMatch(/^blob:/);
+    // the image is not a reply: no url text, and the reply count stays zero
+    expect(screen.queryByText('https://cdn.example/staged.png')).toBeNull();
+    expect(screen.getByTestId('count-reply').textContent).toBe('0');
+
+    // enqueue is the commit point: the draft and the staged thumbnails clear
+    await waitFor(() => expect(box).toHaveValue(''));
+    expect(document.querySelector('img.size-16')).toBeNull();
   });
 });

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { nowSec } from '@/lib/timestamp';
 import { Link, useNavigate } from 'react-router-dom';
 import { nip10, nip19 } from 'nostr-tools';
@@ -16,13 +16,16 @@ import { Chip, RelayPill, RoutePill } from '@/components/Pills';
 import { EngagementCount } from '@/components/EngagementDialog';
 import { useEngagementFeed } from '@/data/hooks/useEngagementFeed';
 import { Composer } from '@/components/Composer';
-import { useAsset } from '@/hooks/useAsset';
+
 import { ProfileAvatar } from '@/components/ProfileAvatar';
+import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
+import { useColumns } from '@/components/columns/columnsState';
+import { useAsset } from '@/hooks/useAsset';
 import { profileHref, eventHref, npubOf, formatTimestamp } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { clientTag as clientTagOf } from '@/lib/clientTag';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
-import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
+
 import { useRouting } from '@/data/hooks/useRouting';
 import type { PrivacyGrade } from '@/lib/privacy';
 import { mediaUrls, MEDIA_URL, VIDEO_URL } from '@/lib/mediaUrls';
@@ -30,7 +33,7 @@ import { mediaUrls, MEDIA_URL, VIDEO_URL } from '@/lib/mediaUrls';
 
 /** Content/image budget past which a note is collapsed with a fade. */
 const CLAMP_THRESHOLD = 420;
-/** More images than this and the note is collapsed; stacks dominate screens. */
+
 const IMAGE_CLAMP_COUNT = 2;
 
 /** Markdown reduced to plain prose for preview contexts. */
@@ -336,14 +339,72 @@ const NoteMeta = ({
     </div>
   );
 };
-/**
- * The one feed-item component. Public items take the signed event. Private
- * items take the decrypted rumor plus its wrapper — the relay-stored event,
- * which is what the info dialog shows; engagement counts and e-tag parent
- * resolution are public-only (a rumor id is unresolvable on relays, and
- * asking about one leaks the query).
- */
-export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showContext = true, onReplies, onEdit, onDelete, edited = false, onEditHistory, children }: {
+/** Bring one card to the top of its scroll container. FLIP, not
+ * scrollTop animation: the scroller freezes for the flight and the
+ * content itself is translated (GPU transform — no layout reads, so a
+ * feed that loads or prepends mid-flight cannot perturb it); the
+ * handoff is one atomic scrollTop correction measured fresh. Animating
+ * scrollTop directly fought live content and scroll anchoring — the
+/** A flight in progress: a second scroll force-finishes it first —
+ * overlapping transforms on the same content stack up and misland. */
+let activeFlight: (() => void) | undefined;
+
+const scrollCardToTop = (card: HTMLElement, durationMs = 550): void => {
+  let scroller: HTMLElement | null = card.parentElement;
+  // 'hidden' counts: while panes are open the feed column is frozen with
+  // overflow-y-hidden, and hidden boxes are still programmatically
+  // scrollable — exactly what the handoff needs.
+  while (scroller && !['auto', 'scroll', 'hidden'].includes(getComputedStyle(scroller).overflowY)) {
+    scroller = scroller.parentElement;
+  }
+  const content = scroller?.firstElementChild as HTMLElement | null;
+  if (!scroller || !content) return;
+  const scrollerRect = scroller.getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  // How far the card sits below its destination (56px in), pre-freeze.
+  // Pin always targets the top — visible or not: the anchor ring and
+  // dimming make the card the column's focus, and a "visible, leave it"
+  // skip strands the last feed item mid-column.
+  const delta = cardRect.top - scrollerRect.top - 56;
+  if (Math.abs(delta) < 2) return;
+
+  // Finish any in-flight scroll before starting this one.
+  activeFlight?.();
+  const prevOverflow = scroller.style.overflow;
+  scroller.style.overflow = 'hidden';
+  let finished = false;
+  const finish = (): void => {
+    if (finished) return;
+    finished = true;
+    content.style.transform = '';
+    scroller!.style.overflow = prevOverflow;
+    activeFlight = undefined;
+  };
+  const easeInOut = (t: number): number =>
+    t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  const t0 = performance.now();
+  const step = (now: number): void => {
+    const t = Math.min(1, (now - t0) / durationMs);
+    content.style.transform = `translateY(${-delta * easeInOut(t)}px)`;
+    if (t < 1) {
+      requestAnimationFrame(step);
+      return;
+    }
+    // Handoff, one frame: drop the transform, jump scrollTop to the
+    // freshly measured position. Same paint — invisible.
+    finish();
+    const live = scroller!.scrollTop
+      + card.getBoundingClientRect().top
+      - scroller!.getBoundingClientRect().top
+      - 56;
+    const max = scroller!.scrollHeight - scroller!.clientHeight;
+    scroller!.scrollTop = Math.max(0, Math.min(live, max));
+  };
+  activeFlight = finish;
+  requestAnimationFrame(step);
+};
+
+export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showContext = true, onReplies, onOpen, anchored, replyCek, onEdit, onDelete, edited = false, onEditHistory, children }: {
   event: NostrEvent | Rumor;
   /** Present when the item is private: the kind 1370/1470 wrapper. */
   wrapper?: NostrEvent;
@@ -353,7 +414,16 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   /** Feed-only: render the replied-to parent inline. Thread pages pass
    * false — the parent is already above, so replies read as replies. */
   showContext?: boolean;
+  /** The conversation's reply CEK — lets the info dialog decode a 1470. */
+  replyCek?: Uint8Array;
   onReplies?: () => void;
+  /** Open this note elsewhere (a column) instead of navigating — body
+   *  click and the reply count both route here. */
+  onOpen?: () => void;
+  /** True when the column to the right pertains to this note: it stays
+   *  lit (and ringed) while its column dims everything else. Undefined
+   *  lets the feed-level default apply (first open pane's note). */
+  anchored?: boolean;
   /** Present when the item is editable (private notes): publish a
    * revision with this content. */
   onEdit?: (content: string) => void;
@@ -453,17 +523,55 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
     onEdit(content);
     setEditing(false);
   };
-
   const navigate = useNavigate();
   const selfHref = eventHref(event.id, event.pubkey, foundOn ?? []);
-  /** The note body opens the note — unless the click landed on something
-   *  interactive (links, media, actions) or the user is selecting text. */
+  // Column opening: an explicit onOpen wins (a pane's replies name their
+  // depth); otherwise a public note inside the column system opens one,
+  // and only where panes fit — mobile keeps navigating as before. With
+  // panes already open the feed is dimmed context: clicking it closes
+  // them (back), it doesn't pivot to a new note.
+  const stack = useColumns();
+  // Any note inside the column system opens a pane — public and sealed
+  // alike; the pane switches its data source on the flag.
+  const openInColumn = stack?.enabled
+    ? () => {
+        if (stack.columns.length > 0) {
+          stack.closeAll();
+          return;
+        }
+        stack.open({
+          id: event.id,
+          author: event.pubkey,
+          relays: foundOn,
+          private: wrapper !== undefined,
+        });
+      }
+    : undefined;
+  const openNote = onOpen ?? openInColumn;
+  const countsRef = useRef<HTMLDivElement>(null);
+  /** Every open path — body click, reply count — opens the pane and then
+   *  scrolls this card to the top of its column. Two frames after the
+   *  commit: layout measured post-paint, nothing left to fight it. */
+  const openAndScroll = (element: HTMLElement | null) => {
+    if (!openNote) return;
+    const card = element?.closest('[data-slot="card"]');
+    openNote();
+    if (!card) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => scrollCardToTop(card as HTMLElement));
+    });
+  };
   const openSelf = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('a, button')) return;
     const selection = window.getSelection();
     if (selection && selection.toString().length > 0) return;
+    if (openNote) {
+      openAndScroll(e.currentTarget as HTMLElement);
+      return;
+    }
     if (selfHref) navigate(selfHref);
   };
+  const isAnchored = anchored ?? (!onOpen && !!stack && stack.columns[0]?.id === event.id);
   const displayName = metadata?.display_name || metadata?.name;
   const npub = npubOf(event.pubkey);
   const href = profileHref(event.pubkey);
@@ -552,7 +660,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
 
   return (
-    <Card className={cn('py-0', grade === 'private' ? 'bg-privacy-private text-privacy-public' : 'bg-privacy-public text-privacy-private')}>
+    <Card data-anchor={isAnchored || undefined} className={cn('py-0', grade === 'private' ? 'bg-privacy-private text-privacy-public' : 'bg-privacy-public text-privacy-private')}>
       <CardContent className="flex gap-3 px-4 py-3">
         <ProfileAvatar
           pubkey={event.pubkey}
@@ -698,14 +806,16 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
           </>
           )}
 
+
+
           {!isPrivate && (
-            <div className="text-muted-foreground flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
+            <div ref={countsRef} className="text-muted-foreground flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
               <ReplyCount
                 replies={feed.replies}
                 pending={feed.pending}
                 capped={feed.capped}
-                onReplies={onReplies}
-                href={linkReplies ? selfHref : undefined}
+                onReplies={openNote ? () => openAndScroll(countsRef.current) : onReplies}
+                href={openNote || !linkReplies ? undefined : selfHref}
               />
               {/* zaps: no send/receive yet — the row ships without it
               <Count icon={<Zap className="size-4" />} count={...} label="zaps" /> */}
@@ -753,7 +863,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
         />
       )}
       {/* No wrapper means the item is public, so event is signed. */}
-      <EventInfoDialog event={wrapper ?? (event as NostrEvent)} foundOn={foundOn} open={infoOpen} onOpenChange={setInfoOpen} />
+      <EventInfoDialog event={wrapper ?? (event as NostrEvent)} foundOn={foundOn} replyCek={replyCek} open={infoOpen} onOpenChange={setInfoOpen} />
     </Card>
   );
 };

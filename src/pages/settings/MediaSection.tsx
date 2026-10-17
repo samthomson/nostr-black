@@ -32,6 +32,17 @@ export const MediaSection = () => {
         show images and video
       </label>
 
+      <label className="flex cursor-pointer items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="size-4 accent-foreground"
+          checked={config.imageCompression}
+          onChange={(e) =>
+            updateConfig((current) => ({ ...current, imageCompression: e.target.checked }))}
+        />
+        compress images on upload
+      </label>
+
       {mediaCache.enabled && (
         <div className="space-y-1 pt-1">
           <p className="text-muted-foreground flex items-center gap-1 text-xs">

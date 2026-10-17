@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { ArrowUp } from 'lucide-react';
 import { Note } from '@/components/Note';
@@ -7,6 +7,7 @@ import { FeedSkeleton } from '@/components/NoteSkeleton';
 import { useFeed } from '@/data/hooks/useFeed';
 import { useProvenance } from '@/data/hooks/useProvenance';
 import { useVisibility } from '@/data/hooks/useVisibility';
+import { useColumns } from '@/components/columns/columnsState';
 
 /**
  * The feed: your follows' notes as sealed pages, newest first.
@@ -14,13 +15,23 @@ import { useVisibility } from '@/data/hooks/useVisibility';
  * Pages never reorder once shown. Notes that arrive while you read are
  * buffered behind a control rather than spliced in around you, and
  * accepting them keeps the note you were reading exactly where it was.
+ *
+ * While note panes are open the feed is backdrop — dimmed, click-to-close
+ * — so its list is FROZEN at exactly what was on screen when the pane
+ * opened. Live churn (page merges, eviction) would otherwise pull the
+ * anchored note out from under its pin.
  */
 export const Feed = () => {
   const {
     notes, pending, loading, exhausted, isLoading, noFollows, followsNotFound,
     loadMore, acceptPending,
   } = useFeed();
-
+  const stack = useColumns();
+  const active = !!stack && stack.columns.length > 0;
+  const [frozen, setFrozen] = useState<readonly NostrEvent[] | null>(null);
+  if (active && frozen === null) setFrozen(notes);
+  if (!active && frozen !== null) setFrozen(null);
+  const shown = frozen ?? notes;
   // Accepting buffered notes inserts them above the viewport, which pushes
   // everything down by exactly the height added. Measuring before and
   // correcting after cancels that out: the note being read stays under the
@@ -61,20 +72,20 @@ export const Feed = () => {
 
   return (
     <div className="space-y-3">
-      {pending.length > 0 && (
+      {!active && pending.length > 0 && (
         <NewNotes count={pending.length} onAccept={accept} />
       )}
 
-      {!isLoading && notes.length > 0 && (
-        <p className="px-1 text-xs text-muted-foreground">{notes.length} notes</p>
+      {!isLoading && shown.length > 0 && (
+        <p className="px-1 text-xs text-muted-foreground">{shown.length} notes</p>
       )}
-      {isLoading && notes.length === 0 && <FeedSkeleton count={5} />}
+      {isLoading && shown.length === 0 && <FeedSkeleton count={5} />}
 
-      {notes.map((event) => (
+      {shown.map((event) => (
         <FeedNote key={event.id} event={event} />
       ))}
 
-      {notes.length > 0 && !exhausted && (
+      {!active && shown.length > 0 && !exhausted && (
         <button
           type="button"
           onClick={loadMore}
@@ -84,7 +95,7 @@ export const Feed = () => {
           {loading ? 'loading…' : 'load older notes'}
         </button>
       )}
-      {notes.length > 0 && exhausted && (
+      {!active && shown.length > 0 && exhausted && (
         <p className="px-1 py-2 text-center text-xs text-muted-foreground">
           nothing older on their relays
         </p>

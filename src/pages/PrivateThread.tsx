@@ -50,6 +50,7 @@ const PrivateThreadBody = ({ id }: { id: string }) => {
         replies={item.replies}
         conversation={item.conversation}
         open
+        pending={false}
         onReply={reply}
         onReact={(note, target, emoji) => react(note, target, item.conversation, emoji)}
         onEdit={edit}

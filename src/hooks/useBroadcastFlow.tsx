@@ -6,6 +6,25 @@ import { enqueue } from '@/data/publish/queue';
 import type { PrivacyGrade } from '@/lib/privacy';
 import type { NostrEvent } from '@nostrify/nostrify';
 
+/** One uploaded file, as buildEvents references it. */
+export interface UploadedFile {
+  url: string;
+  sha256: string;
+  mime: string;
+}
+
+/** Blossom uploads deferred until the user confirms: nothing leaves
+ * the device before the broadcast button. `run` sends the bytes,
+ * `buildEvents` then builds the events that reference the returned
+ * urls. `signUploadsWith` signs the kind-24242 blossom auth — private
+ * uploads use a throwaway key, public ones the note signer. */
+export interface PendingUploads {
+  count: number;
+  server: string;
+  signUploadsWith?: Uint8Array;
+  run: () => Promise<UploadedFile[]>;
+}
+
 /** One broadcast, previewed and awaiting confirmation. */
 export interface PendingBroadcast {
   grade: PrivacyGrade;
@@ -14,18 +33,22 @@ export interface PendingBroadcast {
    *  note body. Omitted by non-text broadcasts, which pass `preview`. */
   content?: string;
   /** Structured preview body for non-text broadcasts (profile edits,
-   *  reactions, deletions, connection requests): rendered instead of
-   *  the text tabs. */
+   *  reactions, deletions): rendered instead of the text tabs. */
   preview?: ReactNode;
   identityPubkey: string;
   identityNote?: string;
   relays: readonly string[];
-  /** Signed events; enqueued when the user confirms. */
-  events: readonly NostrEvent[];
+  /** Signed events; enqueued when the user confirms. Exactly one of
+   *  `events` / `uploads`+`buildEvents` is present: either everything
+   *  is built upfront, or the uploads run first on confirm and the
+   *  events build from the urls they return. */
+  events?: readonly NostrEvent[];
   /** Decoded layers for the event tab (wrapper / seal / rumour). */
   layers?: readonly EventLayer[];
   /** Labels per event when there are several (chunks): defaults to label. */
   labels?: readonly string[];
+  uploads?: PendingUploads;
+  buildEvents?: (uploaded: readonly UploadedFile[]) => readonly NostrEvent[] | Promise<readonly NostrEvent[]>;
   controls?: ReactNode;
   /** Present when the payload is revisable text: re-signs/re-wraps and
    *  re-previews as it changes, so the queued events always match. */
@@ -33,14 +56,15 @@ export interface PendingBroadcast {
   /** Secondary targets behind the discovery toggle. */
   extraRelays?: readonly string[];
   /** Called when the user confirms and the events are enqueued — the
-   * moment surfaces clean up their inputs (draft, burner state). */
+   *  moment surfaces clear their inputs (draft, burner state). */
   onEnqueued?: () => void;
 }
 
 /**
  * The app-wide broadcast flow: `request(pending)` opens the standard
  * modal; confirmation enqueues the signed events. Every publishing
- * surface uses this — the modal is the one UX.
+ * surface uses this — the modal is the one UX, and the one gate: with
+ * deferred uploads, no bytes leave the device before it confirms.
  */
 export const useBroadcastFlow = (): {
   request: (pending: PendingBroadcast) => void;
@@ -49,17 +73,37 @@ export const useBroadcastFlow = (): {
   pending: PendingBroadcast | null;
 } => {
   const [pending, setPending] = useState<PendingBroadcast | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const request = useCallback((next: PendingBroadcast) => setPending(next), []);
+  const request = useCallback((next: PendingBroadcast) => {
+    setUploadError(null);
+    setPending(next);
+  }, []);
 
   const broadcast = (targets: readonly string[]) => {
-    if (!pending) return;
-    pending.events.forEach((event, i) =>
-      enqueue(pending.labels?.[i] ?? pending.label, event, [...targets]));
-    pending.onEnqueued?.();
-    setPending(null);
+    if (!pending || busy) return;
+    const commit = (events: readonly NostrEvent[]): void => {
+      events.forEach((event, i) =>
+        enqueue(pending.labels?.[i] ?? pending.label, event, [...targets]));
+      pending.onEnqueued?.();
+      setPending(null);
+    };
+    if (!pending.uploads || !pending.buildEvents) {
+      commit(pending.events ?? []);
+      return;
+    }
+    // Deferred uploads: the bytes go up first, then the events build
+    // from the real urls. An upload failure keeps the modal open with
+    // the error — retry or cancel, never a silent drop.
+    setUploadError(null);
+    setBusy(true);
+    void pending.uploads.run()
+      .then((uploaded) => Promise.resolve(pending.buildEvents!(uploaded)))
+      .then(commit)
+      .catch((e: unknown) => setUploadError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setBusy(false));
   };
-
 
   const dialog = pending ? (
     <BroadcastDialog
@@ -74,9 +118,11 @@ export const useBroadcastFlow = (): {
       relays={pending.relays}
       controls={pending.controls}
       onEdit={pending.onEdit}
-      layers={pending.layers ?? pending.events.map((event) => ({ name: 'event', decoded: event }))}
+      layers={pending.layers ?? pending.events?.map((event) => ({ name: 'event', decoded: event })) ?? []}
       extraRelays={pending.extraRelays}
-
+      uploads={pending.uploads ? { count: pending.uploads.count, server: pending.uploads.server } : undefined}
+      error={uploadError}
+      busy={busy}
       onBroadcast={broadcast}
     />
   ) : null;

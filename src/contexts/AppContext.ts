@@ -14,6 +14,9 @@ export interface AppConfig {
   torEnabled: boolean;
   /** Render images and video in the feed (default on). */
   mediaEnabled: boolean;
+  /** Compress images before upload (default on): downscale to 1920px and
+   * re-encode as WebP. */
+  imageCompression: boolean;
   /** Feed kinds shown in the follows feed. Toggled from the feed header. */
   feedKinds: number[];
   /** Desktop only: media cache budget in MB. */

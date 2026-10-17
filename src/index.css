@@ -125,6 +125,40 @@
   color: #000;
 }
 
+/* Column focus: while a note pane is open, everything to its left is
+   context — dimmed slightly, never dark, its dead scrollbar hidden. The
+   note the pane pertains to (data-anchor) stays fully lit and ringed, so
+   the relationship reads at a glance. */
+.columns-dim {
+  scrollbar-width: none;
+}
+.columns-dim::-webkit-scrollbar {
+  display: none;
+}
+/* Panes: fade/slide in and out. Column widths are equal flex shares —
+   the row's max-width transition drives the resize, so panes only need
+   opacity and a short slide, never their own width animation. */
+@keyframes pane-in {
+  from { opacity: 0; transform: translateX(1.5rem); }
+}
+@keyframes pane-out {
+  to { opacity: 0; }
+}
+.animate-pane-in {
+  animation: pane-in 280ms ease-out both;
+}
+.animate-pane-out {
+  animation: pane-out 280ms ease-in both;
+}
+.columns-dim [data-slot='card'] {
+  opacity: 0.6;
+  transition: opacity 200ms ease-out;
+}
+.columns-dim [data-slot='card'][data-anchor] {
+  opacity: 1;
+  outline: 2px solid color-mix(in srgb, currentColor 55%, transparent);
+  outline-offset: 2px;
+}
 /* System mono only: no bundled webfont. A webfont in a textarea hit a
  * GPU-raster bug on macOS (blank periods, all engines, inputs fine) —
  * system families render through a healthy path everywhere. */

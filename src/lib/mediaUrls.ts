@@ -13,7 +13,11 @@ export const mediaUrls = (event: NostrEvent | Rumor): string[] => {
   for (const [name, value, ...rest] of event.tags) {
     if (name === 'url' && value && MEDIA_URL.test(value)) urls.push(value);
     if (name === 'imeta') {
-      const url = [value, ...rest].find((p) => p.startsWith('url '))?.slice(4);
+      const parts = [value, ...rest];
+      // PR-#2437 encrypted attachments: the url is ciphertext — the
+      // private media path fetches and decrypts it, never this grid.
+      if (parts.some((p) => p.startsWith('decryption-key '))) continue;
+      const url = parts.find((p) => p.startsWith('url '))?.slice(4);
       if (url) urls.push(url);
     }
     // NIP-23 longform cover — the article's own image tag.

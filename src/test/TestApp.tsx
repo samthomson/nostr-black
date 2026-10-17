@@ -49,6 +49,7 @@ export function TestApp({ children, userState }: TestAppProps) {
     discoveryRelays: DEFAULT_DISCOVERY_RELAYS,
     torEnabled: true,
     mediaEnabled: true,
+    imageCompression: true,
     feedKinds: [...FEED_KINDS],
     defaultReaction: "+",
     mediaCacheMaxMb: 1024,

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { nip19 } from 'nostr-tools';
+import { ChevronDown } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import {
   Dialog,
@@ -8,6 +10,9 @@ import {
 } from '@/components/ui/dialog';
 import { profileHref, eventHref, shortHex } from '@/lib/format';
 import { Link } from 'react-router-dom';
+import { cn } from '@/lib/utils';
+import { useSessionKey } from '@/data/hooks/useSessionKey';
+import { isPrivateKind, privateNoteLayers, type EventLayer } from '@/lib/feedEncryption';
 
 /** One row of a parsed field, when it applies. */
 const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -17,22 +22,66 @@ const Row = ({ label, children }: { label: string; children: React.ReactNode }) 
   </div>
 );
 
+/** Open-by-default section toggle — the same expanding-row language as
+ * the edit-history dialog. */
+const Toggle = ({ title, children }: { title: string; children: React.ReactNode }) => {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="rounded-sm border">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+        className="flex w-full cursor-pointer items-center justify-between px-3 py-2 text-sm"
+      >
+        <span>{title}</span>
+        <ChevronDown className={cn('text-muted-foreground size-4 transition-transform', !open && '-rotate-90')} />
+      </button>
+      {open && <div className="border-t px-3 py-3">{children}</div>}
+    </div>
+  );
+};
+
+/** Formatted JSON — 4-space indent, the house style. */
+const JsonBlock = ({ value }: { value: NostrEvent | RumorJson }) => (
+  <pre className="max-h-64 overflow-auto rounded-sm bg-muted p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
+    {JSON.stringify(value, null, 4)}
+  </pre>
+);
+
+type RumorJson = { kind: number; [key: string]: unknown };
+
+const layerTitle = (layer: EventLayer, i: number): string => {
+  const kind = typeof layer.decoded === 'object' && layer.decoded !== null && 'kind' in layer.decoded
+    ? ` (kind ${String(layer.decoded.kind)})`
+    : '';
+  return `layer ${i + 1} · ${layer.name}${kind}`;
+};
+
 /**
- * Event inspector: the raw JSON plus the load-bearing parts parsed into
- * links (author profile, event id, referenced events/profiles from tags).
+ * Event inspector. The load-bearing parts parsed into links (author,
+ * id, tag references), everything else in labelled toggles: for a
+ * private wrapper (1370/1470) one toggle per decoded layer — wrapper,
+ * seal, rumour — each as formatted JSON; then the tags and the raw
+ * event. A layer that cannot open with the keys at hand says so.
  */
 export const EventInfoDialog = ({
   event,
   foundOn,
+  replyCek,
   open,
   onOpenChange,
 }: {
   event: NostrEvent;
   foundOn?: string[];
+  /** The conversation's reply CEK — decodes 1470 replies. */
+  replyCek?: Uint8Array;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
   const authorHref = profileHref(event.pubkey);
+  const sk = useSessionKey();
+  const layers = sk && isPrivateKind(event.kind) ? privateNoteLayers(sk, event, replyCek) : undefined;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -43,7 +92,7 @@ export const EventInfoDialog = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 px-6 pb-6 pt-4">
+        <div className="space-y-3 px-6 pb-6 pt-4">
           <div className="space-y-1">
             <Row label="id">
               {(() => {
@@ -78,9 +127,22 @@ export const EventInfoDialog = ({
             )}
           </div>
 
+          {layers && layers.length > 0 && (
+            <div className="space-y-2">
+              {layers.map((layer, i) => (
+                <Toggle key={layer.name} title={layerTitle(layer, i)}>
+                  {typeof layer.decoded === 'string' ? (
+                    <p className="text-muted-foreground text-sm">{layer.decoded}</p>
+                  ) : (
+                    <JsonBlock value={layer.decoded as NostrEvent} />
+                  )}
+                </Toggle>
+              ))}
+            </div>
+          )}
+
           {event.tags.length > 0 && (
-            <div className="space-y-1">
-              <p className="text-muted-foreground text-sm">tags</p>
+            <Toggle title="tags">
               <ul className="space-y-1 text-sm">
                 {event.tags.map((tag, i) => {
                   const [name, value] = tag;
@@ -105,15 +167,12 @@ export const EventInfoDialog = ({
                   );
                 })}
               </ul>
-            </div>
+            </Toggle>
           )}
 
-          <div className="space-y-1">
-            <p className="text-muted-foreground text-sm">raw</p>
-            <pre className="max-h-64 overflow-auto rounded-sm border bg-muted p-3 text-xs leading-relaxed break-all whitespace-pre-wrap">
-              {JSON.stringify(event, null, 4)}
-            </pre>
-          </div>
+          <Toggle title="raw event">
+            <JsonBlock value={event} />
+          </Toggle>
         </div>
       </DialogContent>
     </Dialog>

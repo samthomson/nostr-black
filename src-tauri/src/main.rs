@@ -371,6 +371,75 @@ async fn http_get_media_inner(url: &str) -> Result<Vec<u8>, String> {
     }
 }
 
+/// Blossom upload (BUD-01): PUT raw bytes with a Nostr auth header, over
+/// the current route (Tor or direct). Returns the response body — the
+/// server's blob descriptor JSON — as base64. HTTP/1.0 for the same
+/// reason as the GET: no chunked responses to de-chunk. Uploads over Tor
+/// are slow; five minutes before giving up.
+#[tauri::command]
+async fn blossom_put(
+    url: String,
+    authorization: String,
+    content_type: String,
+    body: Vec<u8>,
+) -> Result<String, String> {
+    tokio::time::timeout(
+        std::time::Duration::from_secs(300),
+        blossom_put_inner(&url, &authorization, &content_type, &body),
+    )
+    .await
+    .map_err(|_| "blossom upload timeout (300s)".to_string())?
+}
+
+async fn blossom_put_inner(
+    url: &str,
+    authorization: &str,
+    content_type: &str,
+    body: &[u8],
+) -> Result<String, String> {
+    let stripped = url
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .to_string();
+    let (host, path) = match stripped.split_once('/') {
+        Some((h, p)) => (h.to_string(), format!("/{p}")),
+        None => (stripped, "/".to_string()),
+    };
+    let (host, port) = parse_host_port(&host);
+
+    let stream = connect_stream(&host, port).await?;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let connector = tokio_native_tls::TlsConnector::from(
+        native_tls::TlsConnector::new().map_err(|e| e.to_string())?,
+    );
+    let mut tls = connector
+        .connect(&host, stream)
+        .await
+        .map_err(|e| format!("tls: {e}"))?;
+    let request = format!(
+        "PUT {path} HTTP/1.0\r\nHost: {host}\r\nUser-Agent: nostr-black\r\nAuthorization: {authorization}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    tls.write_all(request.as_bytes()).await.map_err(|e| e.to_string())?;
+    tls.write_all(body).await.map_err(|e| e.to_string())?;
+
+    let mut response = Vec::new();
+    tls.read_to_end(&mut response).await.map_err(|e| e.to_string())?;
+    if let Some(pos) = response.windows(4).position(|w| w == b"\r\n\r\n") {
+        let head = String::from_utf8_lossy(&response[..pos]).to_string();
+        let status = head.lines().next().unwrap_or_default().to_string();
+        let code = status.split_whitespace().nth(1).unwrap_or("");
+        if !code.starts_with('2') {
+            return Err(format!("http status: {status}"));
+        }
+        response.drain(..pos + 4);
+        use base64::Engine as _;
+        Ok(base64::engine::general_purpose::STANDARD.encode(&response))
+    } else {
+        Err("http response had no header terminator".into())
+    }
+}
+
 /// Headless transport self-test: `nostr-black --selftest <wss-url>`
 /// Runs one relay query through arti and prints the event count — no GUI.
 /// Used to verify Tor routing end-to-end and for the kill-tor offline test.
@@ -475,6 +544,7 @@ fn main() {
             get_tor_enabled,
             set_tor_enabled,
             fetch_asset,
+            blossom_put,
             relay_stream_start,
             relay_stream_send,
             relay_stream_stop

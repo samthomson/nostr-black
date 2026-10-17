@@ -23,6 +23,9 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
+// jsdom implements neither scroll primitive.
+Element.prototype.scrollIntoView = () => {};
+
 // Mock window.scrollTo
 Object.defineProperty(window, 'scrollTo', {
   writable: true,

@@ -5,8 +5,12 @@ import { nip19 } from 'nostr-tools';
 import { EngagementCount, type EngagementRow } from '@/components/EngagementDialog';
 import { reactionsTo, type Conversation } from '@/lib/feedEncryptionRead';
 import { Composer } from '@/components/Composer';
+import { PrivateMedia } from '@/components/PrivateMedia';
 import { useAppContext } from '@/hooks/useAppContext';
+import { useAttachments } from '@/hooks/useAttachments';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { usePrivateImagePrep, type StagedImage } from '@/hooks/usePrivateImagePrep';
+import { mediaImagesOf } from '@/lib/fileMessage';
 import { Heart } from 'lucide-react';
 import { useProvenance } from '@/data/hooks/useProvenance';
 import type { OpenedNote, Rumor } from '@/lib/feedEncryption';
@@ -16,21 +20,28 @@ import { cn } from '@/lib/utils';
 
 /**
  * One decrypted item in the standard Note chrome. Provenance and the info
- * dialog point at the wrapper — the event relays actually hold.
+ * dialog point at the wrapper — the event relays actually hold. Media
+ * tags on the item's rumor render as decrypted images under the body.
  */
-const PrivateItem = ({
+export const PrivateItem = ({
   rumor,
   wrapper,
+  replyCek,
   conversation,
   versions,
   replyCount,
   noteHref,
+  onOpen,
+  anchored,
+  pending = false,
   onReact,
   onEdit,
   onDelete,
 }: {
   rumor: Rumor;
   wrapper: NostrEvent;
+  /** The conversation's reply CEK — it derives the image keys. */
+  replyCek: Uint8Array;
   /** The whole conversation — reactions are addressed by rumor id. */
   conversation: Conversation;
   /** The item's full version chain, oldest first, the rendered rumor last. */
@@ -38,8 +49,15 @@ const PrivateItem = ({
   /** Present on the root post in the feed: routes to the thread page. */
   replyCount?: number;
   noteHref?: string;
+  /** Column system: opens the next pane instead of routing. */
+  onOpen?: () => void;
+  /** Lit ring when the pane to the right pertains to this item. */
+  anchored?: boolean;
+  /** Counts render their loading state until the conversation arrives. */
+  pending?: boolean;
   /** Present when reacting is available: broadcast a private reaction. */
   onReact?: (target: Rumor, emoji: string) => void;
+  /** Present when the item is editable: publish a revision. */
   onEdit?: (content: string) => void;
   onDelete?: () => void;
 }) => {
@@ -50,6 +68,7 @@ const PrivateItem = ({
   const [historyOpen, setHistoryOpen] = useState(false);
   const chain = versions ?? [];
   const edited = chain.length > 1;
+
   return (
     <>
       <Note
@@ -57,11 +76,21 @@ const PrivateItem = ({
         wrapper={wrapper}
         foundOn={foundOn}
         route={route}
+        replyCek={replyCek}
+        onOpen={onOpen}
+        anchored={anchored}
         onEdit={onEdit}
         onDelete={onDelete}
         edited={edited}
         onEditHistory={edited ? () => setHistoryOpen(true) : undefined}
       >
+        {mediaImagesOf(rumor).length > 0 && (
+          <div className="space-y-1 pt-1">
+            {mediaImagesOf(rumor).map((image) => (
+              <PrivateMedia key={image.url} image={image} />
+            ))}
+          </div>
+        )}
         {/* Deliberate divergence from the public counts row: no repost.
             A public kind 6 would leak the sealed rumor, and "reposting"
             privately means re-wrapping for another connection — a share
@@ -70,7 +99,7 @@ const PrivateItem = ({
           {noteHref !== undefined && (
             <ReplyCount
               replies={replyCount ?? 0}
-              pending={false}
+              pending={pending}
               capped={false}
               href={noteHref}
             />
@@ -79,7 +108,7 @@ const PrivateItem = ({
             icon={<Heart className={cn('size-4', !!user && reactions.some((r) => r.pubkey === user.pubkey) && 'fill-current')} />}
             count={reactions.length}
             capped={false}
-            pending={false}
+            pending={pending}
             mine={!!user && reactions.some((r) => r.pubkey === user.pubkey)}
             tab="reactions"
             reactions={reactions as readonly EngagementRow[]}
@@ -97,30 +126,61 @@ const PrivateItem = ({
   );
 };
 
-const ReplyComposer = ({
+export const ReplyComposer = ({
   parent,
   onReply,
 }: {
   parent: OpenedNote;
-  onReply: (parent: OpenedNote, content: string) => void;
+  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[]) => void;
 }) => {
   const [draft, setDraft] = useState('');
+  const { attachments, addFiles, remove: removeAttachment, clear } = useAttachments();
+  const prepImages = usePrivateImagePrep();
+  const [prepping, setPrepping] = useState(false);
+  const [prepError, setPrepError] = useState<string | null>(null);
 
+  // Submit encrypts the staged images under the conversation's reply
+  // CEK — local, fast — then hands the reply to the broadcast flow: the
+  // ciphertext leaves only when the modal confirms. A prep failure
+  // stays on screen; the staged files are never dropped silently.
   const submit = () => {
     const content = draft.trim();
-    if (!content) return;
-    onReply(parent, content);
-    setDraft('');
+    if ((!content && attachments.length === 0) || prepping) return;
+    setPrepError(null);
+    setPrepping(true);
+    void (async () => {
+      try {
+        const media = attachments.length > 0
+          ? await prepImages(parent.replyCek, attachments.map((a) => a.file))
+          : [];
+        onReply(parent, content, media);
+        setDraft('');
+        clear();
+      } catch (e) {
+        setPrepError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setPrepping(false);
+      }
+    })();
   };
 
   return (
-    <Composer
-      value={draft}
-      onChange={setDraft}
-      onSubmit={submit}
-      variant="reply"
-      grade="private"
-    />
+    <>
+      <Composer
+        value={draft}
+        onChange={setDraft}
+        onSubmit={submit}
+        busy={prepping}
+        variant="reply"
+        grade="private"
+        attachments={attachments}
+        onAddFiles={addFiles}
+        onRemoveAttachment={removeAttachment}
+      />
+      {prepError && (
+        <p className="text-red-500 px-1 pt-1 text-xs">prep failed: {prepError}</p>
+      )}
+    </>
   );
 };
 
@@ -128,8 +188,9 @@ const ReplyComposer = ({
  * One private post, behaving exactly like a public one: in the feed it
  * shows just the note with a reply count that routes to its thread page;
  * opened (the thread page), the replies indent under it thread-style and
- * the reply composer appears. Every item — post or reply — renders through
- * the same Note component the public feed uses.
+ * the reply composer appears. Every item — post or reply — renders
+ * through the same Note component the public feed uses, its media tags
+ * as decrypted images under the body.
  */
 export const PrivateNote = ({
   note,
@@ -137,8 +198,9 @@ export const PrivateNote = ({
   replies,
   conversation,
   open,
-  onReply,
+  pending,
   onReact,
+  onReply,
   onEdit,
   onEditReply,
   onDelete,
@@ -150,39 +212,48 @@ export const PrivateNote = ({
   conversation: Conversation;
   /** Thread mode: replies and composer are rendered. */
   open: boolean;
-  onReply: (parent: OpenedNote, content: string) => void;
+  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[]) => void;
+  /** Counts show their loading state until the conversation arrives. */
+  pending?: boolean;
   onReact?: (parent: OpenedNote, target: Rumor, emoji: string) => void;
   onEdit?: (parent: OpenedNote, content: string) => void;
   onEditReply?: (parent: OpenedNote, reply: OpenedReply, content: string) => void;
   onDelete?: (parent: OpenedNote, history: readonly OpenedNote[]) => void;
-}) => (
-  <div className="space-y-3">
-    <PrivateItem
-      rumor={note.rumor}
-      wrapper={note.wrapper}
-      conversation={conversation}
-      versions={history.map((h) => h.rumor)}
-      replyCount={replies.length}
-      noteHref={open ? undefined : `/private-feed/${nip19.neventEncode({ id: note.rumor.id, author: note.rumor.pubkey, relays: [] })}`}
-      onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
-      onEdit={onEdit ? (content) => onEdit(note, content) : undefined}
-      onDelete={onDelete ? () => onDelete(note, history) : undefined}
-    />
-    {open && (
-      <div className="space-y-3 border-l pl-3">
-        {replies.map((reply) => (
-          <PrivateItem
-            key={reply.wrapper.id}
-            rumor={reply.rumor}
-            wrapper={reply.wrapper}
-            conversation={conversation}
-            versions={[...(reply.history?.map((h) => h.rumor) ?? []), reply.rumor]}
-            onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
-            onEdit={onEditReply ? (content) => onEditReply(note, reply, content) : undefined}
-          />
-        ))}
-        <ReplyComposer parent={note} onReply={onReply} />
-      </div>
-    )}
-  </div>
-);
+}) => {
+  return (
+    <div className="space-y-3">
+      <PrivateItem
+        rumor={note.rumor}
+        wrapper={note.wrapper}
+        replyCek={note.replyCek}
+        conversation={conversation}
+        versions={history.map((h) => h.rumor)}
+        replyCount={replies.length}
+        noteHref={open ? undefined : `/private-feed/${nip19.neventEncode({ id: note.rumor.id, author: note.rumor.pubkey, relays: [] })}`}
+        pending={pending}
+        onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
+        onEdit={onEdit ? (content) => onEdit(note, content) : undefined}
+        onDelete={onDelete ? () => onDelete(note, history) : undefined}
+      />
+      {open && (
+        <div className="space-y-3 border-l pl-3">
+          {replies.map((reply) => (
+            <div key={reply.wrapper.id} className="space-y-3">
+              <PrivateItem
+                rumor={reply.rumor}
+                wrapper={reply.wrapper}
+                replyCek={note.replyCek}
+                conversation={conversation}
+                versions={[...(reply.history?.map((h) => h.rumor) ?? []), reply.rumor]}
+                pending={pending}
+                onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
+                onEdit={onEditReply ? (content) => onEditReply(note, reply, content) : undefined}
+              />
+            </div>
+          ))}
+          <ReplyComposer parent={note} onReply={onReply} />
+        </div>
+      )}
+    </div>
+  );
+};

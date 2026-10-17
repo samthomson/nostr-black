@@ -12,6 +12,11 @@ export const DEFAULT_DISCOVERY_RELAYS = [
   'wss://relay.ditto.pub/',
 ];
 
+/** Blossom upload servers — the fallback when the user's kind 10006
+ * server list hasn't synced or declares none. The user's own servers are
+ * fetched from their 10006 after login; this is only the floor. */
+export const DEFAULT_BLOSSOM_SERVERS = ['https://blossom.nostr.black/'];
+
 /**
  * The canonical form of a relay url typed by a user: parsed and serialised
  * by the URL parser (lowercases scheme and host, drops the default port,
