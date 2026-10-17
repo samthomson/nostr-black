@@ -1,0 +1,77 @@
+import { afterEach } from 'vitest';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { createHead, UnheadProvider } from '@unhead/react/client';
+import { BrowserRouter } from 'react-router-dom';
+import { AppProvider } from '@/components/AppProvider';
+import { KeystoreProvider } from '@/auth/KeystoreProvider';
+import { AppConfig } from '@/contexts/AppContext';
+import { UserState } from '@/contexts/UserStateContext';
+import { UserStateProvider } from '@/components/UserStateProvider';
+import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
+import { FEED_KINDS } from '@/data/feed/spec';
+import { DataProvider } from '@/data/DataProvider';
+import { store } from '@/data/store';
+import { scheduler } from '@/data/scheduler';
+import { clearFeeds } from '@/data/feed/registry';
+import { resetPersist } from '@/data/persist/persist';
+import { resetUseIsTor } from '@/hooks/useEgress';
+import { lock } from '@/auth/keystore';
+
+afterEach(async () => {
+  lock();
+  window.localStorage.clear();
+  window.sessionStorage.clear();
+  store.clear();
+  scheduler.reset();
+  clearFeeds();
+  resetUseIsTor();
+  await resetPersist();
+});
+
+interface TestAppProps {
+  children: React.ReactNode;
+  /** Seed for synced user nostr state (follows, relay list). */
+  userState?: Partial<UserState>;
+}
+
+export function TestApp({ children, userState }: TestAppProps) {
+  const head = createHead();
+
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+
+  const defaultConfig: AppConfig = {
+    theme: 'dark',
+    discoveryRelays: DEFAULT_DISCOVERY_RELAYS,
+    torEnabled: true,
+    mediaEnabled: true,
+    imageCompression: true,
+    feedKinds: [...FEED_KINDS],
+    defaultReaction: "+",
+    mediaCacheMaxMb: 1024,
+  };
+
+  return (
+    <UnheadProvider head={head}>
+      <AppProvider storageKey='test-app-config' defaultConfig={defaultConfig}>
+        <KeystoreProvider>
+        <UserStateProvider storageKey='test-user-state' initialState={userState}>
+        <QueryClientProvider client={queryClient}>
+          <DataProvider>
+            <BrowserRouter>
+              {children}
+            </BrowserRouter>
+          </DataProvider>
+        </QueryClientProvider>
+        </UserStateProvider>
+        </KeystoreProvider>
+      </AppProvider>
+    </UnheadProvider>
+  );
+}
+
+export default TestApp;
