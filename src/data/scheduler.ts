@@ -29,7 +29,7 @@ import { KIND_CONNECTION, KIND_PRIVATE_NOTE, KIND_PRIVATE_REPLY } from '@/lib/fe
 export type Want =
   | { type: 'profile'; pubkey: string }
   | { type: 'relayList'; pubkey: string }
-  | { type: 'blossomServers'; pubkey: string } // the user's kind 10006 blossom server list (BUD-02)
+  | { type: 'blossomServers'; pubkey: string } // the user's kind 10063 blossom server list (BUD-03)
   | { type: 'followList'; pubkey: string }
   | { type: 'event'; id: string; author?: string; hints?: readonly string[] }
   | { type: 'addressable'; kind: number; pubkey: string; d: string }
@@ -50,7 +50,7 @@ export type ReplaceableWantType = 'profile' | 'relayList' | 'blossomServers' | '
 const REPLACEABLE_KIND: Record<ReplaceableWantType, number> = {
   profile: 0,
   relayList: 10002,
-  blossomServers: 10006,
+  blossomServers: 10063,
   followList: 3,
 };
 
@@ -279,7 +279,6 @@ export const createScheduler = (
     }
 
     pending.set(key, { want, lane });
-    console.log("ENQUEUE:", key, "type:", want.type);
     if (timer === undefined) timer = setTimeout(() => void flush(), DEBOUNCE_MS);
   };
 
@@ -287,6 +286,7 @@ export const createScheduler = (
    * settle that clears spinners waits on it. Covers queue wait and
    * query time both. */
   const LANE_DEADLINE_MS = 15_000;
+
 
   /** One REQ per relay per chunk, ingested under the relay it came from.
    * The returned promise resolves when all jobs finish OR the lane

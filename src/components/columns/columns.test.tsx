@@ -113,6 +113,70 @@ describe('columns', () => {
     expect(within(panes()[0]).getByText('the reply')).toBeTruthy();
   });
 
+  it('two panes open: the dimmed first pane is frozen, modal-capable, and its ground click closes only the right', async () => {
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(sk)}>
+          <Shell>
+            <Note event={ROOT} />
+          </Shell>
+        </Unlock>
+      </TestApp>,
+    );
+
+    await user.click((await screen.findByText('the root note')).parentElement!);
+    await user.click(within(panes()[0]).getByText('the reply'));
+    await waitFor(() => expect(panes()).toHaveLength(2));
+
+    // Backdrop contract, pane edition: the dimmed pane cannot scroll.
+    const dimmedScroller = panes()[0].firstElementChild as HTMLElement;
+    expect(dimmedScroller.className).toContain('overflow-y-hidden');
+    // ...but its controls still work: the info button opens its dialog.
+    await user.click(within(panes()[0]).getByRole('button', { name: 'event info' }));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // A click on the dimmed pane's empty ground closes everything to its
+    // right — the second pane — and nothing else.
+    await user.click(dimmedScroller);
+    await waitFor(() => expect(panes()).toHaveLength(1));
+    expect(within(panes()[0]).getByText('the reply')).toBeTruthy();
+  });
+
+  it('the feed freezes while panes are open: list held, controls gone, thawed on close', async () => {
+    const user = userEvent.setup();
+    feedNotes.notes = [ROOT];
+    const { Feed } = await import('@/components/Feed');
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(sk)}>
+          <Shell>
+            <Feed />
+          </Shell>
+        </Unlock>
+      </TestApp>,
+    );
+
+    // Click the note body — the real open affordance.
+    await user.click(await screen.findByText('the root note'));
+    await waitFor(() => expect(panes()).toHaveLength(1));
+
+    // Frozen: the scroller is inert and the growth controls are gone.
+    const main = document.querySelector('main') as HTMLElement;
+    expect(main.className).toContain('overflow-y-hidden');
+    expect(screen.queryByRole('button', { name: 'load older notes' })).toBeNull();
+
+    // New data landing while frozen does NOT splice into the backdrop.
+    feedNotes.notes = [note('a later note', 300), ROOT];
+    await waitFor(() => expect(screen.queryByText('a later note')).toBeNull());
+
+    // Close: the thaw shows live data again.
+    await user.click(main);
+    await waitFor(() => expect(screen.getByText('a later note')).toBeTruthy());
+  });
+
   it('the main column never unmounts — its scroll survives pane open/close', async () => {
     const user = userEvent.setup();
     render(
@@ -142,7 +206,24 @@ describe('columns', () => {
 });
 
 // Hoisted state the module mocks read from — the private test fills it
-// before rendering; the public tests never touch these modules.
+// Hoisted feed state the useFeed mock reads — the freeze test mutates it.
+const feedNotes = vi.hoisted(() => ({
+  notes: [] as NostrEvent[],
+}));
+vi.mock('@/data/hooks/useFeed', () => ({
+  useFeed: () => ({
+    notes: feedNotes.notes,
+    pending: [],
+    loading: false,
+    exhausted: false,
+    isLoading: false,
+    noFollows: false,
+    followsNotFound: false,
+    loadMore: () => {},
+    acceptPending: () => {},
+  }),
+}));
+
 const priv = vi.hoisted(() => ({
   posts: [] as unknown[],
   pending: false,
@@ -172,7 +253,7 @@ describe('private notes open panes too — same shell, conversation data', () =>
       note: { rumor: rootRumor, wrapper: seal('x', 1), replyCek: new Uint8Array(32) },
       history: [],
       replies: [{ rumor: replyRumor, wrapper: seal('y', 2) }],
-      conversation: { replies: new Map(), root: null },
+      conversation: { replies: new Map(), reactions: [], root: null },
     }];
 
     render(

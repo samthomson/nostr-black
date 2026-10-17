@@ -84,13 +84,16 @@ export const PrivateItem = ({
         edited={edited}
         onEditHistory={edited ? () => setHistoryOpen(true) : undefined}
       >
-        {mediaImagesOf(rumor).length > 0 && (
-          <div className="space-y-1 pt-1">
-            {mediaImagesOf(rumor).map((image) => (
-              <PrivateMedia key={image.url} image={image} />
-            ))}
-          </div>
-        )}
+        {(() => {
+          const images = mediaImagesOf(rumor);
+          return images.length > 0 ? (
+            <div className="space-y-1 pt-1">
+              {images.map((image) => (
+                <PrivateMedia key={image.url} image={image} />
+              ))}
+            </div>
+          ) : null;
+        })()}
         {/* Deliberate divergence from the public counts row: no repost.
             A public kind 6 would leak the sealed rumor, and "reposting"
             privately means re-wrapping for another connection — a share
@@ -185,6 +188,55 @@ export const ReplyComposer = ({
 };
 
 /**
+ * The sealed replies of one note plus its composer — the exact list the
+ * thread page indents under the root and the panes show on their own,
+ * so their wiring (history chains, reactions, edits) exists once.
+ * `onOpenReply`/`anchorId` are column extras: absent on the thread page.
+ */
+export const SealedReplies = ({
+  note,
+  replies,
+  conversation,
+  pending,
+  onReply,
+  onReact,
+  onEditReply,
+  anchorId,
+  onOpenReply,
+}: {
+  note: OpenedNote;
+  replies: readonly OpenedReply[];
+  conversation: Conversation;
+  /** Counts show their loading state until the conversation arrives. */
+  pending?: boolean;
+  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[]) => void;
+  onReact?: (parent: OpenedNote, target: Rumor, emoji: string) => void;
+  onEditReply?: (parent: OpenedNote, reply: OpenedReply, content: string) => void;
+  anchorId?: string;
+  onOpenReply?: (reply: OpenedReply) => void;
+}) => (
+  <>
+    {replies.map((reply) => (
+      <div key={reply.wrapper.id} className="space-y-3">
+        <PrivateItem
+          rumor={reply.rumor}
+          wrapper={reply.wrapper}
+          replyCek={note.replyCek}
+          conversation={conversation}
+          versions={[...(reply.history?.map((h) => h.rumor) ?? []), reply.rumor]}
+          pending={pending}
+          anchored={anchorId !== undefined ? anchorId === reply.rumor.id : undefined}
+          onOpen={onOpenReply ? () => onOpenReply(reply) : undefined}
+          onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
+          onEdit={onEditReply ? (content) => onEditReply(note, reply, content) : undefined}
+        />
+      </div>
+    ))}
+    <ReplyComposer parent={note} onReply={onReply} />
+  </>
+);
+
+/**
  * One private post, behaving exactly like a public one: in the feed it
  * shows just the note with a reply count that routes to its thread page;
  * opened (the thread page), the replies indent under it thread-style and
@@ -199,8 +251,8 @@ export const PrivateNote = ({
   conversation,
   open,
   pending,
-  onReact,
   onReply,
+  onReact,
   onEdit,
   onEditReply,
   onDelete,
@@ -212,48 +264,40 @@ export const PrivateNote = ({
   conversation: Conversation;
   /** Thread mode: replies and composer are rendered. */
   open: boolean;
-  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[]) => void;
   /** Counts show their loading state until the conversation arrives. */
   pending?: boolean;
+  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[]) => void;
   onReact?: (parent: OpenedNote, target: Rumor, emoji: string) => void;
   onEdit?: (parent: OpenedNote, content: string) => void;
   onEditReply?: (parent: OpenedNote, reply: OpenedReply, content: string) => void;
   onDelete?: (parent: OpenedNote, history: readonly OpenedNote[]) => void;
-}) => {
-  return (
-    <div className="space-y-3">
-      <PrivateItem
-        rumor={note.rumor}
-        wrapper={note.wrapper}
-        replyCek={note.replyCek}
-        conversation={conversation}
-        versions={history.map((h) => h.rumor)}
-        replyCount={replies.length}
-        noteHref={open ? undefined : `/private-feed/${nip19.neventEncode({ id: note.rumor.id, author: note.rumor.pubkey, relays: [] })}`}
-        pending={pending}
-        onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
-        onEdit={onEdit ? (content) => onEdit(note, content) : undefined}
-        onDelete={onDelete ? () => onDelete(note, history) : undefined}
-      />
-      {open && (
-        <div className="space-y-3 border-l pl-3">
-          {replies.map((reply) => (
-            <div key={reply.wrapper.id} className="space-y-3">
-              <PrivateItem
-                rumor={reply.rumor}
-                wrapper={reply.wrapper}
-                replyCek={note.replyCek}
-                conversation={conversation}
-                versions={[...(reply.history?.map((h) => h.rumor) ?? []), reply.rumor]}
-                pending={pending}
-                onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
-                onEdit={onEditReply ? (content) => onEditReply(note, reply, content) : undefined}
-              />
-            </div>
-          ))}
-          <ReplyComposer parent={note} onReply={onReply} />
-        </div>
-      )}
-    </div>
-  );
-};
+}) => (
+  <div className="space-y-3">
+    <PrivateItem
+      rumor={note.rumor}
+      wrapper={note.wrapper}
+      replyCek={note.replyCek}
+      conversation={conversation}
+      versions={history.map((h) => h.rumor)}
+      replyCount={replies.length}
+      noteHref={open ? undefined : `/private-feed/${nip19.neventEncode({ id: note.rumor.id, author: note.rumor.pubkey, relays: [] })}`}
+      pending={pending}
+      onReact={onReact ? (target, emoji) => onReact(note, target, emoji) : undefined}
+      onEdit={onEdit ? (content) => onEdit(note, content) : undefined}
+      onDelete={onDelete ? () => onDelete(note, history) : undefined}
+    />
+    {open && (
+      <div className="space-y-3 border-l pl-3">
+        <SealedReplies
+          note={note}
+          replies={replies}
+          conversation={conversation}
+          pending={pending}
+          onReply={onReply}
+          onReact={onReact}
+          onEditReply={onEditReply}
+        />
+      </div>
+    )}
+  </div>
+);

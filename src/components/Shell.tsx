@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { anchorSpacerHeight } from '@/lib/anchorSpacer';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Bug, ChevronLeft, House, Lock, Menu, Settings, User, Users, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -11,11 +10,11 @@ import { Input } from '@/components/ui/input';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { profileHref } from '@/lib/format';
 import { PrivacyTag } from '@/components/PrivacyTag';
-import { cn } from '@/lib/utils';
-import { ColumnsProvider } from '@/components/columns/ColumnsContext';
+import { useAnchorSpacer, useSpacerRefs } from '@/components/columns/useAnchorSpacer';
 import { useColumns, type ColumnPointer } from '@/components/columns/columnsState';
+import { ColumnsProvider } from '@/components/columns/ColumnsContext';
 import { NoteColumn } from '@/components/columns/NoteColumn';
-
+import { cn } from '@/lib/utils';
 type NavItem = { to: string; label: string; Icon: LucideIcon; grade?: import('@/lib/privacy').PrivacyGrade };
 type Grade = NavItem['grade'];
 
@@ -149,17 +148,19 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-/** One column's share (feed and panes are equal-width when open). */
-const SHARE_REM = 41;
-
+/** The feed column's own max width — each open pane grows the row by one
+ *  more of these, so every column (feed included) keeps feed width. */
+const SHARE_PX = 900;
 
 /**
- * The widening content row. The main column's width never changes when
- * panes open — it has no reason to reflow, so its scroll position and
- * the reader's place are untouched by construction. Panes take fixed
- * slots in the space the container grows by. On narrow viewports only
- * the last pane shows, full-width, behind a sliver strip that taps back
- * one depth.
+ * The widening content row. With panes open, main and the panes are
+ * equal flex shares: the row's own max-width transition is the single
+ * driver of the resize (no per-pane width animation to fight it), every
+ * style value stays an explicit length so nothing snaps, and the feed's
+ * left edge never moves. The feed freezes (scroll and content) while
+ * panes are open — it is backdrop. On narrow viewports only the last
+ * pane shows, full-width, behind a sliver strip that taps back one
+ * depth.
  */
 const ColumnsContent = ({
   navBlock,
@@ -176,64 +177,11 @@ const ColumnsContent = ({
   const narrow = stack?.narrow ?? false;
   const count = columns.length;
   const active = count > 0;
-
-  // The anchored card pins to the top of the feed column. When it is the
-  // LAST item there is nothing below it, so the browser would clamp the
-  // scroll short — a spacer of exactly the deficit makes the pin
-  // reachable. Measured ONCE per anchor (a layout effect keyed on the
-  // anchor, not on the spacer): natural height comes from the live DOM
-  // (scrollHeight minus the spacer element's own height), never from
-  // state, so the measurement can't feed back into itself. The reset on
-  // close is render-phase (the exiting-panes pattern); the browser then
-  // clamps scrollTop back to the natural position by itself.
-  const mainRef = useRef<HTMLElement | null>(null);
-  const spacerRef = useRef<HTMLDivElement | null>(null);
-  const [spacer, setSpacer] = useState(0);
+  // The anchored card pins at PIN_OFFSET; the spacer makes that reachable
+  // and keeps it pinned through churn. The mechanism lives in the hook.
+  const [mainRef, spacerRef] = useSpacerRefs();
   const anchorId = columns[0]?.id;
-  if (!active && spacer !== 0) setSpacer(0);
-  useLayoutEffect(() => {
-    if (!active || !anchorId) return;
-    const measure = (): void => {
-      const scroller = mainRef.current;
-      const spacerEl = spacerRef.current;
-      const card = scroller?.querySelector('[data-anchor]') ?? null;
-      if (!scroller || !spacerEl) return;
-      // Live churn can evict the anchored note from the feed entirely —
-      // then there is nothing to pin and the spacer must not linger.
-      if (!card) {
-        spacerEl.style.height = '0px';
-        setSpacer((cur) => (cur === 0 ? cur : 0));
-        return;
-      }
-      const scrollerTop = scroller.getBoundingClientRect().top;
-      const top = card.getBoundingClientRect().top - scrollerTop + scroller.scrollTop;
-      const natural = scroller.scrollHeight - spacerEl.offsetHeight;
-      const next = anchorSpacerHeight(top, natural, scroller.clientHeight, 56);
-      // Write the height to the DOM first — a state-only update lands a
-      // render later, and the re-pin below must see the restored max
-      // NOW. React later writes the same value from state; no conflict.
-      spacerEl.style.height = `${next}px`;
-      setSpacer((cur) => (cur === next ? cur : next));
-      // Re-pin: churn clamps the scroll off the target; with the spacer
-      // restored the target is reachable again. Never mid-FLIP — the
-      // scroller is frozen then and the card rect is mid-transform.
-      const offset = card.getBoundingClientRect().top - scrollerTop;
-      if (scroller.style.overflow !== 'hidden' && Math.abs(offset - 56) > 2) {
-        scroller.scrollTop += offset - 56;
-      }
-    };
-    // and a shrunk max re-clamps the scroll off the pin. Re-derive the
-    // deficit whenever the content box resizes; it reads the spacer from
-    // the DOM, never state, so the loop converges instead of feeding back.
-    const content = mainRef.current?.firstElementChild;
-    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure);
-    ro?.observe(content ?? document.body);
-    window.addEventListener('resize', measure);
-    return () => {
-      ro?.disconnect();
-      window.removeEventListener('resize', measure);
-    };
-  }, [active, anchorId]);
+  const spacer = useAnchorSpacer(mainRef, spacerRef, active, anchorId);
   // Panes leaving the stack collapse out (below) — track them one beat.
   // Render-phase state adjust (the useFeed routing-key pattern): no refs.
   const [prevColumns, setPrevColumns] = useState(columns);
@@ -252,10 +200,10 @@ const ColumnsContent = ({
     <div
       className="relative z-10 flex min-h-0 flex-1 transition-[max-width,margin-right,width] duration-300 ease-out"
       style={{
-        // Each open column grows the row by one share; inside, main and
-        // the panes are all flex-1 basis-0 — EQUAL widths, and the row's
-        // own max-width transition is what narrows the feed, smoothly.
-        maxWidth: narrow ? undefined : `calc(900px + ${count * SHARE_REM}rem)`,
+        // Each open column grows the row by one feed width; inside, main
+        // and the panes are all flex-1 basis-0 — EQUAL shares, and the
+        // row's own max-width transition is what narrows the feed.
+        maxWidth: narrow ? undefined : `${SHARE_PX * (count + 1)}px`,
         // Every value is an explicit length — `auto` never appears, so
         // max-width, margins AND width all interpolate. The centering
         // margin M = max(0, 50% - 450px): closed, M both sides (centered
@@ -295,10 +243,10 @@ const ColumnsContent = ({
       <main
         ref={mainRef}
         className={cn(
-          // flex-1: the feed smoothly yields as pane widths animate in
-          // and out. The scrollbar gutter is reserved ALWAYS — a classic
-          // scrollbar appearing/disappearing would change its width by
-          // its track and re-wrap every note mid-animation.
+          // flex-1: an equal share beside the panes. The scrollbar gutter
+          // is reserved ALWAYS — a classic scrollbar appearing/disappearing
+          // would change the width by its track and re-wrap every note
+          // mid-animation.
           'flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto px-3 pt-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pt-4 md:pb-3',
           // Panes open: the feed is backdrop — inert. overflow-y-hidden
           // freezes it (scrollTop keeps; restoring the class unfreezes).
@@ -349,6 +297,7 @@ const ColumnsContent = ({
               pointer={pointer}
               depth={i}
               anchorId={columns[i + 1]?.id}
+              dimmed={!last}
               onOpen={(next, depth) => open?.(next, depth)}
               onClose={() => close?.(i)}
             />

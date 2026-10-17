@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { nip19 } from 'nostr-tools';
 import { ChevronDown } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
@@ -79,9 +79,14 @@ export const EventInfoDialog = ({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) => {
-  const authorHref = profileHref(event.pubkey);
   const sk = useSessionKey();
-  const layers = sk && isPrivateKind(event.kind) ? privateNoteLayers(sk, event, replyCek) : undefined;
+  // Decoding only while open — this dialog mounts on every note, and
+  // layer-opening is ECDH + AEAD per private wrapper.
+  const layers = useMemo(
+    () => (open && sk && isPrivateKind(event.kind) ? privateNoteLayers(sk, event, replyCek) : undefined),
+    [open, sk, event, replyCek],
+  );
+  const authorHref = profileHref(event.pubkey);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

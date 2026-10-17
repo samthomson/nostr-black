@@ -381,8 +381,12 @@ async fn blossom_put(
     url: String,
     authorization: String,
     content_type: String,
-    body: Vec<u8>,
+    body: String,
 ) -> Result<String, String> {
+    use base64::Engine as _;
+    let body = base64::engine::general_purpose::STANDARD
+        .decode(&body)
+        .map_err(|e| format!("body base64: {e}"))?;
     tokio::time::timeout(
         std::time::Duration::from_secs(300),
         blossom_put_inner(&url, &authorization, &content_type, &body),

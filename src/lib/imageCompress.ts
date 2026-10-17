@@ -81,3 +81,18 @@ export const compressImage = async (file: File): Promise<CompressedImage> => {
   if (encoded.size >= file.size) return passthrough(originalWidth, originalHeight);
   return { bytes: new Uint8Array(await encoded.arrayBuffer()), type: encoded.type, width, height };
 };
+
+/** One file staged for upload: compressed when compression is enabled
+ * (and the file benefits), the original bytes otherwise. The one
+ * staging step every upload surface goes through. */
+export const prepareImage = async (file: File, compress: boolean): Promise<CompressedImage> => {
+  if (!compress) {
+    return {
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      type: file.type || 'application/octet-stream',
+      width: 0,
+      height: 0,
+    };
+  }
+  return compressImage(file);
+};

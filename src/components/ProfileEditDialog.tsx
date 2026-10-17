@@ -13,7 +13,7 @@ import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { useBlossomUpload } from '@/hooks/useBlossomUpload';
 import { useBlossomServers } from '@/data/hooks/useBlossomServers';
-import { compressImage } from '@/lib/imageCompress';
+import { prepareImage } from '@/lib/imageCompress';
 import {
   EDITABLE_PROFILE_FIELDS,
   editedProfileContent,
@@ -301,14 +301,7 @@ export const ProfileEditDialog = ({
         server,
         signUploadsWith: sk ?? undefined,
         run: async () => Promise.all(staged.map(async ({ file }) => {
-          const compressed = config.imageCompression
-            ? await compressImage(file)
-            : {
-                bytes: new Uint8Array(await file.arrayBuffer()),
-                type: file.type || 'application/octet-stream',
-                width: 0,
-                height: 0,
-              };
+          const compressed = await prepareImage(file, config.imageCompression);
           const blob = await upload(compressed.bytes, compressed.type, sk!, server);
           return { url: blob.url, sha256: blob.sha256, mime: compressed.type };
         })),

@@ -14,7 +14,7 @@ import { clientTag } from '@/lib/clientTag';
 import { DraftAction, DraftSwitch } from '@/components/BroadcastDialog';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAttachments } from '@/hooks/useAttachments';
-import { compressImage } from '@/lib/imageCompress';
+import { prepareImage } from '@/lib/imageCompress';
 import { useBlossomUpload } from '@/hooks/useBlossomUpload';
 import { useBlossomServers } from '@/data/hooks/useBlossomServers';
 
@@ -98,14 +98,7 @@ export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
             server: servers[0]!,
             signUploadsWith: signer,
             run: (): Promise<UploadedImage[]> => Promise.all(staged.map(async (file) => {
-              const compressed = config.imageCompression
-                ? await compressImage(file)
-                : {
-                    bytes: new Uint8Array(await file.arrayBuffer()),
-                    type: file.type || 'application/octet-stream',
-                    width: 0,
-                    height: 0,
-                  };
+              const compressed = await prepareImage(file, config.imageCompression);
               const blob = await upload(compressed.bytes, compressed.type, signer, servers[0]);
               return {
                 url: blob.url,

@@ -8,7 +8,10 @@ interface OpenedImage {
 }
 
 /** Decrypted images by ciphertext hash, shared by every mount — the
- * feed, the thread and re-renders fetch one image once per session. */
+ * feed, the thread and re-renders fetch one image once per session.
+ * Capped: each entry holds a blob (megabytes post-decrypt), so the
+ * oldest entry is evicted and revoked past the cap. */
+const CACHE_MAX = 24;
 const cache = new Map<string, OpenedImage>();
 /** Loads in progress by ciphertext hash — remounts join the running
  * fetch instead of starting a second one (and leaking its blob url). */
@@ -40,6 +43,13 @@ export const PrivateMedia = ({ image }: { image: PrivateImage }) => {
     void loadOf(x, image)
       .then((opened) => {
         cache.set(x, opened);
+        while (cache.size > CACHE_MAX) {
+          const oldest = cache.keys().next().value;
+          if (oldest === undefined) break;
+          const evicted = cache.get(oldest);
+          cache.delete(oldest);
+          if (evicted) URL.revokeObjectURL(evicted.blobUrl);
+        }
         if (!cancelled) setLoaded(opened);
       })
       .catch((e: unknown) => {

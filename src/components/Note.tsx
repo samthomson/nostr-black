@@ -23,6 +23,7 @@ import { useColumns } from '@/components/columns/columnsState';
 import { useAsset } from '@/hooks/useAsset';
 import { profileHref, eventHref, npubOf, formatTimestamp } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { PIN_OFFSET } from '@/lib/anchorSpacer';
 import { clientTag as clientTagOf } from '@/lib/clientTag';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 
@@ -357,17 +358,17 @@ const scrollCardToTop = (card: HTMLElement, durationMs = 550): void => {
   while (scroller && !['auto', 'scroll', 'hidden'].includes(getComputedStyle(scroller).overflowY)) {
     scroller = scroller.parentElement;
   }
-  const content = scroller?.firstElementChild as HTMLElement | null;
-  if (!scroller || !content) return;
+  if (!scroller) return;
+  const content = scroller.firstElementChild as HTMLElement | null;
+  if (!content) return;
   const scrollerRect = scroller.getBoundingClientRect();
   const cardRect = card.getBoundingClientRect();
-  // How far the card sits below its destination (56px in), pre-freeze.
-  // Pin always targets the top — visible or not: the anchor ring and
-  // dimming make the card the column's focus, and a "visible, leave it"
-  // skip strands the last feed item mid-column.
-  const delta = cardRect.top - scrollerRect.top - 56;
+  // How far the card sits below its destination (PIN_OFFSET in),
+  // pre-freeze. Pin always targets the top — visible or not: the anchor
+  // ring and dimming make the card the column's focus, and a "visible,
+  // leave it" skip strands the last feed item mid-column.
+  const delta = cardRect.top - scrollerRect.top - PIN_OFFSET;
   if (Math.abs(delta) < 2) return;
-
   // Finish any in-flight scroll before starting this one.
   activeFlight?.();
   const prevOverflow = scroller.style.overflow;
@@ -396,7 +397,7 @@ const scrollCardToTop = (card: HTMLElement, durationMs = 550): void => {
     const live = scroller!.scrollTop
       + card.getBoundingClientRect().top
       - scroller!.getBoundingClientRect().top
-      - 56;
+      - PIN_OFFSET;
     const max = scroller!.scrollHeight - scroller!.clientHeight;
     scroller!.scrollTop = Math.max(0, Math.min(live, max));
   };
@@ -542,7 +543,9 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
         stack.open({
           id: event.id,
           author: event.pubkey,
-          relays: foundOn,
+          // Relay hints are for public fetches; a sealed pointer reads the
+          // decrypted conversation instead, so it carries none.
+          relays: wrapper === undefined ? foundOn : undefined,
           private: wrapper !== undefined,
         });
       }

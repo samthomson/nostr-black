@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { useAppContext } from '@/hooks/useAppContext';
-import { compressImage } from '@/lib/imageCompress';
+import { prepareImage } from '@/lib/imageCompress';
 import { encryptImage, type EncryptedImage } from '@/lib/fileMessage';
 
 /** One staged private image: its media-tag descriptors plus the
@@ -24,14 +24,7 @@ export const usePrivateImagePrep = (): ((
   return useCallback(async (replyCek: Uint8Array, files: File[]): Promise<StagedImage[]> => {
     const staged: StagedImage[] = [];
     for (const file of files) {
-      const compressed = config.imageCompression
-        ? await compressImage(file)
-        : {
-            bytes: new Uint8Array(await file.arrayBuffer()),
-            type: file.type || 'application/octet-stream',
-            width: 0,
-            height: 0,
-          };
+      const compressed = await prepareImage(file, config.imageCompression);
       staged.push({ ...encryptImage(replyCek, compressed.bytes), mime: compressed.type });
     }
     return staged;

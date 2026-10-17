@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { BroadcastDialog } from '@/components/BroadcastDialog';
 import type { EventLayer } from '@/lib/feedEncryption';
@@ -72,7 +72,14 @@ export const useBroadcastFlow = (): {
   /** The preview currently open, if any. */
   pending: PendingBroadcast | null;
 } => {
-  const [pending, setPending] = useState<PendingBroadcast | null>(null);
+  const [pending, setPendingState] = useState<PendingBroadcast | null>(null);
+  /** Mirrors pending for liveness checks inside async upload chains —
+   * a cancel swaps it to null and the resolved chain drops its result. */
+  const pendingRef = useRef<PendingBroadcast | null>(null);
+  const setPending = (next: PendingBroadcast | null): void => {
+    pendingRef.current = next;
+    setPendingState(next);
+  };
   const [busy, setBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
@@ -83,14 +90,19 @@ export const useBroadcastFlow = (): {
 
   const broadcast = (targets: readonly string[]) => {
     if (!pending || busy) return;
+    // Liveness: a cancel while the deferred upload runs closes the
+    // modal (setPending(null)) — the resolved chain must then drop the
+    // result instead of publishing a broadcast the user cancelled.
+    const live = pending;
+    const stillLive = (): boolean => pendingRef.current === live;
     const commit = (events: readonly NostrEvent[]): void => {
       events.forEach((event, i) =>
-        enqueue(pending.labels?.[i] ?? pending.label, event, [...targets]));
-      pending.onEnqueued?.();
+        enqueue(live.labels?.[i] ?? live.label, event, [...targets]));
+      live.onEnqueued?.();
       setPending(null);
     };
-    if (!pending.uploads || !pending.buildEvents) {
-      commit(pending.events ?? []);
+    if (!live.uploads || !live.buildEvents) {
+      commit(live.events ?? []);
       return;
     }
     // Deferred uploads: the bytes go up first, then the events build
@@ -98,10 +110,10 @@ export const useBroadcastFlow = (): {
     // the error — retry or cancel, never a silent drop.
     setUploadError(null);
     setBusy(true);
-    void pending.uploads.run()
-      .then((uploaded) => Promise.resolve(pending.buildEvents!(uploaded)))
-      .then(commit)
-      .catch((e: unknown) => setUploadError(e instanceof Error ? e.message : String(e)))
+    void live.uploads.run()
+      .then((uploaded) => Promise.resolve(live.buildEvents!(uploaded)))
+      .then((events) => { if (stillLive()) commit(events); })
+      .catch((e: unknown) => { if (stillLive()) setUploadError(e instanceof Error ? e.message : String(e)); })
       .finally(() => setBusy(false));
   };
 

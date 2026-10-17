@@ -1,4 +1,11 @@
 /**
+ * Where an opened note pins inside its column, from the scroller's top.
+ * Single source of truth: the FLIP scroll, the spacer measurement and
+ * the re-pin all target this offset.
+ */
+export const PIN_OFFSET = 56;
+
+/**
  * Extra content height needed below the fold so the anchored card can pin
  * to the top of its scroller. Without it the browser clamps scrollTop at
  * (content height − viewport), and the last feed item — nothing below it —
