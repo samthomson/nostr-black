@@ -21,7 +21,7 @@ Plan of record: `README.md`.
 
 ## Git
 
-- never run `git commit`, `--amend`, `push`, or any history-mutating command unless explicitly asked for that exact action in the current message. "build it"/"ship it" does not authorize a commit. leave the tree dirty; the user commits
+- never run `git commit`, `--amend`, `push`, `git add`, `git stage`, or any history- or index-mutating command unless explicitly asked for that exact action in the current message. that permission is single-shot: it covers only the immediate instruction, then expires — default back to touching nothing. "build it"/"ship it"/"done" does not authorize a commit or a stage. leave the tree dirty; the user stages and commits
 
 ## Privacy doctrine (non-negotiable)
 
