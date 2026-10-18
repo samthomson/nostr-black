@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useSeoMeta } from '@unhead/react';
-import { Check, Copy, Loader2 } from 'lucide-react';
+import { Check, Copy, Eye, Loader2, Radar } from 'lucide-react';
 import { getPublicKey } from 'nostr-tools';
 import { Page } from '@/components/Page';
 import { PrivacyTag } from '@/components/PrivacyTag';
@@ -12,6 +12,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { useRouting } from '@/data/hooks/useRouting';
 import { useProfiles, type Profile } from '@/data/hooks/useProfile';
+import { store } from '@/data/store';
+import { useUserState } from '@/hooks/useUserState';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { useConnections } from '@/data/hooks/useConnections';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
@@ -22,6 +24,7 @@ import {
   type ConnectionRecord,
 } from '@/lib/feedEncryption';
 import { parsePubkey, npubOf, profileHref } from '@/lib/format';
+import { scanFollowsForOffers } from '@/lib/connectionScan';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
 
@@ -153,8 +156,9 @@ const RequestRow = ({
 const ConnectionsBody = () => {
   const sk = useSessionKey();
   const { request: requestBroadcast, dialog } = useBroadcastFlow();
-  const { myWrite } = useRouting();
+  const { myWrite, relays: relaysOf } = useRouting();
   const discoveryTargets = DEFAULT_DISCOVERY_RELAYS.filter((url) => !myWrite.includes(url));
+  const follows = useUserState().state.follows.pubkeys;
   const [input, setInput] = useState('');
   const [formError, setFormError] = useState<string | undefined>();
   const [lookup, setLookup] = useState<string | undefined>();
@@ -165,6 +169,10 @@ const ConnectionsBody = () => {
   const { records, connected, outgoing, incoming, pending } = useConnections(lookup);
   const [searchParams, setSearchParams] = useSearchParams();
   const [lookedUp, setLookedUp] = useState(false);
+  /** Follows scan state: idle → scanning → a result count or "none". */
+  const [scan, setScan] = useState<'idle' | 'scanning' | 'done'>('idle');
+  const [scanFound, setScanFound] = useState(0);
+  const scanAbort = useRef<AbortController | undefined>(undefined);
 
   // One batched kind-0 want for every peer — rows and the filter read it.
   const peers = useMemo(() => records.map((r) => r.peer), [records]);
@@ -260,6 +268,28 @@ const ConnectionsBody = () => {
     });
   };
 
+  /** Check every follow's own relays for a connection offer already
+      addressed to us. Found offers ingest into the store — the graph
+      hook picks them up and the rows render without any further action. */
+  const scanFollows = async () => {
+    if (scan === 'scanning') return;
+    scanAbort.current?.abort();
+    const controller = new AbortController();
+    scanAbort.current = controller;
+    setScan('scanning');
+    setScanFound(0);
+    let found = 0;
+    const targets = follows
+      .filter((pubkey) => !records.some((r) => r.peer === pubkey))
+      .map((pubkey) => ({ pubkey, write: relaysOf({ kind: 'oneAuthor', pubkey }) }));
+    await scanFollowsForOffers(sk, targets, (record, event, from) => {
+      found += 1;
+      setScanFound(found);
+      store.ingest([event], from);
+    }, controller.signal);
+    if (!controller.signal.aborted) setScan('done');
+  };
+
   const matches = (record: ConnectionRecord): boolean => {
     const needle = filter.trim().toLowerCase();
     if (!needle) return true;
@@ -277,12 +307,26 @@ const ConnectionsBody = () => {
   return (
     <>
       <div className="space-y-8">
-        {pending && (
-          <div className="text-muted-foreground flex items-center gap-2 text-xs">
-            <Loader2 className="size-3.5 animate-spin" />
-            fetching events
-          </div>
-        )}
+        {/* The explainer: what a connection is, in two sentences. Every
+            action on this page makes sense only once this lands. */}
+        <Card>
+          <CardContent className="space-y-1.5 px-4 py-4">
+            <h2 className="text-sm font-semibold">how connections work</h2>
+            <p className="text-muted-foreground text-sm">
+              a connection is a mutual link you both opt into. your private notes reach only the
+              people you've connected with, and it takes both of you to set one up — nobody can
+              connect to you without you agreeing.
+            </p>
+            <div className="flex gap-2 rounded-sm border border-current/20 bg-current/5 px-3 py-2">
+              <Eye className="mt-0.5 size-4 shrink-0" />
+              <p className="text-sm">
+                they aren't notified when you ask. they find your request by checking this page —
+                by looking for you by npub, or through the link you send them. send the link; it's
+                the fastest way.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* The one action this page starts with. After requesting, the
             card hands over the link — the thing the user must do next. */}
@@ -326,6 +370,10 @@ const ConnectionsBody = () => {
             ) : (
               <>
                 <h2 className="text-sm font-semibold">start a connection</h2>
+                <p className="text-muted-foreground text-sm">
+                  connect by entering their npub. the request is encrypted end to end and only
+                  they can see it — it sits until they accept.
+                </p>
                 <form
                   className="flex flex-wrap gap-2"
                   onSubmit={(e) => {
@@ -350,6 +398,29 @@ const ConnectionsBody = () => {
                   </Button>
                 </form>
                 {formError && <p className="text-destructive text-xs">{formError}</p>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={scan === 'scanning' || follows.length === 0}
+                    onClick={() => void scanFollows()}
+                  >
+                    {scan === 'scanning'
+                      ? <Loader2 className="size-3.5 animate-spin" />
+                      : <Radar className="size-3.5" />}
+                    check your follows
+                  </Button>
+                  <p className="text-muted-foreground text-xs">
+                    {follows.length === 0
+                      ? 'you follow no one yet — connect by npub above'
+                      : scan === 'done'
+                        ? scanFound > 0
+                          ? `${scanFound} of your follows already asked to connect —${incoming.length > 0 ? ' see their requests below' : ''}`
+                          : 'none of your follows has an open request for you'
+                        : 'anyone you follow who already sent you a connection request will appear'}
+                  </p>
+                </div>
                 {/* The lookup without a link: find a request someone
                     already sent. Same protocol action, second door. */}
                 <button
@@ -380,9 +451,12 @@ const ConnectionsBody = () => {
         {filteredIncoming.length > 0 && (
           <section className="space-y-1">
             <h2 className="text-xs font-semibold">
-              connection requests
+              requests to you
               <span className="text-muted-foreground ml-1.5 font-normal">({filteredIncoming.length})</span>
             </h2>
+            <p className="text-muted-foreground text-xs">
+              people who asked to connect with you — accept and you're connected
+            </p>
             <ul>
               {filteredIncoming.map((record) => (
                 <RequestRow
@@ -399,11 +473,11 @@ const ConnectionsBody = () => {
         {filteredOutgoing.length > 0 && (
           <section className="space-y-1">
             <h2 className="text-xs font-semibold">
-              pending connections
+              requests from you
               <span className="text-muted-foreground ml-1.5 font-normal">({filteredOutgoing.length})</span>
             </h2>
             <p className="text-muted-foreground text-xs">
-              they haven't accepted yet — the invite link on each row is what gets you there
+              waiting for their yes — send them the invite link, it's the fastest way
             </p>
             <ul>
               {filteredOutgoing.map((record) => (
@@ -417,13 +491,12 @@ const ConnectionsBody = () => {
             </ul>
           </section>
         )}
-
         <section className="space-y-1">
           <h2 className="text-xs font-semibold">
-            your connections
-            <span className="text-muted-foreground ml-1.5 font-normal">({filteredConnected.length})</span>
-          </h2>
-          {connected.length === 0 && !pending && (
+              connected
+              <span className="text-muted-foreground ml-1.5 font-normal">({filteredConnected.length})</span>
+            </h2>
+            {connected.length === 0 && !pending && (
             <Card className="border-dashed">
               <CardContent className="px-8 py-8 text-center">
                 <p className="text-muted-foreground mx-auto max-w-sm text-sm">

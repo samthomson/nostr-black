@@ -251,6 +251,11 @@ export const createScheduler = (
 
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running: Promise<void> | undefined;
+  /** Misses whose routing was never correct (the author's kind 10002 was
+   * unknown, so nothing went to their outbox), by want key. The entry
+   * makes the next enqueue bypass the freshness dedupe once the list has
+   * landed — one bounded re-ask at the outbox, then it is a verdict. */
+  const awaitingRoute = new Map<string, number>();
 
   const fresh = (want: Want): boolean => {
     const at = satisfiedAt.get(wantKey(want));
@@ -265,16 +270,37 @@ export const createScheduler = (
     return Date.now() - at < window;
   };
 
+  /** The author whose kind 10002 this want's routing depends on — the
+   * want types that can be misrouted while that list is unknown. */
+  const routeOf = (want: Want, ctx: RoutingContext): string | undefined => {
+    const author =
+      want.type === 'event' ? want.author
+        : want.type === 'profile' || want.type === 'authorNotes' || want.type === 'authorActivity'
+          ? want.pubkey
+          : undefined;
+    if (author === undefined || author === ctx.pubkey) return author;
+    return ctx.authorRelays.get(author) !== undefined ? author : undefined;
+  };
   const enqueue = (want: Want, lane: Lane): void => {
     const key = wantKey(want);
-    if (inflight.has(key) || fresh(want)) return;
+    const retries = awaitingRoute.get(key);
+    // A miss that was waiting on the author's relay list re-asks once the
+    // list is known — regardless of the freshness window, which would
+    // otherwise hold the 15-minute mark set by the misrouted first ask.
+    // Two retries, then the miss is a verdict: the entry drops and the
+    // normal staleness window takes over.
+    const retriable =
+      retries !== undefined && retries < 2 && routeOf(want, context()) !== undefined;
+    if (retries !== undefined && !retriable) awaitingRoute.delete(key);
+    if (retriable) awaitingRoute.set(key, retries + 1);
+    if (inflight.has(key) || (!retriable && fresh(want))) return;
 
     // Re-asking a missed event reopens the question: the UI pends while
     // this run is in flight instead of showing the earlier miss. A miss
     // is not a verdict — relays back off, connections race cold starts.
-    if (want.type === 'event') {
-      const entity = wantEntity(want);
-      if (entity && target.get(entity).settledAt !== undefined) target.unsettle(entity);
+    const entity = wantEntity(want);
+    if ((want.type === 'event' || retriable) && entity && target.get(entity).settledAt !== undefined) {
+      target.unsettle(entity);
     }
     const queued = pending.get(key);
     if (queued) {
@@ -777,15 +803,20 @@ export const createScheduler = (
         const want = q.want;
         const key = wantKey(want);
         inflight.delete(key);
-        // An event miss while we still don't know the author's relays is
-        // not a verdict — the trailing kind 10002 may unlock their outbox.
-        const waitingOnAuthor =
-          want.type === 'event' &&
-          !target.getEvent(want.id) &&
-          !!want.author &&
-          !ctx.authorRelays.get(want.author);
+        // A miss whose routing was never correct — the author's kind
+        // 10002 was unknown, so nothing went to their outbox — is not a
+        // verdict. It joins awaitingRoute: the next enqueue re-asks at
+        // the outbox once the list lands (bounded, see enqueue).
+        const misrouted =
+          !target.get(wantEntity(want) ?? '')?.event &&
+          want.type !== 'relayList' &&
+          routeOf(want, ctx) === undefined &&
+          (want.type === 'event'
+            ? !!want.author
+            : want.type === 'profile' || want.type === 'authorNotes' || want.type === 'authorActivity');
+        if (misrouted) awaitingRoute.set(key, awaitingRoute.get(key) ?? 0);
         if (want.type === 'relayList' && want.pubkey === ctx.pubkey) selfRelayListSettled = true;
-        if (!waitingOnAuthor) satisfiedAt.set(key, now);
+        satisfiedAt.set(key, now);
         const entity = wantEntity(want);
         if (entity) settled.push(entity);
       }
@@ -828,6 +859,7 @@ export const createScheduler = (
       pending.clear();
       inflight.clear();
       satisfiedAt.clear();
+      awaitingRoute.clear();
       running = undefined;
     },
   };

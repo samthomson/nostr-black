@@ -128,6 +128,43 @@ describe('coalescing', () => {
     expect(askedFor(0)).toEqual([{ url: 'wss://mine/', kinds: [0], authors: [ALICE] }]);
   });
 
+  it('re-asks a misrouted profile miss at the outbox once the relay list lands', async () => {
+    const { scheduler, lists } = build();
+
+    // Flush 1: ALICE has no relay list, so the kind-0 ask goes to mine
+    // and misses. Their kind 10002 lands right after (the background
+    // relay-list want's answer ingested between flushes).
+    scheduler.want({ type: 'profile', pubkey: ALICE }, 'interactive');
+    await scheduler.flush();
+    lists.set(ALICE, { read: [], write: ['wss://alice/'] });
+
+    // Flush 2: the mounted hook re-declares the want — the retry
+    // bypasses the freshness window and routes to their outbox.
+    scheduler.want({ type: 'profile', pubkey: ALICE }, 'interactive');
+    await scheduler.flush();
+
+    expect(askedFor(0)).toContainEqual({ url: 'wss://alice/', kinds: [0], authors: [ALICE] });
+  });
+  it('caps the misrouted re-ask at two attempts', async () => {
+    const { scheduler, lists } = build();
+
+    // Flush 1: misrouted ask on mine. Then the list lands. Each later
+    // flush re-declares the want (as a mounted hook does on rerender);
+    // awaitingRoute keeps re-asking until its two retries are spent.
+    scheduler.want({ type: 'profile', pubkey: ALICE }, 'interactive');
+    await scheduler.flush();
+    lists.set(ALICE, { read: [], write: ['wss://alice/'] });
+
+    for (let round = 0; round < 5; round += 1) {
+      scheduler.want({ type: 'profile', pubkey: ALICE }, 'interactive');
+      await scheduler.flush();
+    }
+
+    // 1 misrouted ask + 2 retries; rounds beyond the cap dedupe like any
+    // satisfied want.
+    expect(askedFor(0)).toHaveLength(3);
+  });
+
   it('splits an oversized author list rather than sending one huge filter', async () => {
     const { scheduler } = build();
 
