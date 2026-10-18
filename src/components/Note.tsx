@@ -25,7 +25,7 @@ import { useAsset } from '@/hooks/useAsset';
 import { profileHref, eventHref, npubOf, formatTimestamp } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { PIN_OFFSET } from '@/lib/anchorSpacer';
-import { clientTag as clientTagOf } from '@/lib/clientTag';
+import { clientTagOf } from '@/lib/clientTag';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 
 import { useRouting } from '@/data/hooks/useRouting';
@@ -545,7 +545,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
     }
     void (async () => {
       const tags: string[][] = [['e', (event as NostrEvent).id]];
-      const tag = clientTagOf();
+      const tag = clientTagOf(config.clientTag, (event as NostrEvent).id);
       if (tag) tags.push(['client', tag]);
       const deletion = await user!.signer.signEvent({
         kind: 5, content: '', tags, created_at: nowSec(),
@@ -707,12 +707,25 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   return (
     <Card data-anchor={isAnchored || undefined} className={cn('py-0', PRIVACY[grade].surface)}>
       <CardContent className="flex gap-3 px-4 py-3">
-        <ProfileAvatar
-          pubkey={event.pubkey}
-          metadata={metadata}
-          waitingMetadata={authorPending}
-          className="size-10 shrink-0"
-        />
+        {href ? (
+          <ProfileHoverCard pubkey={event.pubkey}>
+            <Link to={href} className="shrink-0" aria-label="profile">
+              <ProfileAvatar
+                pubkey={event.pubkey}
+                metadata={metadata}
+                waitingMetadata={authorPending}
+                className="size-10"
+              />
+            </Link>
+          </ProfileHoverCard>
+        ) : (
+          <ProfileAvatar
+            pubkey={event.pubkey}
+            metadata={metadata}
+            waitingMetadata={authorPending}
+            className="size-10 shrink-0"
+          />
+        )}
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-baseline gap-2">
             {href ? (
