@@ -102,13 +102,15 @@ export const StorageSection = () => {
         tags,
         created_at: nowSec(),
       });
-      setState('enqueued');
       request({
         grade: 'public',
         label: 'upload servers',
         identityPubkey: user.pubkey,
         relays: myWrite,
         events: [signed],
+        // Enqueue is the commit: "on its way" means it IS on its way,
+        // not that the modal opened (a cancel never shows it).
+        onEnqueued: () => setState('enqueued'),
         preview: <ServersDiff old={declared} next={list} />,
       });
     })();

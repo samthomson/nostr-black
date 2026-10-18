@@ -6,6 +6,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useProfile } from '@/data/hooks/useProfile';
 import { useRouting } from '@/data/hooks/useRouting';
 import { useBroadcastFlow, type PendingBroadcast } from '@/hooks/useBroadcastFlow';
+import { MediaThumb } from '@/components/MediaThumb';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { clientTag } from '@/lib/clientTag';
 import { useAppContext } from '@/hooks/useAppContext';
@@ -100,7 +101,7 @@ const ProfileDiff = ({
         </div>
         <div className="flex items-center gap-3 px-2 py-1.5">
           {currentUrl !== '' ? (
-            <img src={currentUrl} alt="" className="border-diff-del/40 size-10 rounded-sm border object-cover" />
+            <MediaThumb url={currentUrl} className="border-diff-del/40 size-10 border" />
           ) : (
             <span className="text-diff-del font-mono text-[10px]">none</span>
           )}
@@ -341,9 +342,15 @@ export const ProfileEditDialog = ({
     })();
 
   /** The kind 0 with every staged field's uploaded url in place — the
-   * local preview urls never leave the device. */
-  const kindZeroOf = async (urls: readonly string[]): Promise<readonly NostrEvent[]> => {
-    const byField = new Map<string, string>(staged.map((s, i) => [s.field, urls[i]!]));
+   * local preview urls never leave the device. Takes the staged list
+   * explicitly: the caller captured it at save time, and the urls line
+   * up with THAT list — reading live state here could misassign fields
+   * if it changed while the modal was open. */
+  const kindZeroOf = async (
+    urls: readonly string[],
+    stagedNow: readonly { field: string }[],
+  ): Promise<readonly NostrEvent[]> => {
+    const byField = new Map(stagedNow.map((s, i) => [s.field, urls[i]!]));
     const merged = Object.fromEntries(EDITABLE_PROFILE_FIELDS.map((f) => [f, byField.get(f) ?? form[f]]));
     const built = editedProfileContent(event?.content ?? '', merged);
     if (!built.ok) throw new Error('profile merge failed');
@@ -393,8 +400,12 @@ export const ProfileEditDialog = ({
         ...payload,
       });
 
-    if (staged.length === 0) {
-      void kindZeroOf([]).then((events) => requestProfile({ events }));
+    // The save-time snapshot: the upload run and the kind 0 build both
+    // work with THIS list, whatever happens to state while the modal
+    // is open.
+    const stagedNow = staged;
+    if (stagedNow.length === 0) {
+      void kindZeroOf([], stagedNow).then((events) => requestProfile({ events }));
       return;
     }
     // Same deferred shape as the note composers: the compressed images
@@ -403,7 +414,7 @@ export const ProfileEditDialog = ({
     const server = servers[0]!;
     requestProfile({
       uploads: {
-        count: staged.length,
+        count: stagedNow.length,
         server,
         signUploadsWith: sk ?? undefined,
         // The session key gates the whole run — without it the blossom
@@ -412,14 +423,14 @@ export const ProfileEditDialog = ({
         // surface a TypeError from inside the crypto.
         run: async () => {
           if (!sk) throw new Error('logged out — relogin to upload');
-          return Promise.all(staged.map(async ({ file }) => {
+          return Promise.all(stagedNow.map(async ({ file }) => {
             const compressed = await prepareImage(file, config.imageCompression);
             const blob = await upload(compressed.bytes, compressed.type, sk, server);
             return { url: blob.url, sha256: blob.sha256, mime: compressed.type };
           }));
         },
       },
-      buildEvents: (uploaded) => kindZeroOf(uploaded.map((file) => file.url)),
+      buildEvents: (uploaded) => kindZeroOf(uploaded.map((file) => file.url), stagedNow),
     });
   };
 

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAsset } from '@/hooks/useAsset';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { cn } from '@/lib/utils';
 import type { NostrMetadata } from '@nostrify/nostrify';
 
@@ -28,7 +29,7 @@ export const ProfileAvatar = ({
   waitingMetadata?: boolean;
 }) => {
   void pubkey;
-  const { url: picture, error, ref } = useAsset(metadata?.picture, 'avatar');
+  const { url: picture, error, ref } = useAsset(sanitizeUrl(metadata?.picture), 'avatar');
   const [imgStatus, setImgStatus] = useState<ImageStatus>('idle');
   const [trackedPicture, setTrackedPicture] = useState(picture);
   if (picture !== trackedPicture) {

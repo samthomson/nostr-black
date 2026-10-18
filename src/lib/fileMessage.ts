@@ -11,6 +11,7 @@ import { gcm } from '@noble/ciphers/aes.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, randomBytes } from '@noble/hashes/utils.js';
 import { getEventHash } from 'nostr-tools';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { makeRumor, type Rumor } from './feedEncryption';
 import { blossomBytes } from '@/net/blossom';
 
@@ -117,12 +118,9 @@ export const mediaImagesOf = (rumor: Rumor): PrivateImage[] => {
     const nonce = field('decryption-nonce');
     const mime = field('m');
     if (!url || !key || !nonce || !mime) continue;
-    try {
-      if (new URL(url).protocol !== 'https:') continue;
-    } catch {
-      continue;
-    }
-    images.push({ url, mime, key, nonce, x: field('x'), ox: field('ox') });
+    const safe = sanitizeUrl(url);
+    if (!safe) continue;
+    images.push({ url: safe, mime, key, nonce, x: field('x'), ox: field('ox') });
   }
   return images;
 };

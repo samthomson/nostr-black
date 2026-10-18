@@ -15,6 +15,7 @@ import { usePrivateActions } from '@/hooks/usePrivateActions';
 import { npubOf } from '@/lib/format';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useAsset } from '@/hooks/useAsset';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { Card, CardContent } from '@/components/ui/card';
 import { FeedSkeleton } from '@/components/NoteSkeleton';
 import { useMemo, useState } from 'react';
@@ -102,7 +103,7 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
   return (
     <div className="space-y-3">
       <div className="overflow-hidden rounded-sm border bg-card">
-        <ProfileBanner url={about?.banner} onOpen={bannerIndex >= 0 ? () => setOpenMedia(bannerIndex) : undefined} />
+        <ProfileBanner url={sanitizeUrl(about?.banner)} onOpen={bannerIndex >= 0 ? () => setOpenMedia(bannerIndex) : undefined} />
         <div className="relative px-4 pb-4">
           <div className="-mt-8 mb-3 sm:-mt-10">
             {pictureIndex >= 0 ? (
@@ -148,16 +149,22 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
           {about?.about && (
             <p className="mt-3 whitespace-pre-wrap break-words text-sm">{about.about}</p>
           )}
-          {about?.website && (
-            <a
-              href={about.website.startsWith('http') ? about.website : `https://${about.website}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground mt-1 block truncate text-sm underline underline-offset-2"
-            >
-              {about.website}
-            </a>
-          )}
+          {about?.website && (() => {
+            const raw = about?.website;
+            const site = raw
+              ? sanitizeUrl(/^https?:\/\//.test(raw) ? raw : `https://${raw}`)
+              : undefined;
+            return site ? (
+              <a
+                href={site}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-muted-foreground mt-1 block truncate text-sm underline underline-offset-2"
+              >
+                {about.website}
+              </a>
+            ) : null;
+          })()}
 
           <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <button

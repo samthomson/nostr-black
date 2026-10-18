@@ -390,15 +390,24 @@ async fn http_get_media(url: &str) -> Result<Vec<u8>, String> {
 }
 
 async fn http_get_media_inner(url: &str) -> Result<Vec<u8>, String> {
-    let stripped = url
-        .trim_start_matches("https://")
-        .trim_start_matches("http://")
-        .to_string();
-    let (host, path) = match stripped.split_once('/') {
-        Some((h, p)) => (h.to_string(), format!("/{p}")),
-        None => (stripped, "/".to_string()),
+    // The webview already https-gates event-sourced urls, but the
+    // transport validates its own input too: literal https, a real host,
+    // no credentials. Anything else is refused — no scheme-stripping, no
+    // arbitrary host:port dialing from note content.
+    let rest = url
+        .strip_prefix("https://")
+        .ok_or_else(|| "only https urls are fetched".to_string())?;
+    let (authority, path) = match rest.split_once('/') {
+        Some((a, p)) => (a.to_string(), format!("/{p}")),
+        None => (rest.to_string(), "/".to_string()),
     };
-    let (host, port) = parse_host_port(&host);
+    if authority.contains(['@', ':', '?', '#']) {
+        return Err("invalid url authority".into());
+    }
+    if authority.is_empty() {
+        return Err("empty url host".into());
+    }
+    let (host, port) = parse_host_port(&authority);
 
     let stream = connect_stream(&host, port).await?;
     // TLS over the stream, then a minimal HTTP/1.0 GET — 1.0 so servers
@@ -457,15 +466,17 @@ async fn blossom_put_inner(
     content_type: &str,
     body: &[u8],
 ) -> Result<String, String> {
-    let stripped = url
-        .trim_start_matches("https://")
-        .trim_start_matches("http://")
-        .to_string();
-    let (host, path) = match stripped.split_once('/') {
-        Some((h, p)) => (h.to_string(), format!("/{p}")),
-        None => (stripped, "/".to_string()),
+    let rest = url
+        .strip_prefix("https://")
+        .ok_or_else(|| "only https urls are uploaded to".to_string())?;
+    let (authority, path) = match rest.split_once('/') {
+        Some((a, p)) => (a.to_string(), format!("/{p}")),
+        None => (rest.to_string(), "/".to_string()),
     };
-    let (host, port) = parse_host_port(&host);
+    if authority.contains(['@', '?', '#']) || authority.is_empty() {
+        return Err("invalid url authority".into());
+    }
+    let (host, port) = parse_host_port(&authority);
 
     let stream = connect_stream(&host, port).await?;
     use tokio::io::AsyncWriteExt;

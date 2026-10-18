@@ -30,6 +30,7 @@ import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 import { useRouting } from '@/data/hooks/useRouting';
 import type { PrivacyGrade } from '@/lib/privacy';
 import { mediaUrls, MEDIA_URL, VIDEO_URL } from '@/lib/mediaUrls';
+import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
 
 /** Content/image budget past which a note is collapsed with a fade. */
@@ -104,10 +105,14 @@ const renderContent = (content: string, grade: PrivacyGrade) =>
         return <NostrRef key={i} bech32={token.slice(1)} grade={grade} />;
       }
       if (/^https?:\/\//.test(token)) {
+        const safe = sanitizeUrl(token);
+        // http/non-https links still render as text — clicking out is
+        // https-only in this app, but the words aren't lost.
+        if (!safe) return token;
         return (
           <a
             key={i}
-            href={token}
+            href={safe}
             className={cn(refClass(grade), 'underline underline-offset-2 break-all')}
             rel="noopener noreferrer nofollow"
             target="_blank"
