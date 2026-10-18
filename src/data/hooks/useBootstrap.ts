@@ -75,16 +75,16 @@ export const useBootstrap = (): void => {
     // content. They merge into one list — the feed and the outbox model
     // treat a private follow identically to a public one, and nobody
     // watching the kind 3 learns who the private half names.
+    // Undecryptable content is a verdict about the ciphertext, not a
+    // silent skip: it fails the app loudly. The private half of your
+    // social graph is load-bearing — a wrong or locked key must stop
+    // the world, not quietly shrink your feed.
     let privateFollows: string[] = [];
-    if (sk) {
-      try {
-        privateFollows = parsePrivateFollows(sk, event);
-      } catch {
-        // Undecryptable content is a verdict about the ciphertext, not
-        // an excuse to drop the person from the follow list entirely —
-        // but we surface it in dev rather than eating it.
-        console.warn('[follows] private list content undecryptable');
-      }
+    if (!sk) throw new Error('private follows found but the session key is locked — unlock to read them');
+    try {
+      privateFollows = parsePrivateFollows(sk, event);
+    } catch (e) {
+      throw new Error(`your private follow list could not be decrypted: ${e instanceof Error ? e.message : String(e)}`, { cause: e });
     }
     updateUser((current) => ({
       ...current,

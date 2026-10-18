@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useLayoutEffect, type ReactNode } from 'react';
 import { TestApp } from '@/test/TestApp';
-import { FollowsPage } from './Lists';
+import { FollowsPage, MutesPage } from './Lists';
 import { useKeystore } from '@/auth/useKeystore';
 import { finalizeEvent, generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 
@@ -84,7 +84,125 @@ describe('ListsPage', () => {
     expect(publicTags).toEqual([]);
 
     void row;
+
+    // The move is reflected without reload: alice now sits in private.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'make semi-private' })).toBeNull());
   });
-});
+
+  it('private→public move broadcasts the follow back into tags', async () => {
+    const sk = generateSecretKey();
+    // Seeded kind 3: alice sealed privately.
+    const { sealPrivateList } = await import('@/lib/outbox');
+    const content = sealPrivateList(sk, [['p', alice]]);
+    const contactList = finalizeEvent(
+      { kind: 3, created_at: 100, tags: [], content }, sk,
+    );
+    queryRelay.mockImplementation(async (_url, filters) =>
+      filters[0].kinds?.includes(3) ? [contactList] : []);
+
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19Of(sk)}>
+          <FollowsPage />
+        </Unlock>
+      </TestApp>,
+    );
+
+    await screen.findByRole('button', { name: 'make public' });
+    await user.click(screen.getByRole('button', { name: 'make public' }));
+
+    const dialog = await screen.findByRole('dialog');
+    for (const b of await within(dialog).findAllByRole('button')) {
+      if (/^broadcast$/.test((b.textContent ?? '').trim())) {
+        await user.click(b);
+        break;
+      }
+    }
+    await waitFor(() => expect(publish).toHaveBeenCalled());
+    const [event] = publish.mock.calls[0];
+    expect(event.tags).toContainEqual(['p', alice]);
+    expect(event.content).toBe('');
+  });
+
+  it('mute page moves a private mute to public as kind 10000', async () => {
+    const sk = generateSecretKey();
+    const { sealPrivateList } = await import('@/lib/outbox');
+    const content = sealPrivateList(sk, [['p', alice]]);
+    const muteListEvent = finalizeEvent(
+      { kind: 10000, created_at: 100, tags: [], content }, sk,
+    );
+    queryRelay.mockImplementation(async (_url, filters) =>
+      filters[0].kinds?.includes(10000) ? [muteListEvent] : []);
+
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19Of(sk)}>
+          <MutesPage />
+        </Unlock>
+      </TestApp>,
+    );
+
+    await screen.findByRole('button', { name: 'make public' });
+    await user.click(screen.getByRole('button', { name: 'make public' }));
+
+    const dialog = await screen.findByRole('dialog');
+    for (const b of await within(dialog).findAllByRole('button')) {
+      if (/^broadcast$/.test((b.textContent ?? '').trim())) {
+        await user.click(b);
+        break;
+      }
+    }
+    await waitFor(() => expect(publish).toHaveBeenCalled());
+    const [event] = publish.mock.calls[0];
+    expect(event.kind).toBe(10000);
+    expect(event.tags).toContainEqual(['p', alice]);
+  });
+
+  it('make all private seals every public follow in one broadcast', async () => {
+    const sk = generateSecretKey();
+    const bob = getPublicKey(generateSecretKey());
+    const contactList = finalizeEvent(
+      { kind: 3, created_at: 100, tags: [['p', alice], ['p', bob]], content: '' }, sk,
+    );
+    queryRelay.mockImplementation(async (_url, filters) =>
+      filters[0].kinds?.includes(3) ? [contactList] : []);
+
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19Of(sk)}>
+          <FollowsPage />
+        </Unlock>
+      </TestApp>,
+    );
+
+    await screen.findByRole('button', { name: 'make all semi-private' });
+    await user.click(screen.getByRole('button', { name: 'make all semi-private' }));
+    // Confirm the bulk bar.
+    await user.click(await screen.findByRole('button', { name: 'confirm' }));
+    // Confirm the broadcast modal.
+    const dialog = await screen.findByRole('dialog');
+    for (const b of await within(dialog).findAllByRole('button')) {
+      if (/^broadcast$/.test((b.textContent ?? '').trim())) {
+        await user.click(b);
+        break;
+      }
+    }
+    await waitFor(() => expect(publish).toHaveBeenCalled());
+    const [event] = publish.mock.calls[0];
+    expect(event.kind).toBe(3);
+    expect(event.tags.filter(([n]) => n === 'p')).toEqual([]);
+    expect(event.content).not.toBe('');
+    // Both sealed follows decrypt back.
+    const opened = JSON.parse(
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      (() => { const { nip44 } = require('nostr-tools'); return nip44.v2.decrypt(event.content, nip44.v2.utils.getConversationKey(sk, getPublicKey(sk))); })(),
+    ) as string[][];
+    expect(opened).toEqual([['p', alice], ['p', bob]]);
+  });
 
 const nip19Of = (sk: Uint8Array): string => nip19.nsecEncode(sk);
+const alice = getPublicKey(generateSecretKey());
+});
