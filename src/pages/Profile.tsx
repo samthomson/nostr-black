@@ -74,7 +74,12 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
       <div className={cn('overflow-hidden rounded-sm border', PRIVACY.public.surface)}>
         <ProfileBanner url={sanitizeUrl(about?.banner)} onOpen={bannerIndex >= 0 ? () => setOpenMedia(bannerIndex) : undefined} />
         <div className="relative px-4 pb-4">
-          <div className="-mt-8 mb-3 sm:-mt-10">
+          {/* The avatar rides up over the banner via transform, not a
+              negative margin: a negative first-child margin collapses
+              through and drags this whole block up over the banner,
+              where its full-width box eats the banner's clicks. A
+              transform moves the paint without moving the box. */}
+          <div className="mb-3 inline-block w-fit -translate-y-8 sm:-translate-y-10">
             {pictureIndex >= 0 ? (
               <LightboxTrigger label="open profile picture" onOpen={() => setOpenMedia(pictureIndex)}>
                 <ProfileAvatar
