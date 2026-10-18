@@ -13,6 +13,7 @@ import { UserStateProvider } from '@/components/UserStateProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { FEED_KINDS } from '@/data/feed/spec';
+import { COMMON_CLIENTS } from '@/lib/clientTag';
 import { QueryDevtools } from '@/components/QueryDevtools';
 import { BetaBanner } from '@/components/BetaBanner';
 import { DataProvider } from '@/data/DataProvider';
@@ -40,8 +41,9 @@ const defaultConfig: AppConfig = {
   torEnabled: true,
   mediaEnabled: true,
   imageCompression: true,
-  feedKinds: [...FEED_KINDS],
   defaultReaction: '+',
+  feedKinds: [...FEED_KINDS],
+  clientTag: { mode: 'none', spoof: [...COMMON_CLIENTS] },
   mediaCacheMaxMb: 1024,
   mediaMaxDownloadMb: 32,
 };

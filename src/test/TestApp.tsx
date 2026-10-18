@@ -6,6 +6,7 @@ import { AppProvider } from '@/components/AppProvider';
 import { KeystoreProvider } from '@/auth/KeystoreProvider';
 import { AppConfig } from '@/contexts/AppContext';
 import { UserState } from '@/contexts/UserStateContext';
+import { COMMON_CLIENTS } from '@/lib/clientTag';
 import { UserStateProvider } from '@/components/UserStateProvider';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { FEED_KINDS } from '@/data/feed/spec';
@@ -52,6 +53,7 @@ export function TestApp({ children, userState }: TestAppProps) {
     imageCompression: true,
     feedKinds: [...FEED_KINDS],
     defaultReaction: "+",
+    clientTag: { mode: 'none', spoof: [...COMMON_CLIENTS] },
     mediaCacheMaxMb: 1024,
     mediaMaxDownloadMb: 32,
   };

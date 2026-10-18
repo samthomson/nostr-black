@@ -27,6 +27,16 @@ export interface AppConfig {
   mediaMaxDownloadMb: number;
   /** The emoji a plain heart-click broadcasts. */
   defaultReaction: string;
+  /** What the app stamps as the event `client` tag — published metadata,
+   * so it is always a deliberate choice. `none` sends no tag at all. */
+  clientTag: ClientTagConfig;
+}
+
+export interface ClientTagConfig {
+  /** none: no tag · black: tag "nostr.black" · spoof: pick from a list */
+  mode: 'none' | 'black' | 'spoof';
+  /** Spoof pool — one entry is picked per event. */
+  spoof: string[];
 }
 
 export interface AppContextType {

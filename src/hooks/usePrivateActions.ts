@@ -69,12 +69,13 @@ export const usePrivateActions = () => {
   /** The deferred uploads for pre-encrypted images: ciphertext to the
    * first blossom server, the kind-24242 auth signed by a throwaway —
    * it correlates with nothing, not even the burner. */
-  const uploadsOf = (media: readonly StagedImage[]): PendingUploads => {
+  const uploadsOf = (media: readonly StagedImage[], previews?: readonly string[]): PendingUploads => {
     const throwaway = generateSecretKey();
     const server = servers[0]!;
     return {
       count: media.length,
       server,
+      previews,
       signUploadsWith: throwaway,
       run: async () => Promise.all(media.map(async (image) => {
         const blob = await upload(image.ct, 'application/octet-stream', throwaway, server);
@@ -89,6 +90,7 @@ export const usePrivateActions = () => {
     media: readonly StagedImage[],
     cekAndRumor: { rumor: Rumor; replyCek: Uint8Array },
     handlers: { onEdit?: (content: string) => void; onEnqueued?: () => void } = {},
+    previews?: readonly string[],
   ): void => {
     // The conversation was minted at submit start — its reply CEK
     // encrypted the images. The media tags land on the minted shell
@@ -109,7 +111,7 @@ export const usePrivateActions = () => {
       return;
     }
     privateRequest('private note', content, {
-      uploads: uploadsOf(media),
+      uploads: uploadsOf(media, previews),
       buildEvents: (uploaded) =>
         wrapPrivateNote(key, peers, rumorOf(uploaded.map((file) => file.url))),
     }, {
@@ -144,7 +146,7 @@ export const usePrivateActions = () => {
     });
   };
 
-  const reply = (parent: OpenedNote, content: string, media: readonly StagedImage[] = []) => {
+  const reply = (parent: OpenedNote, content: string, media: readonly StagedImage[] = [], previews?: readonly string[]) => {
     const eventOf = (urls: readonly string[]): NostrEvent => {
       const { rumor } = makeRumor(getPublicKey(key), content, [
         ['e', parent.rumor.id],
@@ -161,7 +163,7 @@ export const usePrivateActions = () => {
       return;
     }
     privateRequest('private reply', content, {
-      uploads: uploadsOf(media),
+      uploads: uploadsOf(media, previews),
       buildEvents: (uploaded) => [eventOf(uploaded.map((file) => file.url))],
     }, { extraRelays: discoveryTargets });
   };

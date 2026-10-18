@@ -157,7 +157,7 @@ export const ReplyComposer = ({
   onReply,
 }: {
   parent: OpenedNote;
-  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[]) => void;
+  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[], previews?: readonly string[]) => void;
 }) => {
   const [draft, setDraft] = useState('');
   const { attachments, addFiles, remove: removeAttachment, clear } = useAttachments();
@@ -179,7 +179,7 @@ export const ReplyComposer = ({
         const media = attachments.length > 0
           ? await prepImages(parent.replyCek, attachments.map((a) => a.file))
           : [];
-        onReply(parent, content, media);
+        onReply(parent, content, media, attachments.map((a) => a.previewUrl));
         setDraft('');
         clear();
       } catch (e) {
@@ -232,7 +232,7 @@ export const SealedReplies = ({
   conversation: Conversation;
   /** Counts show their loading state until the conversation arrives. */
   pending?: boolean;
-  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[]) => void;
+  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[], previews?: readonly string[]) => void;
   onReact?: (parent: OpenedNote, target: Rumor, emoji: string) => void;
   onEditReply?: (parent: OpenedNote, reply: OpenedReply, content: string) => void;
   anchorId?: string;
@@ -289,7 +289,7 @@ export const PrivateNote = ({
   open: boolean;
   /** Counts show their loading state until the conversation arrives. */
   pending?: boolean;
-  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[]) => void;
+  onReply: (parent: OpenedNote, content: string, media?: readonly StagedImage[], previews?: readonly string[]) => void;
   onReact?: (parent: OpenedNote, target: Rumor, emoji: string) => void;
   onEdit?: (parent: OpenedNote, content: string) => void;
   onEditReply?: (parent: OpenedNote, reply: OpenedReply, content: string) => void;

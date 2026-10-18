@@ -21,6 +21,9 @@ export interface UploadedFile {
 export interface PendingUploads {
   count: number;
   server: string;
+  /** Local blob urls of the staged files — the modal preview shows the
+   *  pictures before the upload has run and produced real urls. */
+  previews?: readonly string[];
   signUploadsWith?: Uint8Array;
   run: () => Promise<UploadedFile[]>;
 }
@@ -150,7 +153,7 @@ export const useBroadcastFlow = (): {
       onEdit={pending.onEdit}
       layers={pending.layers ?? pending.events?.map((event) => ({ name: 'event', decoded: event })) ?? []}
       extraRelays={pending.extraRelays}
-      uploads={pending.uploads ? { count: pending.uploads.count, server: pending.uploads.server } : undefined}
+      uploads={pending.uploads ? { count: pending.uploads.count, server: pending.uploads.server, previews: pending.uploads.previews } : undefined}
       onBroadcast={broadcast}
     />
   ) : null;

@@ -97,7 +97,7 @@ export const StorageSection = () => {
     if (!user || !signer || !dirty) return;
     void (async () => {
       const tags = list.map((url) => ['server', url] as [string, string]);
-      const tag = clientTagOf(config.clientTag);
+      const tag = clientTagOf(config.clientTag, list.join(','));
       if (tag) tags.push(['client', tag]);
       const signed = await signer.signEvent({
         kind: 10063,

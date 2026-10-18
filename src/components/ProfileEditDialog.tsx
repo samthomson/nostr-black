@@ -355,7 +355,7 @@ export const ProfileEditDialog = ({
     const built = editedProfileContent(event?.content ?? '', merged);
     if (!built.ok) throw new Error('profile merge failed');
     const tags: string[][] = [];
-    const tag = clientTagOf(config.clientTag);
+    const tag = clientTagOf(config.clientTag, built.content);
     if (tag) tags.push(['client', tag]);
     return [await user.signer.signEvent({
       kind: 0,

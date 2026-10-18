@@ -10,7 +10,8 @@ import { useRouting } from '@/data/hooks/useRouting';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
-import { clientTag } from '@/lib/clientTag';
+import { clientTagOf } from '@/lib/clientTag';
+import type { ClientTagConfig } from '@/contexts/AppContext';
 import { DraftAction, DraftSwitch } from '@/components/BroadcastDialog';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAttachments } from '@/hooks/useAttachments';
@@ -91,11 +92,12 @@ export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
       // uploads as the burner, so the blossom auth event correlates
       // with whoever signs the note, nothing else.
       ...(staged.length === 0
-        ? { events: [signedNote(signer, content, parent)] }
+        ? { events: [signedNote(signer, content, config.clientTag, parent)] }
         : {
           uploads: {
             count: staged.length,
             server: servers[0]!,
+            previews: attachments.map((a) => a.previewUrl),
             signUploadsWith: signer,
             run: (): Promise<UploadedImage[]> => Promise.all(staged.map(async (file) => {
               const compressed = await prepareImage(file, config.imageCompression);
@@ -112,6 +114,7 @@ export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
             signedNote(
               signer,
               [content, ...uploaded.map((file) => file.url)].filter(Boolean).join(' '),
+              config.clientTag,
               parent,
               uploaded as readonly UploadedImage[],
             ),
@@ -181,11 +184,12 @@ const replyTagsOf = (parent: NostrEvent): string[][] => {
 const signedNote = (
   sk: Uint8Array,
   content: string,
+  policy: ClientTagConfig,
   parent?: NostrEvent,
   uploaded: readonly UploadedImage[] = [],
 ): NostrEvent => {
   const tags: string[][] = [];
-  const tag = clientTag();
+  const tag = clientTagOf(policy, content);
   if (tag) tags.push(['client', tag]);
   if (parent) tags.push(...replyTagsOf(parent));
   for (const image of uploaded) {

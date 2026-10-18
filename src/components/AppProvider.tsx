@@ -23,6 +23,10 @@ const AppConfigSchema = z.object({
   mediaCacheMaxMb: z.number(),
   mediaMaxDownloadMb: z.number(),
   defaultReaction: z.string(),
+  clientTag: z.object({
+    mode: z.enum(['none', 'black', 'spoof']),
+    spoof: z.array(z.string()),
+  }),
 }) satisfies z.ZodType<AppConfig>;
 
 export function AppProvider(props: AppProviderProps) {
