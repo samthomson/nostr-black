@@ -20,7 +20,6 @@ export const COMMON_CLIENTS = [
   'Ditto',
   'Iris',
   'Nostur',
-  'Current',
 ] as const;
 
 /** FNV-1a over a hex/utf string — a stable 32-bit seed. */
