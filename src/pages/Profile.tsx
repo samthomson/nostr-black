@@ -77,58 +77,59 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
       <div className={cn('overflow-hidden rounded-sm border', PRIVACY.public.surface)}>
         <ProfileBanner url={sanitizeUrl(about?.banner)} onOpen={bannerIndex >= 0 ? () => setOpenMedia(bannerIndex) : undefined} />
         <div className="relative px-4 pb-4">
-          {/* The avatar rides up over the banner via transform, not a
-              negative margin: a negative first-child margin collapses
-              through and drags this whole block up over the banner,
-              where its full-width box eats the banner's clicks. A
-              transform moves the paint without moving the box. */}
-          <div className="mb-3 inline-block w-fit -translate-y-8 sm:-translate-y-10">
-            {pictureIndex >= 0 ? (
-              <LightboxTrigger label="open profile picture" onOpen={() => setOpenMedia(pictureIndex)}>
+          {/* Identity rides up over the banner like the hover cards —
+              avatar with the name beside it. Transform, not a negative
+              margin: a negative first-child margin collapses through and
+              drags this whole block over the banner, where its full-width
+              box eats the banner's clicks. The block below pulls back up
+              by the same translate amount to close the gap. */}
+          <div className="flex items-end justify-between gap-2 -translate-y-8 sm:-translate-y-10">
+            <div className="flex min-w-0 items-end gap-3">
+              {pictureIndex >= 0 ? (
+                <LightboxTrigger label="open profile picture" onOpen={() => setOpenMedia(pictureIndex)} className="shrink-0">
+                  <ProfileAvatar
+                    pubkey={pubkey}
+                    metadata={about}
+                    waitingMetadata={waitingMetadata}
+                    className="border-background size-16 border-2 sm:size-20"
+                  />
+                </LightboxTrigger>
+              ) : (
                 <ProfileAvatar
                   pubkey={pubkey}
                   metadata={about}
                   waitingMetadata={waitingMetadata}
-                  className="border-background size-16 border-2 sm:size-20"
+                  className="border-background size-16 shrink-0 border-2 sm:size-20"
                 />
-              </LightboxTrigger>
-            ) : (
-              <ProfileAvatar
-                pubkey={pubkey}
-                metadata={about}
-                waitingMetadata={waitingMetadata}
-                className="border-background size-16 border-2 sm:size-20"
-              />
-            )}
-          </div>
-          <div className="space-y-1">
-            <div className="flex items-start justify-between gap-2">
-              <p className="min-w-0 truncate text-xl font-semibold">{displayName}</p>
-              <div className="flex shrink-0 items-center gap-2">
-                {!ownProfile && (
-                  <>
-                    <FollowButton pubkey={pubkey} />
-                    <MuteButton pubkey={pubkey} />
-                  </>
-                )}
-                {ownProfile && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={() => setEditOpen(true)}
-                    aria-label="edit profile"
-                  >
-                    <Pencil className="size-3.5" />
-                    edit
-                  </Button>
-                )}
-              </div>
+              )}
+              <p className="min-w-0 truncate pb-0.5 text-xl font-semibold">{displayName}</p>
             </div>
+            <div className="flex shrink-0 items-center gap-2 self-end pb-1">
+              {!ownProfile && (
+                <>
+                  <FollowButton pubkey={pubkey} />
+                  <MuteButton pubkey={pubkey} />
+                </>
+              )}
+              {ownProfile && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => setEditOpen(true)}
+                  aria-label="edit profile"
+                >
+                  <Pencil className="size-3.5" />
+                  edit
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="-mt-6 space-y-1 sm:-mt-8">
             {about?.nip05 && (
               <p className="text-privacy-public-muted truncate text-sm">{about.nip05}</p>
             )}
-            <NpubCopy pubkey={pubkey} className="w-fit text-xs text-privacy-public-muted hover:text-foreground" />
+            <NpubCopy pubkey={pubkey} className="w-fit text-xs" />
           </div>
 
           {about?.about && (

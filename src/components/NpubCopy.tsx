@@ -5,8 +5,8 @@ import { npubOf } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 /**
- * Middle-clipped npub with a copy flash — `aaaa…bbbb` plus copy icon.
- * One line, used anywhere an npub is shown as copyable text.
+ * Middle-clipped npub with a copy button — `aaaa…bbbb` text plus copy icon.
+ * The text is plain; only the icon is the click target.
  */
 export const NpubCopy = ({ pubkey, className = '' }: { pubkey: string; className?: string }) => {
   const [copied, setCopied] = useState(false);
@@ -16,17 +16,16 @@ export const NpubCopy = ({ pubkey, className = '' }: { pubkey: string; className
     setTimeout(() => setCopied(false), 1500);
   }, [pubkey]);
   return (
-    <button
-      type="button"
-      onClick={copy}
-      className={cn(
-        'text-muted-foreground flex w-full max-w-full min-w-0 cursor-pointer items-center gap-1 font-mono text-[11px] hover:text-foreground',
-        className,
-      )}
-      aria-label="copy npub"
-    >
+    <span className={cn('text-muted-foreground flex w-full max-w-full min-w-0 items-center gap-1 font-mono text-[11px]', className)}>
       <span className="truncate">{npubOf(pubkey)}</span>
-      {copied ? <Check className="size-3 shrink-0" /> : <Copy className="size-3 shrink-0" />}
-    </button>
+      <button
+        type="button"
+        onClick={copy}
+        className="shrink-0 cursor-pointer hover:text-foreground"
+        aria-label="copy npub"
+      >
+        {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+      </button>
+    </span>
   );
 };
