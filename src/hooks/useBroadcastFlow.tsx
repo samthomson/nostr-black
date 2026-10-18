@@ -81,10 +81,15 @@ export const useBroadcastFlow = (): {
     setPendingState(next);
   };
   const [busy, setBusy] = useState(false);
+  /** Which step of an upload+broadcast run is live — the modal shows
+   * "1/2 uploading…" then "2/2 broadcasting…" so the button press has
+   * visible progress instead of a silent disabled beat. */
+  const [phase, setPhase] = useState<'idle' | 'uploading' | 'broadcasting'>('idle');
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const request = useCallback((next: PendingBroadcast) => {
     setUploadError(null);
+    setPhase('idle');
     setPending(next);
   }, []);
 
@@ -99,6 +104,7 @@ export const useBroadcastFlow = (): {
       events.forEach((event, i) =>
         enqueue(live.labels?.[i] ?? live.label, event, [...targets]));
       live.onEnqueued?.();
+      setBusy(false);
       setPending(null);
     };
     if (!live.uploads || !live.buildEvents) {
@@ -107,20 +113,32 @@ export const useBroadcastFlow = (): {
     }
     // Deferred uploads: the bytes go up first, then the events build
     // from the real urls. An upload failure keeps the modal open with
-    // the error — retry or cancel, never a silent drop.
+    // the error — retry or cancel, never a silent drop. Between the two
+    // steps the modal holds one readable beat on "broadcasting" so the
+    // user sees both halves happened.
     setUploadError(null);
     setBusy(true);
+    setPhase('uploading');
     void live.uploads.run()
       .then((uploaded) => Promise.resolve(live.buildEvents!(uploaded)))
-      .then((events) => { if (stillLive()) commit(events); })
-      .catch((e: unknown) => { if (stillLive()) setUploadError(e instanceof Error ? e.message : String(e)); })
-      .finally(() => setBusy(false));
+      .then((events) => {
+        if (!stillLive()) return;
+        setPhase('broadcasting');
+        setTimeout(() => { if (stillLive()) commit(events); }, 600);
+      })
+      .catch((e: unknown) => {
+        setBusy(false);
+        if (stillLive()) setUploadError(e instanceof Error ? e.message : String(e));
+      });
   };
 
   const dialog = pending ? (
     <BroadcastDialog
       open
       onOpenChange={(open) => { if (!open) setPending(null); }}
+      error={uploadError}
+      busy={busy}
+      phase={phase}
       grade={pending.grade}
       label={pending.label}
       content={pending.content}
@@ -133,8 +151,6 @@ export const useBroadcastFlow = (): {
       layers={pending.layers ?? pending.events?.map((event) => ({ name: 'event', decoded: event })) ?? []}
       extraRelays={pending.extraRelays}
       uploads={pending.uploads ? { count: pending.uploads.count, server: pending.uploads.server } : undefined}
-      error={uploadError}
-      busy={busy}
       onBroadcast={broadcast}
     />
   ) : null;

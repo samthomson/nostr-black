@@ -24,13 +24,23 @@ const serverUrlsOf = (event: NostrEvent | undefined): string[] => {
 
 /**
  * The logged-in user's blossom upload servers: their kind 10063 list
- * first, `server` tags on their NIP-65 list second, and the app's
- * default server as the floor — the same shape as the discovery-relay
- * fallback. Upload targets resolve from this; `pending` tells the UI the
- * 10063 sync is still in flight (a fallback here is a default, not a
- * verdict that the user has no list).
+ * first (BUD-03, `server` tags), `server` tags on their NIP-65 relay
+ * list second, and the app's default server as the floor. Upload
+ * targets resolve from `servers` in that order — the first declared
+ * server is the primary. `declared` / `fromRelayList` expose the two
+ * sources separately so the storage settings can edit one without
+ * pretending to own the other.
  */
-export const useBlossomServers = (): { servers: string[]; pending: boolean } => {
+export const useBlossomServers = (): {
+  servers: string[];
+  /** Servers from the user's kind 10063 — the editable list. */
+  declared: string[];
+  /** Servers only implied by the NIP-65 relay list — read-only here. */
+  fromRelayList: string[];
+  /** The kind 10063 event behind `declared`, if one was found. */
+  event: NostrEvent | undefined;
+  pending: boolean;
+} => {
   const { user } = useCurrentUser();
   const pubkey = user?.pubkey;
   const settle = useEntity(pubkey ? { type: 'blossomServers', pubkey } : undefined, 'background');
@@ -38,15 +48,16 @@ export const useBlossomServers = (): { servers: string[]; pending: boolean } => 
   // want settles, and its `server` tags are the second source.
   const relayList = useEntity(pubkey ? { type: 'relayList', pubkey } : undefined, 'background');
 
+  const declared = useMemo(() => serverUrlsOf(settle.event), [settle]);
+  const fromRelayList = useMemo(
+    () => serverUrlsOf(relayList.event).filter((url) => !declared.includes(url)),
+    [relayList, declared],
+  );
   const servers = useMemo(() => {
     if (!pubkey) return DEFAULT_BLOSSOM_SERVERS;
-    const declared = [
-      ...serverUrlsOf(settle.event),
-      ...serverUrlsOf(relayList.event),
-    ];
-    const unique = [...new Set(declared)];
+    const unique = [...declared, ...fromRelayList];
     return unique.length > 0 ? unique : DEFAULT_BLOSSOM_SERVERS;
-  }, [pubkey, settle, relayList]);
+  }, [pubkey, declared, fromRelayList]);
 
-  return { servers, pending: !!pubkey && isPending(settle) };
+  return { servers, declared, fromRelayList, event: settle.event, pending: !!pubkey && isPending(settle) };
 };

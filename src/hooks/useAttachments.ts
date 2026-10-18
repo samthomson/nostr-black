@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { isUploadableImage } from '@/lib/imageCompress';
 
-/** One staged image: the file itself plus a local preview. */
 export interface Attachment {
   id: string;
   file: File;
@@ -30,7 +30,10 @@ export const useAttachments = () => {
   }, []);
 
   const addFiles = useCallback((files: File[]) => {
-    const images = files.filter((file) => file.type.startsWith('image/'));
+    // Uploadable types only: the preview must render everywhere and the
+    // pipeline must understand the bytes — same rule as the profile
+    // pictures.
+    const images = files.filter(isUploadableImage);
     if (images.length === 0) return;
     setAttachments((current) => {
       const room = MAX_ATTACHMENTS - current.length;
@@ -45,15 +48,14 @@ export const useAttachments = () => {
   }, []);
 
   /** A paste event carrying image files — call from the textarea's
-   * onPaste; the default paste of the *files* is prevented, text pastes
-   * untouched. */
+   *  onPaste; the default paste of the *files* is prevented, text pastes
+   *  untouched. */
   const addFromPaste = useCallback((e: React.ClipboardEvent) => {
-    const images = Array.from(e.clipboardData?.files ?? []).filter((f) => f.type.startsWith('image/'));
+    const images = Array.from(e.clipboardData?.files ?? []).filter(isUploadableImage);
     if (images.length === 0) return;
     e.preventDefault();
     addFiles(images);
   }, [addFiles]);
-
   const remove = useCallback((id: string) => {
     setAttachments((current) => {
       const gone = current.find((a) => a.id === id);

@@ -1,4 +1,4 @@
-import { Radio } from 'lucide-react';
+import { Loader2, Radio } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import {
   Dialog,
@@ -46,6 +46,7 @@ export const BroadcastDialog = ({
   onEdit,
   onBroadcast,
   busy = false,
+  phase = 'idle',
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -60,14 +61,18 @@ export const BroadcastDialog = ({
   identityNote?: string;
   relays: readonly string[];
   extraRelays?: readonly string[];
-  /** Deferred blossom uploads, stated in the config rows: they run on
-   *  confirm, before the events build from the returned urls. */
-  uploads?: { count: number; server: string };
-  /** A failed deferred upload — the modal stays open with the reason. */
-  error?: string | null;
   controls?: ReactNode;
+  error?: string | null;
   onEdit?: (content: string) => void;
+  /** Deferred blossom uploads, stated in the config rows and the CTA:
+   * they run on confirm — the button says "upload … + broadcast" and
+   * the step line narrates the run. */
+  uploads?: { count: number; server: string };
+  /** Which half of an upload+broadcast run is live. */
+  phase?: 'idle' | 'uploading' | 'broadcasting';
+  /** Confirm: run deferred uploads, then enqueue the events. */
   onBroadcast: (targets: readonly string[]) => void;
+  /** A run is in flight — the footer locks. */
   busy?: boolean;
 }) => {
   const burner = identityNote === 'burner';
@@ -260,6 +265,19 @@ export const BroadcastDialog = ({
           </p>
         )}
 
+        {/* The run, narrated: uploads then broadcast — both visible,
+            neither silent. */}
+        {busy && uploads && (
+          <div className="shrink-0 px-4 pt-2 font-mono text-[10px] leading-relaxed">
+            <p className={phase === 'uploading' ? 'text-foreground' : 'text-muted-foreground'}>
+              {phase === 'uploading' ? '›' : '✓'} 1/2 uploading image{uploads.count === 1 ? '' : 's'}…
+            </p>
+            {phase === 'broadcasting' && (
+              <p className="text-foreground">› 2/2 broadcasting {label}…</p>
+            )}
+          </div>
+        )}
+
         {/* The modal's own footer — separated from the draft by real
             space, not a border. */}
         <div className="flex shrink-0 justify-end gap-2 px-4 pt-4 pb-4">
@@ -273,7 +291,16 @@ export const BroadcastDialog = ({
             onClick={() => { onBroadcast(targets); }}
             className={cn(PRIVACY_BUTTON, style.className)}
           >
-            broadcast
+            {busy ? (
+              <>
+                <Loader2 className="size-3.5 animate-spin" />
+                {phase === 'uploading' ? 'uploading…' : 'broadcasting…'}
+              </>
+            ) : uploads ? (
+              `upload ${uploads.count === 1 ? 'image' : `${uploads.count} images`} + broadcast`
+            ) : (
+              'broadcast'
+            )}
           </Button>
         </div>
       </DialogContent>

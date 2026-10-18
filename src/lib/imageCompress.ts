@@ -15,6 +15,17 @@ export const QUALITY = 0.85;
 /** Files below this size are not worth a decode/encode round-trip. */
 export const MIN_COMPRESS_BYTES = 64 * 1024;
 
+/** Image types the app accepts for upload: the formats every browser
+ * decodes (so previews render) and the pipeline understands. HEIC and
+ * friends decode nowhere but Safari — a staged preview would be blank
+ * and the bytes would ride uncompressed. */
+export const UPLOADABLE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
+/** The file-picker `accept` value for the same set. */
+export const UPLOADABLE_IMAGE_ACCEPT = UPLOADABLE_IMAGE_TYPES.join(',');
+/** True when a picked/pasted file is a type we can preview and upload. */
+export const isUploadableImage = (file: File): boolean =>
+  (UPLOADABLE_IMAGE_TYPES as readonly string[]).includes(file.type);
+
 export interface CompressedImage {
   bytes: Uint8Array;
   /** MIME type of `bytes` — the original's on pass-through. */

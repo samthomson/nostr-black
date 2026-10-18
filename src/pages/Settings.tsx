@@ -5,18 +5,20 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { cn } from '@/lib/utils';
 import { NetworkSection } from './settings/NetworkSection';
 import { MediaSection } from './settings/MediaSection';
+import { StorageSection } from './settings/StorageSection';
+import { PrivacySection } from './settings/PrivacySection';
 import { ReactionSection } from './settings/ReactionSection';
 import { AccountSection } from './settings/AccountSection';
 import { CacheSection } from './settings/CacheSection';
-
 const SETTINGS_SECTIONS = [
   { id: 'network', label: 'network' },
   { id: 'media', label: 'media' },
+  { id: 'storage', label: 'storage' },
+  { id: 'privacy', label: 'privacy' },
   { id: 'reaction', label: 'reaction' },
   { id: 'account', label: 'account' },
   { id: 'cache', label: 'cache' },
 ] as const;
-
 type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
 
 const DEFAULT_SECTION: SettingsSectionId = 'network';
@@ -27,11 +29,12 @@ const isSectionId = (value: string): value is SettingsSectionId =>
 const PANELS: Record<SettingsSectionId, React.FC> = {
   network: NetworkSection,
   media: MediaSection,
+  storage: StorageSection,
+  privacy: PrivacySection,
   reaction: ReactionSection,
   account: AccountSection,
   cache: CacheSection,
 };
-
 const SectionTabs = () => {
   const { pathname } = useLocation();
   const active = pathname.match(/^\/settings\/([^/]+)/)?.[1];

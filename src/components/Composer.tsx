@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef } from 'react';
 import { Loader2, Paperclip, X } from 'lucide-react';
+import { UPLOADABLE_IMAGE_ACCEPT } from '@/lib/imageCompress';
 import { Button } from '@/components/ui/button';
 import { PRIVACY, PRIVACY_BUTTON, type PrivacyGrade } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
@@ -140,7 +141,7 @@ export const Composer = ({
             <Paperclip className="size-4" />
             <input
               type="file"
-              accept="image/*"
+              accept={UPLOADABLE_IMAGE_ACCEPT}
               multiple
               className="hidden"
               onChange={(e) => {
