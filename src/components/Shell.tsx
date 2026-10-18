@@ -6,7 +6,6 @@ import type { LucideIcon } from 'lucide-react';
 import { LoginArea } from '@/components/auth/LoginArea';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { BrandMark } from '@/components/BrandMark';
-import { Input } from '@/components/ui/input';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { profileHref } from '@/lib/format';
 import { PrivacyTag } from '@/components/PrivacyTag';
@@ -40,7 +39,8 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
     { to: '/public-feed', label: 'feed', Icon: House, grade: 'public' },
     { to: '/private-feed', label: 'private feed', Icon: Lock, grade: 'private' },
     { to: '/connections', label: 'connections', Icon: Users, grade: 'high' },
-    ...(profileTo ? [{ to: profileTo, label: 'profile', Icon: User }] : []),
+    ...(profileTo ? [{ to: profileTo, label: 'profile', Icon: User, grade: 'public' as const }] : []),
+    { to: '/lists', label: 'follows & mutes', Icon: Users, grade: 'high' },
     { to: '/settings', label: 'settings', Icon: Settings },
     { to: '/debug', label: 'debug', Icon: Bug },
   ];
@@ -76,12 +76,6 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   const navBlock = (onNavigate?: () => void) => (
     <div className="flex flex-col gap-0.5">
       {nav.map(({ to, label, Icon, grade }) => navLink(to, label, Icon, grade, onNavigate))}
-      <Input
-        type="search"
-        placeholder="search"
-        className="bg-accent/40 mt-2 rounded-sm text-sm"
-        aria-label="search"
-      />
     </div>
   );
 
