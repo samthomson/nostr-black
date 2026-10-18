@@ -4,8 +4,9 @@ import { Check, Copy } from 'lucide-react';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { FollowButton } from '@/components/FollowButton';
+import { ConnectButton } from '@/components/ConnectButton';
 import { useProfile } from '@/data/hooks/useProfile';
-import { profileHref, npubOf, clipMiddle } from '@/lib/format';
+import { profileHref, npubOf } from '@/lib/format';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { PRIVACY } from '@/lib/privacy';
 import { useAsset } from '@/hooks/useAsset';
@@ -61,10 +62,10 @@ const NpubLine = memo(function NpubLine({ pubkey }: { pubkey: string }) {
     <button
       type="button"
       onClick={copy}
-      className="text-muted-foreground flex min-w-0 cursor-pointer items-center gap-1 font-mono text-[11px] hover:text-foreground"
+      className="text-muted-foreground flex w-full max-w-full min-w-0 cursor-pointer items-center gap-1 font-mono text-[11px] hover:text-foreground"
       aria-label="copy npub"
     >
-      <span className="truncate">{clipMiddle(npubOf(pubkey), 14, 8)}</span>
+      <span className="truncate">{npubOf(pubkey)}</span>
       {copied ? <Check className="size-3 shrink-0" /> : <Copy className="size-3 shrink-0" />}
     </button>
   );
@@ -117,9 +118,10 @@ const ProfileHoverCardBody = memo(function ProfileHoverCardBody({ pubkey }: { pu
           </p>
         )}
       </div>
-      {/* Action row: compact buttons, more to come. */}
+      {/* Action row: follow (public), connect (private). */}
       <div className="flex items-center gap-1.5 px-3 pb-2">
         <FollowButton pubkey={pubkey} compact />
+        <ConnectButton pubkey={pubkey} compact />
       </div>
     </div>
   );
