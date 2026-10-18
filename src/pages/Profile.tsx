@@ -3,6 +3,8 @@ import { cn } from '@/lib/utils';
 import { PRIVACY } from '@/lib/privacy';
 import { Page } from '@/components/Page';
 import { ProfileEditDialog } from '@/components/ProfileEditDialog';
+import { FollowButton } from '@/components/FollowButton';
+import { MuteButton } from '@/components/MuteButton';
 import { FollowsDialog } from '@/components/FollowsDialog';
 import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
 import { ProfileBanner } from '@/components/ProfileBanner';
@@ -17,6 +19,7 @@ import { useProfilePrivateNotes } from '@/data/hooks/useProfilePrivateNotes';
 import { usePrivateActions } from '@/hooks/usePrivateActions';
 import { npubOf } from '@/lib/format';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
+import { NpubCopy } from '@/components/NpubCopy';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { Card, CardContent } from '@/components/ui/card';
 import { FeedSkeleton } from '@/components/NoteSkeleton';
@@ -101,23 +104,31 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
           <div className="space-y-1">
             <div className="flex items-start justify-between gap-2">
               <p className="min-w-0 truncate text-xl font-semibold">{displayName}</p>
-              {ownProfile && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => setEditOpen(true)}
-                  aria-label="edit profile"
-                >
-                  <Pencil className="size-3.5" />
-                  edit
-                </Button>
-              )}
+              <div className="flex shrink-0 items-center gap-2">
+                {!ownProfile && (
+                  <>
+                    <FollowButton pubkey={pubkey} />
+                    <MuteButton pubkey={pubkey} />
+                  </>
+                )}
+                {ownProfile && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => setEditOpen(true)}
+                    aria-label="edit profile"
+                  >
+                    <Pencil className="size-3.5" />
+                    edit
+                  </Button>
+                )}
+              </div>
             </div>
             {about?.nip05 && (
               <p className="text-privacy-public-muted truncate text-sm">{about.nip05}</p>
             )}
-            <p className="text-privacy-public-muted truncate font-mono text-xs">{npub}</p>
+            <NpubCopy pubkey={pubkey} className="w-fit text-xs text-privacy-public-muted hover:text-foreground" />
           </div>
 
           {about?.about && (

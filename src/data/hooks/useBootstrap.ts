@@ -19,10 +19,10 @@ export const useBootstrap = (): void => {
   const { user } = useCurrentUser();
   const { state, updateUser, markRelaySynced } = useUserState();
   const pubkey = user?.pubkey;
-  const sk = useSessionKey();
-
   const relays = useEntity(pubkey ? { type: 'relayList', pubkey } : undefined);
   const follows = useEntity(pubkey ? { type: 'followList', pubkey } : undefined);
+  const mutes = useEntity(pubkey ? { type: 'muteList', pubkey } : undefined);
+  const sk = useSessionKey();
 
   useEffect(() => {
     setAuthSigner(
@@ -43,9 +43,9 @@ export const useBootstrap = (): void => {
 
   useEffect(() => {
     if (!pubkey) return;
-    if (relays.settledAt === undefined && follows.settledAt === undefined) return;
+    if (relays.settledAt === undefined && follows.settledAt === undefined && mutes.settledAt === undefined) return;
     markRelaySynced();
-  }, [pubkey, relays.settledAt, follows.settledAt, markRelaySynced]);
+  }, [pubkey, relays.settledAt, follows.settledAt, mutes.settledAt, markRelaySynced]);
 
   // TODO (ui nudge): once `relays` settles without an event, the user
   // publishes no NIP-65 list — surface that here so settings can suggest

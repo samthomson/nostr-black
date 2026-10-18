@@ -406,6 +406,12 @@ describe('PrivateFeedPage', () => {
     const modal = await screen.findByRole('dialog');
     expect(uploadBlob).not.toHaveBeenCalled();
     expect(modal.textContent).toContain('1 image');
+    // the preview tab shows the staged picture — the local blob, not
+    // the uploaded url (the bytes have not left the device yet)
+    const modalImg = modal.querySelector('img[src^="blob:"]');
+    expect(modalImg).toBeTruthy();
+    const composerThumb = document.querySelector('img.size-16') as HTMLImageElement;
+    expect(modalImg!.getAttribute('src')).toBe(composerThumb.getAttribute('src'));
     // the feed fetches the ciphertext as soon as the note re-renders —
     // serve whatever the upload actually sent
     fetchBlob.mockImplementation(async () => uploadBlob.mock.calls[0]![0]);

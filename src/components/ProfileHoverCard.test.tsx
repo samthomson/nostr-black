@@ -66,8 +66,9 @@ describe('ProfileHoverCard', () => {
       </TestApp>,
     );
 
-    // Closed: no follow button anywhere.
-    expect(screen.queryByRole('button', { name: 'follow' })).toBeNull();
+    // Closed: no follow buttons anywhere.
+    expect(screen.queryByRole('button', { name: 'follow publicly' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'follow privately' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'unfollow' })).toBeNull();
 
     // Hover the author name.
@@ -77,8 +78,8 @@ describe('ProfileHoverCard', () => {
     const npub = nip19.npubEncode(getPublicKey(alice));
     expect(await screen.findByText(npub)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'copy npub' })).toBeTruthy();
-    const follow = screen.getByRole('button', { name: 'follow' });
-    expect(follow).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'follow publicly' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'follow privately' })).toBeTruthy();
     expect(queuedEntries()).toHaveLength(0);
   });
 
@@ -115,7 +116,7 @@ describe('ProfileHoverCard', () => {
     );
 
     await user.hover(await screen.findByRole('link', { name: new RegExp(nip19.npubEncode(getPublicKey(alice)).slice(0, 10)) }));
-    await user.click(await screen.findByRole('button', { name: 'follow' }));
+    await user.click(await screen.findByRole('button', { name: 'follow publicly' }));
     await confirmBroadcast(user);
 
     await waitFor(() => expect(publish).toHaveBeenCalled());
@@ -168,7 +169,7 @@ describe('ProfileHoverCard', () => {
     );
 
     await user.hover(await screen.findByRole('link', { name: new RegExp(nip19.npubEncode(getPublicKey(me)).slice(0, 10)) }));
-    expect(await screen.findByRole('button', { name: 'follow' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'follow publicly' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'connect' })).toBeNull();
   });
 });

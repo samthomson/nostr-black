@@ -9,6 +9,7 @@ import DebugPage from "./pages/Debug";
 import CrashPage from "./pages/Crash";
 import SettingsPage from "./pages/Settings";
 import ConnectionsPage from "./pages/Connections";
+import { FollowsPage, MutesPage } from "./pages/Lists";
 import PublicFeedPage from "./pages/PublicFeed";
 import PrivateFeedPage from "./pages/PrivateFeed";
 import { PrivateThreadPage } from "./pages/PrivateThread";
@@ -20,6 +21,8 @@ const GATED: readonly { path: string; element: ReactNode }[] = [
   { path: "/settings/*", element: <SettingsPage /> },
   { path: "/debug", element: <DebugPage /> },
   { path: "/connections", element: <ConnectionsPage /> },
+  { path: "/follows", element: <FollowsPage /> },
+  { path: "/mutes", element: <MutesPage /> },
   { path: "/public-feed", element: <PublicFeedPage /> },
   { path: "/private-feed", element: <PrivateFeedPage /> },
   { path: "/private-feed/:nip19", element: <PrivateThreadPage /> },

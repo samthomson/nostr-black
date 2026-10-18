@@ -346,6 +346,8 @@ describe('PrivateThreadPage', () => {
     const modal = await screen.findByRole('dialog');
     expect(uploadBlob).not.toHaveBeenCalled();
     expect(modal.textContent).toContain('1 image');
+    // the preview tab shows the staged picture before anything uploads
+    expect(modal.querySelector('img[src^="blob:"]')).toBeTruthy();
     // the thread fetches the ciphertext as soon as the reply re-renders —
     // serve whatever the upload actually sent
     fetchBlob.mockImplementation(async () => uploadBlob.mock.calls[0]![0]);

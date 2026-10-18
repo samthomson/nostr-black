@@ -23,6 +23,7 @@ type NavItem = {
    *  open or when one of them is the active page. */
   children?: NavItem[];
 };
+type Grade = NavItem['grade'];
 
 /**
  * A nav entry with contained sub-pages: a caret toggles them open, they
@@ -135,10 +136,30 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
 
   // A parent whose section contains the active page starts open; the
   // caret toggles it manually. Children indent one level.
+  const navLink = (to: string, label: string, Icon: LucideIcon, grade: Grade, onNavigate?: () => void) => {
+    const active = pathname === to || pathname.startsWith(`${to}/`);
+    return (
+      <Link
+        key={to}
+        to={to}
+        onClick={onNavigate}
+        className={cn(
+          'hover:bg-accent/50 flex items-center gap-3 rounded-sm px-2.5 py-2 text-sm',
+          active ? 'text-foreground bg-accent' : 'text-muted-foreground',
+        )}
+      >
+        <Icon className={active ? 'size-5' : 'size-5'} strokeWidth={active ? 2.5 : 2} />
+        {grade ? <PrivacyTag grade={grade}>{label}</PrivacyTag> : label}
+      </Link>
+    );
+  };
+
   const navBlock = (onNavigate?: () => void) => (
     <div className="flex flex-col gap-0.5">
       {nav.map((item) => (
-        <NavGroup key={item.to} item={item} pathname={pathname} onNavigate={onNavigate} />
+        item.children
+          ? <NavGroup key={item.to} item={item} pathname={pathname} onNavigate={onNavigate} />
+          : navLink(item.to, item.label, item.Icon, item.grade, onNavigate)
       ))}
     </div>
   );

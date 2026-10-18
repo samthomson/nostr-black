@@ -67,7 +67,7 @@ export const BroadcastDialog = ({
   /** Deferred blossom uploads, stated in the config rows and the CTA:
    * they run on confirm — the button says "upload … + broadcast" and
    * the step line narrates the run. */
-  uploads?: { count: number; server: string };
+  uploads?: { count: number; server: string; previews?: readonly string[] };
   /** Which half of an upload+broadcast run is live. */
   phase?: 'idle' | 'uploading' | 'broadcasting';
   /** Confirm: run deferred uploads, then enqueue the events. */
@@ -154,7 +154,21 @@ export const BroadcastDialog = ({
             {preview && tab === 'preview' ? (
               <div className="text-sm">{preview}</div>
             ) : tab === 'preview' ? (
-              <div className="text-sm break-words whitespace-pre-wrap">{content}</div>
+              <div className="space-y-2">
+                {content && <div className="text-sm break-words whitespace-pre-wrap">{content}</div>}
+                {uploads?.previews && uploads.previews.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {uploads.previews.map((url) => (
+                      <img
+                        key={url}
+                        src={url}
+                        alt=""
+                        className="max-h-36 rounded-sm border object-cover"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             ) : tab === 'edit' ? (
               <textarea
                 ref={editorRef}

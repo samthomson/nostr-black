@@ -1,6 +1,5 @@
-import { memo, useCallback, useState } from 'react';
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Copy } from 'lucide-react';
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { FollowButton } from '@/components/FollowButton';
@@ -10,6 +9,7 @@ import { profileHref, npubOf } from '@/lib/format';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { PRIVACY } from '@/lib/privacy';
 import { useAsset } from '@/hooks/useAsset';
+import { NpubCopy } from '@/components/NpubCopy';
 import { cn } from '@/lib/utils';
 
 /**
@@ -50,26 +50,6 @@ const BannerSliver = memo(function BannerSliver({ url }: { url: string | undefin
   );
 });
 
-/** Middle-clipped npub with a copy flash — `aaaa…bbbb` plus copy icon. */
-const NpubLine = memo(function NpubLine({ pubkey }: { pubkey: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = useCallback(() => {
-    void navigator.clipboard.writeText(npubOf(pubkey));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  }, [pubkey]);
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      className="text-muted-foreground flex w-full max-w-full min-w-0 cursor-pointer items-center gap-1 font-mono text-[11px] hover:text-foreground"
-      aria-label="copy npub"
-    >
-      <span className="truncate">{npubOf(pubkey)}</span>
-      {copied ? <Check className="size-3 shrink-0" /> : <Copy className="size-3 shrink-0" />}
-    </button>
-  );
-});
 
 /** Card body — mounted only while the hover card is open. */
 const ProfileHoverCardBody = memo(function ProfileHoverCardBody({ pubkey }: { pubkey: string }) {
@@ -108,10 +88,7 @@ const ProfileHoverCardBody = memo(function ProfileHoverCardBody({ pubkey }: { pu
             <span className="min-w-0 truncate pb-0.5 text-sm font-semibold">{name}</span>
           )}
         </div>
-        {metadata?.nip05 && (
-          <p className="text-muted-foreground truncate text-xs">{metadata.nip05}</p>
-        )}
-        <NpubLine pubkey={pubkey} />
+        <NpubCopy pubkey={pubkey} />
         {metadata?.about && (
           <p className="text-muted-foreground mt-1 line-clamp-1 truncate whitespace-pre-wrap break-words text-xs leading-snug">
             {metadata.about}
