@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Bug, ChevronLeft, House, Lock, Menu, Settings, User, Users, X } from 'lucide-react';
+import { Bug, ChevronDown, ChevronLeft, ChevronRight, House, Lock, Menu, Settings, User, Users, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { LoginArea } from '@/components/auth/LoginArea';
@@ -8,14 +8,83 @@ import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { BrandMark } from '@/components/BrandMark';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { profileHref } from '@/lib/format';
-import { PrivacyTag } from '@/components/PrivacyTag';
+import { PrivacyTag, type PrivacyTagGrade } from '@/components/PrivacyTag';
 import { useAnchorSpacer, useSpacerRefs } from '@/components/columns/useAnchorSpacer';
 import { useColumns, type ColumnPointer } from '@/components/columns/columnsState';
 import { ColumnsProvider } from '@/components/columns/ColumnsContext';
 import { NoteColumn } from '@/components/columns/NoteColumn';
 import { cn } from '@/lib/utils';
-type NavItem = { to: string; label: string; Icon: LucideIcon; grade?: import('@/lib/privacy').PrivacyGrade };
-type Grade = NavItem['grade'];
+type NavItem = {
+  to: string;
+  label: string;
+  Icon: LucideIcon;
+  grade?: PrivacyTagGrade;
+  /** Contained sub-pages, indented below and shown when the section is
+   *  open or when one of them is the active page. */
+  children?: NavItem[];
+};
+
+/**
+ * A nav entry with contained sub-pages: a caret toggles them open, they
+ * indent one level, and the section starts open whenever one of the
+ * children is the active page (or when the parent itself is).
+ */
+const NavGroup = ({
+  item,
+  pathname,
+  onNavigate,
+}: {
+  item: NavItem;
+  pathname: string;
+  onNavigate?: () => void;
+}) => {
+  const containsActive = (i: NavItem): boolean =>
+    pathname === i.to || pathname.startsWith(`${i.to}/`) || (i.children?.some(containsActive) ?? false);
+  const [open, setOpen] = useState(containsActive(item));
+  // Following the active page beats the stored toggle: landing on a
+  // contained page reveals its section even if the user had it closed.
+  if (containsActive(item) && !open) setOpen(true);
+
+  const row = (to: string, label: string, Icon: LucideIcon, grade?: PrivacyTagGrade, indent = false) => {
+    const active = pathname === to || pathname.startsWith(`${to}/`);
+    return (
+      <Link
+        key={to}
+        to={to}
+        onClick={onNavigate}
+        className={cn(
+          'hover:bg-accent/50 flex items-center gap-3 rounded-sm py-2 text-sm',
+          indent ? 'pl-6 pr-2.5' : 'px-2.5',
+          active ? 'text-foreground bg-accent' : 'text-muted-foreground',
+        )}
+      >
+        <Icon className={active ? 'size-5' : 'size-5'} strokeWidth={active ? 2.5 : 2} />
+        {grade ? <PrivacyTag grade={grade}>{label}</PrivacyTag> : label}
+      </Link>
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        className={cn(
+          'hover:bg-accent/50 flex w-full items-center gap-3 rounded-sm px-2.5 py-2 text-sm',
+          containsActive(item) ? 'text-foreground' : 'text-muted-foreground',
+        )}
+      >
+        <item.Icon className="size-5" strokeWidth={containsActive(item) ? 2.5 : 2} />
+        {item.grade ? <PrivacyTag grade={item.grade}>{item.label}</PrivacyTag> : item.label}
+        {open
+          ? <ChevronDown className="text-muted-foreground ml-auto size-4" />
+          : <ChevronRight className="text-muted-foreground ml-auto size-4" />}
+      </button>
+      {open && item.children?.map((child) => row(child.to, child.label, child.Icon, child.grade, true))}
+    </div>
+  );
+};
 
 /**
  * App chrome. Desktop (md+): centred rail + main column + any opened note
@@ -33,14 +102,23 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
   }
 
   const profileTo = user ? profileHref(user.pubkey) : undefined;
-  // Privacy is colour: the public feed is white, the private feed black,
-  // encrypted connections near-black; your profile is a public page.
+  // Privacy is colour: the public feed and profile are white, the private
+  // feed and encrypted connections black.
   const nav: NavItem[] = [
     { to: '/public-feed', label: 'feed', Icon: House, grade: 'public' },
     { to: '/private-feed', label: 'private feed', Icon: Lock, grade: 'private' },
-    { to: '/connections', label: 'connections', Icon: Users, grade: 'high' },
+    { to: '/connections', label: 'connections', Icon: Users, grade: 'private' },
     ...(profileTo ? [{ to: profileTo, label: 'profile', Icon: User, grade: 'public' as const }] : []),
-    { to: '/lists', label: 'follows & mutes', Icon: Users, grade: 'high' },
+    {
+      to: '/follows',
+      label: 'follows',
+      Icon: Users,
+      grade: ['public', 'low'],
+      children: [
+        { to: '/follows', label: 'follows', Icon: Users, grade: ['public', 'low'] },
+        { to: '/mutes', label: 'mutes', Icon: Users, grade: ['public', 'low'] },
+      ],
+    },
     { to: '/settings', label: 'settings', Icon: Settings },
     { to: '/debug', label: 'debug', Icon: Bug },
   ];
@@ -55,27 +133,13 @@ export const Shell = ({ children }: { children: React.ReactNode }) => {
     };
   }, [menuOpen]);
 
-  const navLink = (to: string, label: string, Icon: LucideIcon, grade: Grade, onNavigate?: () => void) => {
-    const active = pathname === to || pathname.startsWith(`${to}/`);
-    return (
-      <Link
-        key={to}
-        to={to}
-        onClick={onNavigate}
-        className={cn(
-          'hover:bg-accent/50 flex items-center gap-3 rounded-sm px-2.5 py-2 text-sm',
-          active ? 'text-foreground bg-accent' : 'text-muted-foreground',
-        )}
-      >
-        <Icon className={active ? 'size-5' : 'size-5'} strokeWidth={active ? 2.5 : 2} />
-        {grade ? <PrivacyTag grade={grade}>{label}</PrivacyTag> : label}
-      </Link>
-    );
-  };
-
+  // A parent whose section contains the active page starts open; the
+  // caret toggles it manually. Children indent one level.
   const navBlock = (onNavigate?: () => void) => (
     <div className="flex flex-col gap-0.5">
-      {nav.map(({ to, label, Icon, grade }) => navLink(to, label, Icon, grade, onNavigate))}
+      {nav.map((item) => (
+        <NavGroup key={item.to} item={item} pathname={pathname} onNavigate={onNavigate} />
+      ))}
     </div>
   );
 
