@@ -35,16 +35,26 @@ vi.mock('@/net/blossom', async (importOriginal) => ({
 const { scheduler } = await import('@/data/scheduler');
 const { resetQueue } = await import('@/data/publish/queue');
 
-/** Click the confirm button in the open broadcast modal. */
+/** Click the confirm button in the open broadcast modal — plain
+ * "broadcast", or "upload N images + broadcast" when deferred uploads
+ * ride the confirm. An upload run holds a 600ms narration beat before
+ * the events enqueue, waited out in real time. */
 const confirmBroadcast = async (user: { click: (el: Element) => Promise<void> }) => {
   const dialog = await screen.findByRole('dialog');
   for (const b of await within(dialog).findAllByRole('button')) {
-    if ((b.textContent ?? '').trim() === 'broadcast') {
+    if (/(^|\+\s)broadcast$/.test((b.textContent ?? '').trim())) {
       await user.click(b);
       return;
     }
   }
   throw new Error('broadcast button not found');
+};
+
+/** Wait out the upload→broadcast narration beat in real time. */
+const broadcastBeat = async (): Promise<void> => {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, 700);
+  await promise;
 };
 
 const Unlock = ({ nsec, children }: { nsec: string; children: ReactNode }) => {
@@ -340,6 +350,7 @@ describe('PrivateThreadPage', () => {
     // serve whatever the upload actually sent
     fetchBlob.mockImplementation(async () => uploadBlob.mock.calls[0]![0]);
     await confirmBroadcast(user);
+    await act(broadcastBeat);
     await settle();
 
     // only ciphertext left the device

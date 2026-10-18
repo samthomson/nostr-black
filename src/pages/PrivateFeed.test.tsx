@@ -35,16 +35,29 @@ const { resetQueue } = await import('@/data/publish/queue');
 const { store } = await import('@/data/store');
 
 
-/** Click the confirm button in the open broadcast modal. */
+/** Click the confirm button in the open broadcast modal — plain
+ * "broadcast", or "upload N images + broadcast" when deferred uploads
+ * ride the confirm. An upload run holds a 600ms narration beat before
+ * the events enqueue; mock timers must be installed so the beat is
+ * crossed, and `advanceBroadcastBeat` fires it. */
 const confirmBroadcast = async (user: { click: (el: Element) => Promise<void> }) => {
   const dialog = await screen.findByRole('dialog');
   for (const b of await within(dialog).findAllByRole('button')) {
-    if ((b.textContent ?? '').trim() === 'broadcast') {
+    if (/(^|\+\s)broadcast$/.test((b.textContent ?? '').trim())) {
       await user.click(b);
       return;
     }
   }
   throw new Error('broadcast button not found');
+};
+
+/** Wait out the upload→broadcast narration beat in real time — fake
+ * timers stall the publish scheduler's own debounce, so they can't
+ * carry the confirm run. */
+const broadcastBeat = async (): Promise<void> => {
+  const { promise, resolve } = Promise.withResolvers<void>();
+  setTimeout(resolve, 700);
+  await promise;
 };
 
 const Unlock = ({ nsec, children }: { nsec: string; children: ReactNode }) => {
@@ -349,6 +362,8 @@ describe('PrivateFeedPage', () => {
     await user.type(box, 'edited after close');
     await user.click(screen.getByRole('button', { name: 'save' }));
     await confirmBroadcast(user);
+    await settle();
+
     // One slotless conversation event under the reply CEK: bob holds the
     // key regardless of connection state, and finds it by #n.
     const revision = publish.mock.calls.map(([ev]) => ev).find((ev) => ev.kind === 1470);
@@ -361,7 +376,6 @@ describe('PrivateFeedPage', () => {
     const bob = generateSecretKey();
     const offer = requestConnection(alice, getPublicKey(bob));
     const accepted = acceptConnection(bob, openConnection(bob, offer));
-
     queryRelay.mockImplementation(async (_url, filters) => {
       if (filters[0].kinds?.includes(30378)) return [accepted];
       return [];
@@ -396,13 +410,12 @@ describe('PrivateFeedPage', () => {
     // serve whatever the upload actually sent
     fetchBlob.mockImplementation(async () => uploadBlob.mock.calls[0]![0]);
     await confirmBroadcast(user);
+    await act(broadcastBeat);
     await settle();
-
     // only ciphertext left the device, and only now
     expect(uploadBlob).toHaveBeenCalledTimes(1);
     const [sentBytes] = uploadBlob.mock.calls[0]!;
     expect(sentBytes).not.toEqual(new Uint8Array([9, 8, 7]));
-
     // one event per note: the 1370 set is the whole broadcast — an
     // attached image adds nothing beyond what a text note produces
     const published = publish.mock.calls.map(([ev]) => ev);
@@ -434,6 +447,17 @@ describe('PrivateFeedPage', () => {
     // the image is not a reply: no url text, and the reply count stays zero
     expect(screen.queryByText('https://cdn.example/staged.png')).toBeNull();
     expect(screen.getByTestId('count-reply').textContent).toBe('0');
+
+    // the decrypted image opens the note's lightbox — the same ux as the
+    // public feed, wearing the private grade
+    await user.click(screen.getByRole('button', { name: 'open image' }));
+    const lightbox = await screen.findByRole('dialog');
+    expect(lightbox.style.backgroundColor).toBe('var(--privacy-private)');
+    expect(lightbox.querySelector('img:not([aria-hidden])')).toHaveAttribute('src', shown.getAttribute('src')!);
+    // single image: no navigation dots or arrows
+    expect(screen.queryByTestId('lightbox-nav')).toBeNull();
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
     // enqueue is the commit point: the draft and the staged thumbnails clear
     await waitFor(() => expect(box).toHaveValue(''));

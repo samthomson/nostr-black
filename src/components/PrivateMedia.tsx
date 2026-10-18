@@ -2,23 +2,14 @@ import { useEffect, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { loadPrivateImage, type PrivateImage } from '@/lib/fileMessage';
 import { useAppContext } from '@/hooks/useAppContext';
+import { LightboxTrigger } from '@/components/Lightbox';
 import { Button } from '@/components/ui/button';
+import { CACHE_MAX, cache, type OpenedImage } from '@/components/privateMediaCache';
 
-interface OpenedImage {
-  blobUrl: string;
-  mime: string;
-}
 
-/** Decrypted images by ciphertext hash, shared by every mount — the
- * feed, the thread and re-renders fetch one image once per session.
- * Capped: each entry holds a blob (megabytes post-decrypt), so the
- * oldest entry is evicted and revoked past the cap. */
-const CACHE_MAX = 24;
-const cache = new Map<string, OpenedImage>();
 /** Loads in progress by ciphertext hash — remounts join the running
  * fetch instead of starting a second one (and leaking its blob url). */
 const inflight = new Map<string, Promise<OpenedImage>>();
-
 const loadOf = (x: string, image: PrivateImage, maxBytes: number): Promise<OpenedImage> => {
   const held = inflight.get(x);
   if (held) return held;
@@ -43,7 +34,14 @@ const truncatedUrl = (url: string): string => (url.length > 80 ? `${url.slice(0,
  * renders a dud card — the url and an explicit load button — until
  * clicked.
  */
-export const PrivateMedia = ({ image }: { image: PrivateImage }) => {
+export const PrivateMedia = ({
+  image,
+  onOpen,
+}: {
+  image: PrivateImage;
+  /** Called once decrypted, with the blob url — the note's lightbox set. */
+  onOpen?: (blobUrl: string) => void;
+}) => {
   const { config } = useAppContext();
   const [loadRequested, setLoadRequested] = useState(false);
   const auto = config.mediaEnabled || loadRequested;
@@ -112,5 +110,13 @@ export const PrivateMedia = ({ image }: { image: PrivateImage }) => {
     );
   }
 
-  return <img src={loaded.blobUrl} alt="" className="max-h-96 w-full rounded-sm object-cover" />;
+  return (
+    <LightboxTrigger
+      label="open image"
+      onOpen={() => onOpen?.(loaded.blobUrl)}
+      className="w-full"
+    >
+      <img src={loaded.blobUrl} alt="" className="max-h-96 w-full rounded-sm object-cover" />
+    </LightboxTrigger>
+  );
 };

@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import type { NostrEvent } from '@nostrify/nostrify';
-import { Note, ReplyCount } from '@/components/Note';
 import { nip19 } from 'nostr-tools';
+import { Note, ReplyCount } from '@/components/Note';
+import { Lightbox } from '@/components/Lightbox';
+import { PrivateMedia } from '@/components/PrivateMedia';
+import { decryptedUrlOf } from '@/components/privateMediaCache';
+import { Composer } from '@/components/Composer';
 import { EngagementCount, type EngagementRow } from '@/components/EngagementDialog';
 import { reactionsTo, type Conversation } from '@/lib/feedEncryptionRead';
-import { Composer } from '@/components/Composer';
-import { PrivateMedia } from '@/components/PrivateMedia';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAttachments } from '@/hooks/useAttachments';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -66,8 +68,15 @@ export const PrivateItem = ({
   const { config } = useAppContext();
   const reactions = reactionsTo(conversation, rumor.id);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [openMedia, setOpenMedia] = useState<number | null>(null);
   const chain = versions ?? [];
   const edited = chain.length > 1;
+  // The lightbox set: this item's images that have decrypted this
+  // session, in tag order — read at render, so a fresh decrypt rerenders
+  // the whole item and the modal picks the url up.
+  const decryptedImages = mediaImagesOf(rumor)
+    .map((image) => decryptedUrlOf(image.x))
+    .filter((u): u is string => !!u);
 
   return (
     <>
@@ -89,7 +98,11 @@ export const PrivateItem = ({
           return images.length > 0 ? (
             <div className="space-y-1 pt-1">
               {images.map((image) => (
-                <PrivateMedia key={image.url} image={image} />
+                <PrivateMedia
+                  key={image.url}
+                  image={image}
+                  onOpen={(blobUrl) => setOpenMedia(decryptedImages.indexOf(blobUrl))}
+                />
               ))}
             </div>
           ) : null;
@@ -122,6 +135,16 @@ export const PrivateItem = ({
           />
         </div>
       </Note>
+      {openMedia !== null && decryptedImages[openMedia] && (
+        <Lightbox
+          urls={decryptedImages}
+          index={openMedia}
+          onIndex={setOpenMedia}
+          onClose={() => setOpenMedia(null)}
+          alt="decrypted image"
+          grade="private"
+        />
+      )}
       {edited && (
         <EditHistoryDialog versions={chain} open={historyOpen} onOpenChange={setHistoryOpen} />
       )}

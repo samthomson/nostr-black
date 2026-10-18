@@ -172,6 +172,9 @@ const remember = (url: string, blob: Blob, blobUrl: string, bucket: MediaKind): 
  * how to surface the error.
  */
 export const fetchAssetUrl = async (url: string, kind: MediaKind = 'media'): Promise<string> => {
+  // A blob: url is already local bytes (decrypted private media) — the
+  // Rust fetch bridge must never see it.
+  if (url.startsWith('blob:')) return url;
   if (!isDesktop()) return url;
 
   const now = Date.now();

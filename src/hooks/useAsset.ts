@@ -12,6 +12,9 @@ export interface Asset {
 /**
  * Resolves a media URL to something renderable.
  *
+ * A `blob:` url is already local bytes (decrypted private media) — passed
+ * through untouched, no fetch, on every platform.
+ *
  * Web: identity — the browser fetches over https directly.
  * Desktop: bytes are fetched through Rust (Tor or direct, throttled and
  * time-boxed in fetchAssetUrl) and cached as a blob URL — the webview
@@ -28,11 +31,12 @@ export function useAsset(
   const [blobUrl, setBlobUrl] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const ref = useRef<HTMLDivElement | null>(null);
+  const local = url?.startsWith('blob:') ?? false;
 
   useEffect(() => {
-    if (!url || !desktop) return;
+    if (!url || desktop || local) return;
     let alive = true;
-    fetchAssetUrl(url, kind)
+    void fetchAssetUrl(url, kind)
       .then((u) => {
         if (alive) {
           setBlobUrl(u);
@@ -45,11 +49,11 @@ export function useAsset(
     return () => {
       alive = false;
     };
-  }, [url, kind, desktop]);
+  }, [url, kind, desktop, local]);
 
   // Viewport boost: seeing it means wanting it now.
   useEffect(() => {
-    if (!url || !desktop || blobUrl) return;
+    if (!url || !desktop || local || blobUrl) return;
     const el = ref.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
     const observer = new IntersectionObserver((entries) => {
@@ -60,8 +64,8 @@ export function useAsset(
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [url, desktop, blobUrl]);
+  }, [url, desktop, blobUrl, local]);
 
-  if (url && !desktop) return { url, error: undefined, ref };
+  if (local || (url && !desktop)) return { url, error: undefined, ref };
   return { url: blobUrl, error, ref };
 }
