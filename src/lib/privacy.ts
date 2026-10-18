@@ -25,6 +25,8 @@ export interface PrivacyStyle {
   className: string;
   /** Static surface classes: grade bg + complementary fg, no hover. */
   surface: string;
+  /** Utility class for a soft nested surface on `bg` (skeleton bars, wells). */
+  softClass: string;
   /** Grade name for labels. */
   label: string;
 }
@@ -47,6 +49,7 @@ export const PRIVACY: Record<PrivacyGrade, PrivacyStyle> = {
     className:
       'bg-privacy-private text-privacy-private-fg hover:bg-privacy-high hover:text-privacy-private-fg',
     surface: 'bg-privacy-private text-privacy-private-fg',
+    softClass: 'bg-privacy-private-soft',
     label: 'private',
   },
   high: {
@@ -57,6 +60,7 @@ export const PRIVACY: Record<PrivacyGrade, PrivacyStyle> = {
     className:
       'bg-privacy-high text-privacy-high-fg hover:bg-privacy-medium hover:text-privacy-high-fg',
     surface: 'bg-privacy-high text-privacy-high-fg',
+    softClass: 'bg-privacy-high-soft',
     label: 'high privacy',
   },
   medium: {
@@ -67,6 +71,7 @@ export const PRIVACY: Record<PrivacyGrade, PrivacyStyle> = {
     className:
       'bg-privacy-medium text-privacy-medium-fg hover:bg-privacy-high hover:text-privacy-medium-fg',
     surface: 'bg-privacy-medium text-privacy-medium-fg',
+    softClass: 'bg-privacy-medium-soft',
     label: 'medium privacy',
   },
   low: {
@@ -77,6 +82,7 @@ export const PRIVACY: Record<PrivacyGrade, PrivacyStyle> = {
     className:
       'bg-privacy-low text-privacy-low-fg hover:bg-privacy-public hover:text-privacy-low-fg',
     surface: 'bg-privacy-low text-privacy-low-fg',
+    softClass: 'bg-privacy-low-soft',
     label: 'low privacy',
   },
   public: {
@@ -85,8 +91,9 @@ export const PRIVACY: Record<PrivacyGrade, PrivacyStyle> = {
     soft: 'var(--privacy-public-soft)',
     muted: 'var(--privacy-public-muted)',
     className:
-      'bg-privacy-public text-privacy-public-fg hover:bg-privacy-low hover:text-privacy-public-fg',
+      'bg-privacy-public text-privacy-public-fg ring-1 ring-black/10 shadow-xs hover:bg-privacy-low hover:text-privacy-public-fg',
     surface: 'bg-privacy-public text-privacy-public-fg',
+    softClass: 'bg-privacy-public-soft',
     label: 'public',
   },
 };

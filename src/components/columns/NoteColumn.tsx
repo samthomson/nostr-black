@@ -119,7 +119,7 @@ export const NoteColumn = ({
         {!priv && root.event && thread.pending && thread.children.length === 0 && (
           <FeedSkeleton count={2} />
         )}
-        {priv && privFeed.pending && privFeed.posts.length === 0 && <NoteSkeleton />}
+        {priv && privFeed.pending && privFeed.posts.length === 0 && <NoteSkeleton grade="private" />}
         {priv && !privFeed.pending && !privPost && <MissingNote />}
 
         {!priv && root.event && (

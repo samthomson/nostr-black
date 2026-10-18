@@ -27,7 +27,7 @@ const PrivateThreadBody = ({ id }: { id: string }) => {
     );
   }
 
-  if (pending) return <FeedSkeleton count={1} />;
+  if (pending) return <FeedSkeleton count={1} grade="private" />;
 
   const item = posts.find((post) => post.note.rumor.id === id);
   if (!item) {

@@ -72,7 +72,7 @@ const PrivateFeedBody = () => {
           ? await prepImages(minted.replyCek, attachments.map((a) => a.file))
           : [];
         stagedRef.current = { ...minted, media };
-        post(content, connectedPeers, media, minted, handlers);
+        post(content, connectedPeers, media, minted, handlers, attachments.map((a) => a.previewUrl));
       } catch (e) {
         setPrepError(e instanceof Error ? e.message : String(e));
       } finally {
@@ -117,7 +117,7 @@ const PrivateFeedBody = () => {
           )}
         </>
       )}
-      {pending && posts.length === 0 && <FeedSkeleton />}
+      {pending && posts.length === 0 && <FeedSkeleton grade="private" />}
       {!pending && connectedPeers.length === 0 && empty(
         "only once you've connected with people can you make private posts",
         { to: '/connections', label: 'add connections' },
