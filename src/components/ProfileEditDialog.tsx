@@ -8,7 +8,7 @@ import { useRouting } from '@/data/hooks/useRouting';
 import { useBroadcastFlow, type PendingBroadcast } from '@/hooks/useBroadcastFlow';
 import { MediaThumb } from '@/components/MediaThumb';
 import type { NostrEvent } from '@nostrify/nostrify';
-import { clientTag } from '@/lib/clientTag';
+import { clientTagOf } from '@/lib/clientTag';
 import { useAppContext } from '@/hooks/useAppContext';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
@@ -355,7 +355,7 @@ export const ProfileEditDialog = ({
     const built = editedProfileContent(event?.content ?? '', merged);
     if (!built.ok) throw new Error('profile merge failed');
     const tags: string[][] = [];
-    const tag = clientTag();
+    const tag = clientTagOf(config.clientTag);
     if (tag) tags.push(['client', tag]);
     return [await user.signer.signEvent({
       kind: 0,

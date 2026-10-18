@@ -5,7 +5,8 @@ import { useRouting } from '@/data/hooks/useRouting';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 import { useBlossomServers } from '@/data/hooks/useBlossomServers';
 import { DEFAULT_BLOSSOM_SERVERS } from '@/lib/appRelays';
-import { clientTag } from '@/lib/clientTag';
+import { useAppContext } from '@/hooks/useAppContext';
+import { clientTagOf } from '@/lib/clientTag';
 import { Button } from '@/components/ui/button';
 import { Section } from './Section';
 
@@ -67,6 +68,7 @@ const ServerRow = ({
  */
 export const StorageSection = () => {
   const { user } = useCurrentUser();
+  const { config } = useAppContext();
   const { myWrite } = useRouting();
   const { request, dialog } = useBroadcastFlow();
   const { declared, fromRelayList, event, pending } = useBlossomServers();
@@ -91,12 +93,13 @@ export const StorageSection = () => {
   };
 
   const publish = () => {
-    if (!user || !dirty) return;
+    const signer = user?.signer;
+    if (!user || !signer || !dirty) return;
     void (async () => {
       const tags = list.map((url) => ['server', url] as [string, string]);
-      const tag = clientTag();
+      const tag = clientTagOf(config.clientTag);
       if (tag) tags.push(['client', tag]);
-      const signed = await user.signer.signEvent({
+      const signed = await signer.signEvent({
         kind: 10063,
         content: '',
         tags,

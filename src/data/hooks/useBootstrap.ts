@@ -3,8 +3,10 @@ import { nowSec } from '@/lib/timestamp';
 import { setAuthSigner } from '@/net/net';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useUserState } from '@/hooks/useUserState';
-import { parseFollows } from '@/lib/outbox';
+import { parseFollows, parsePrivateFollows } from '@/lib/outbox';
+import type { NostrEvent } from '@nostrify/nostrify';
 import { useEntity } from './useEntity';
+import { useSessionKey } from './useSessionKey';
 
 /**
  * The logged-in user's own kind 3 and 10002, plus NIP-42 AUTH.
@@ -17,6 +19,7 @@ export const useBootstrap = (): void => {
   const { user } = useCurrentUser();
   const { state, updateUser, markRelaySynced } = useUserState();
   const pubkey = user?.pubkey;
+  const sk = useSessionKey();
 
   const relays = useEntity(pubkey ? { type: 'relayList', pubkey } : undefined);
   const follows = useEntity(pubkey ? { type: 'followList', pubkey } : undefined);
@@ -66,11 +69,29 @@ export const useBootstrap = (): void => {
   }, [relays.event, state.relayMetadata.updatedAt, updateUser]);
 
   useEffect(() => {
-    const event = follows.event;
+    const event: NostrEvent | undefined = follows.event;
     if (!event || event.created_at <= state.follows.updatedAt) return;
+    // Public follows from tags; NIP-51 private follows from the sealed
+    // content. They merge into one list — the feed and the outbox model
+    // treat a private follow identically to a public one, and nobody
+    // watching the kind 3 learns who the private half names.
+    let privateFollows: string[] = [];
+    if (sk) {
+      try {
+        privateFollows = parsePrivateFollows(sk, event);
+      } catch {
+        // Undecryptable content is a verdict about the ciphertext, not
+        // an excuse to drop the person from the follow list entirely —
+        // but we surface it in dev rather than eating it.
+        console.warn('[follows] private list content undecryptable');
+      }
+    }
     updateUser((current) => ({
       ...current,
-      follows: { pubkeys: parseFollows(event), updatedAt: event.created_at },
+      follows: {
+        pubkeys: [...new Set([...parseFollows(event), ...privateFollows])],
+        updatedAt: event.created_at,
+      },
     }));
-  }, [follows.event, state.follows.updatedAt, updateUser]);
+  }, [follows.event, state.follows.updatedAt, updateUser, sk]);
 };

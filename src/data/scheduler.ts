@@ -31,6 +31,7 @@ export type Want =
   | { type: 'relayList'; pubkey: string }
   | { type: 'blossomServers'; pubkey: string } // the user's kind 10063 blossom server list (BUD-03)
   | { type: 'followList'; pubkey: string }
+  | { type: 'muteList'; pubkey: string } // the user's kind 10000 mute list (NIP-51, content may be self-encrypted)
   | { type: 'event'; id: string; author?: string; hints?: readonly string[] }
   | { type: 'addressable'; kind: number; pubkey: string; d: string }
   | { type: 'engagement'; target: string }
@@ -45,13 +46,14 @@ export type Want =
 
 export type { Lane };
 
-export type ReplaceableWantType = 'profile' | 'relayList' | 'blossomServers' | 'followList';
+export type ReplaceableWantType = 'profile' | 'relayList' | 'blossomServers' | 'followList' | 'muteList';
 
 const REPLACEABLE_KIND: Record<ReplaceableWantType, number> = {
   profile: 0,
   relayList: 10002,
   blossomServers: 10063,
   followList: 3,
+  muteList: 10000,
 };
 
 /** How long a satisfied want stays fresh before it may be asked again. */
@@ -59,6 +61,7 @@ const STALE_MS: Record<Want['type'], number> = {
   profile: 15 * 60_000,
   relayList: 60 * 60_000,
   followList: 15 * 60_000,
+  muteList: 15 * 60_000,
   blossomServers: 24 * 60 * 60_000,
   event: Number.POSITIVE_INFINITY,
   addressable: 15 * 60_000,
@@ -117,6 +120,7 @@ export const wantKey = (want: Want): string => {
     case 'relayList':
     case 'blossomServers':
     case 'followList':
+    case 'muteList':
       return `${want.type}:${want.pubkey}`;
     case 'event':
       return `event:${want.id}`;
@@ -158,6 +162,7 @@ export const wantEntity = (want: Want): EntityKey | undefined => {
     case 'relayList':
     case 'blossomServers':
     case 'followList':
+    case 'muteList':
       return replaceableKey(REPLACEABLE_KIND[want.type], want.pubkey);
     case 'event':
       return eventKey(want.id);
@@ -389,6 +394,7 @@ export const createScheduler = (
     const blossomServers = byType('blossomServers');
 
     const follows = byType('followList');
+    const mutes = byType('muteList');
     const events = batch
       .map((q) => q.want)
       .filter((w): w is Extract<Want, { type: 'event' }> => w.type === 'event');
@@ -445,6 +451,12 @@ export const createScheduler = (
       follows.length > 0
         ? runGroups(lane, profileGroups(ctx, follows), (authors) => ({
             kinds: [REPLACEABLE_KIND.followList],
+            authors,
+          }))
+        : undefined,
+      mutes.length > 0
+        ? runGroups(lane, profileGroups(ctx, mutes), (authors) => ({
+            kinds: [REPLACEABLE_KIND.muteList],
             authors,
           }))
         : undefined,

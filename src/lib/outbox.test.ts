@@ -1,10 +1,16 @@
 import { describe, it, expect } from 'vitest';
-
+import { finalizeEvent, generateSecretKey, getPublicKey } from 'nostr-tools';
 import {
   parseFollows,
   parseRelayList,
   buildAuthorRelayMap,
   buildRelayGroups,
+  moveFollow,
+  moveMute,
+  sealPrivateList,
+  openPrivateList,
+  parseMutes,
+  parsePrivateFollows,
 } from './outbox';
 import type { NostrEvent } from '@nostrify/nostrify';
 
@@ -108,4 +114,56 @@ describe('buildRelayGroups', () => {
     expect(groups.get('wss://tiny.example')).toEqual([C]);
   });
 });
+
+describe('private follow/mute lists (NIP-51 encrypted content)', () => {
+  const sk = generateSecretKey();
+  const alice = getPublicKey(generateSecretKey());
+  const bob = getPublicKey(generateSecretKey());
+
+  const listEvent = (kind: number, tags: string[][], content: string): NostrEvent =>
+    finalizeEvent({ kind, created_at: 100, tags, content }, sk) as NostrEvent;
+
+  it('seals and opens private p entries', () => {
+    const content = sealPrivateList(sk, [['p', alice]]);
+    const opened = openPrivateList(sk, listEvent(3, [], content));
+    expect(opened).toEqual([['p', alice]]);
+  });
+
+  it('decodes legacy nip04 ciphertext from older clients', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const t = require('nostr-tools');
+    const legacy = t.nip04.encrypt(sk, getPublicKey(sk), JSON.stringify([['p', bob]]));
+    const opened = openPrivateList(sk, listEvent(3, [], legacy));
+    expect(opened).toEqual([['p', bob]]);
+  });
+
+  it('fails visibly on junk content — never a silent empty list', () => {
+    expect(() => openPrivateList(sk, listEvent(3, [], 'not ciphertext'))).toThrow();
+  });
+
+  it('moves a public follow to private — still followed, other half survives', () => {
+    const old = listEvent(3, [['p', alice], ['p', bob]], '');
+    const next = moveFollow(sk, old, alice, 'private');
+    expect(parseFollows({ ...old, tags: next.tags })).toEqual([bob]);
+    expect(parsePrivateFollows(sk, { ...old, tags: next.tags, content: next.content })).toEqual([alice]);
+  });
+
+  it('unfollow removes from whichever list held the person', () => {
+    const sealed = moveFollow(sk, listEvent(3, [['p', alice]], ''), bob, 'private');
+    const event = listEvent(3, sealed.tags, sealed.content);
+    const next = moveFollow(sk, event, bob, false);
+    expect(parsePrivateFollows(sk, { ...event, tags: next.tags, content: next.content })).toEqual([]);
+    const next2 = moveFollow(sk, event, alice, false);
+    expect(parseFollows({ ...event, tags: next2.tags })).toEqual([]);
+  });
+
+  it('mute: moves a public mute to private (kind 10000)', () => {
+    const old = listEvent(10000, [['p', alice]], '');
+    const next = moveMute(sk, old, alice, 'private');
+    const mutes = parseMutes(sk, { ...old, tags: next.tags, content: next.content });
+    expect(mutes.public).toEqual([]);
+    expect(mutes.private).toEqual([alice]);
+  });
+});
+
 
