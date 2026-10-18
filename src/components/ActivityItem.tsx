@@ -1,6 +1,8 @@
 import type { NostrEvent } from '@nostrify/nostrify';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatTimestamp } from '@/lib/format';
+import { PRIVACY } from '@/lib/privacy';
+import { cn } from '@/lib/utils';
 
 const LABEL: Record<number, string> = {
   0: 'updated their profile',
@@ -10,10 +12,10 @@ const LABEL: Record<number, string> = {
 
 /** One replaceable activity event in the profile timeline. */
 export const ActivityItem = ({ event }: { event: NostrEvent }) => (
-  <Card className="bg-privacy-public text-privacy-private py-0">
+  <Card className={cn('py-0', PRIVACY.public.surface)}>
     <CardContent className="flex items-baseline gap-2 px-4 py-3">
       <span className="truncate text-sm font-semibold">{LABEL[event.kind] ?? `kind ${event.kind}`}</span>
-      <span className="text-muted-foreground shrink-0 text-xs">{formatTimestamp(event.created_at)}</span>
+      <span className="text-privacy-public-muted shrink-0 text-xs">{formatTimestamp(event.created_at)}</span>
     </CardContent>
   </Card>
 );

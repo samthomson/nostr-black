@@ -28,7 +28,7 @@ import { clientTag as clientTagOf } from '@/lib/clientTag';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 
 import { useRouting } from '@/data/hooks/useRouting';
-import type { PrivacyGrade } from '@/lib/privacy';
+import { PRIVACY, type PrivacyGrade } from '@/lib/privacy';
 import { mediaUrls, MEDIA_URL, VIDEO_URL } from '@/lib/mediaUrls';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 
@@ -45,10 +45,11 @@ const stripMd = (md: string): string => md
   .replace(/^#{1,6}\s+/gm, '')
   .replace(/[*_`>~]/g, '')
   .trim();
-/** Link/accent color for a privacy-graded surface: maroon on white
- * (public), primary (near-white) on black (private). */
+/** Link/accent colour for a privacy-graded surface: maroon pops on the
+ * light public surface; on dark grades the grade's own fg keeps links
+ * readable. */
 const refClass = (grade: PrivacyGrade): string =>
-  grade === 'public' ? 'text-maroon' : 'text-primary';
+  grade === 'public' ? 'text-maroon' : 'text-privacy-private-fg';
 
 
 /** Renders a bech32 id (npub/note/nevent/naddr…) as a link to its route. */
@@ -688,9 +689,8 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const parentPubkey = parent.event?.pubkey ?? taggedAuthor;
   const clientTag = event.tags.find(([n]) => n === 'client')?.[1];
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
-
   return (
-    <Card data-anchor={isAnchored || undefined} className={cn('py-0', grade === 'private' ? 'bg-privacy-private text-privacy-public' : 'bg-privacy-public text-privacy-private')}>
+    <Card data-anchor={isAnchored || undefined} className={cn('py-0', PRIVACY[grade].surface)}>
       <CardContent className="flex gap-3 px-4 py-3">
         <ProfileAvatar
           pubkey={event.pubkey}
@@ -709,14 +709,14 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
                 {displayName ?? `${npub.slice(0, 10)}…`}
               </span>
             )}
-            <span className="text-muted-foreground shrink-0 text-sm">
+            <span className="text-privacy-public-muted shrink-0 text-sm">
               {formatTimestamp(event.created_at)}
             </span>
             {edited && (
               <button
                 type="button"
                 onClick={onEditHistory}
-                className="text-muted-foreground shrink-0 text-xs hover:underline"
+                className="text-privacy-public-muted shrink-0 text-xs hover:underline"
                 aria-label="edit history"
               >
                 edited
@@ -798,7 +798,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
               {!embedded && <MediaGrid urls={media} alt={altText} onOpen={setOpenMedia} />}
             </div>
             {clampable && !expanded && (
-              <div className={`pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t ${grade === 'private' ? 'from-privacy-private' : 'from-privacy-public'} to-transparent`} />
+              <div className={cn('pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-privacy-public to-transparent')} />
             )}
           </div>
 
@@ -839,7 +839,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
 
 
           {!isPrivate && (
-            <div ref={countsRef} className="text-muted-foreground flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
+            <div ref={countsRef} className="text-privacy-public-muted flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
               <ReplyCount
                 replies={feed.replies}
                 pending={feed.pending}

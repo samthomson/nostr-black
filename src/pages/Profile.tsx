@@ -1,4 +1,6 @@
 import { useSeoMeta } from '@unhead/react';
+import { cn } from '@/lib/utils';
+import { PRIVACY } from '@/lib/privacy';
 import { Page } from '@/components/Page';
 import { ProfileEditDialog } from '@/components/ProfileEditDialog';
 import { FollowsDialog } from '@/components/FollowsDialog';
@@ -102,7 +104,7 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-sm border bg-card">
+      <div className={cn('overflow-hidden rounded-sm border', PRIVACY.public.surface)}>
         <ProfileBanner url={sanitizeUrl(about?.banner)} onOpen={bannerIndex >= 0 ? () => setOpenMedia(bannerIndex) : undefined} />
         <div className="relative px-4 pb-4">
           <div className="-mt-8 mb-3 sm:-mt-10">
@@ -141,9 +143,9 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
               )}
             </div>
             {about?.nip05 && (
-              <p className="text-muted-foreground truncate text-sm">{about.nip05}</p>
+              <p className="text-privacy-public-muted truncate text-sm">{about.nip05}</p>
             )}
-            <p className="text-muted-foreground truncate font-mono text-xs">{npub}</p>
+            <p className="text-privacy-public-muted truncate font-mono text-xs">{npub}</p>
           </div>
 
           {about?.about && (
@@ -159,28 +161,28 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
                 href={site}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-muted-foreground mt-1 block truncate text-sm underline underline-offset-2"
+                className="text-privacy-public-muted mt-1 block truncate text-sm underline underline-offset-2"
               >
                 {about.website}
               </a>
             ) : null;
           })()}
 
-          <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          <div className="text-privacy-public-muted mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <button
               type="button"
               onClick={() => setFollowsOpen(true)}
               className="cursor-pointer hover:underline"
             >
-              <span className="text-foreground font-medium">{countLabel(follows.count, follows.pending)}</span>
+              <span className="text-privacy-public-fg font-medium">{countLabel(follows.count, follows.pending)}</span>
               {' '}following
             </button>
             <span>
-              <span className="text-foreground font-medium">{countLabel(followers.count, followers.pending, followers.capped)}</span>
+              <span className="text-privacy-public-fg font-medium">{countLabel(followers.count, followers.pending, followers.capped)}</span>
               {' '}followers
             </span>
             <span>
-              <span className="text-foreground font-medium">{uniqueRelays || '—'}</span>
+              <span className="text-privacy-public-fg font-medium">{uniqueRelays || '—'}</span>
               {' '}relays
             </span>
           </div>

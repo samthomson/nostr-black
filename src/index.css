@@ -29,10 +29,25 @@
   --color-accent: var(--accent);
   --color-maroon: var(--maroon);
   --color-privacy-private: var(--privacy-private);
+  --color-privacy-private-fg: var(--privacy-private-fg);
+  --color-privacy-private-soft: var(--privacy-private-soft);
+  --color-privacy-private-muted: var(--privacy-private-muted);
   --color-privacy-high: var(--privacy-high);
+  --color-privacy-high-fg: var(--privacy-high-fg);
+  --color-privacy-high-soft: var(--privacy-high-soft);
+  --color-privacy-high-muted: var(--privacy-high-muted);
   --color-privacy-medium: var(--privacy-medium);
+  --color-privacy-medium-fg: var(--privacy-medium-fg);
+  --color-privacy-medium-soft: var(--privacy-medium-soft);
+  --color-privacy-medium-muted: var(--privacy-medium-muted);
   --color-privacy-low: var(--privacy-low);
+  --color-privacy-low-fg: var(--privacy-low-fg);
+  --color-privacy-low-soft: var(--privacy-low-soft);
+  --color-privacy-low-muted: var(--privacy-low-muted);
   --color-privacy-public: var(--privacy-public);
+  --color-privacy-public-fg: var(--privacy-public-fg);
+  --color-privacy-public-soft: var(--privacy-public-soft);
+  --color-privacy-public-muted: var(--privacy-public-muted);
   --color-accent-foreground: var(--accent-foreground);
   --color-maroon-foreground: var(--maroon-foreground);
 
@@ -81,13 +96,30 @@
   --accent-foreground: hsl(0 0% 98%);
 
   /* Privacy grades — the colour semantics: private is black, public is
-     white, greys between. Text on a grade is the inversion (see
-     src/lib/privacy.ts). */
+     white, greys between (see src/lib/privacy.ts). One scale per grade:
+     `bg` (surface), `fg` (complementary text, always readable on bg),
+     `soft` (subtle tinted surface for nested chrome), and `muted`
+     (soft text on bg). Components consume these — never raw greys. */
   --privacy-private: hsl(240 5% 10%);
+  --privacy-private-fg: hsl(240 5% 91%);
+  --privacy-private-soft: hsl(240 5% 15%);
+  --privacy-private-muted: hsl(240 5% 55%);
   --privacy-high: hsl(240 5% 22%);
+  --privacy-high-fg: hsl(240 5% 91%);
+  --privacy-high-soft: hsl(240 5% 27%);
+  --privacy-high-muted: hsl(240 5% 62%);
   --privacy-medium: hsl(240 5% 42%);
+  --privacy-medium-fg: hsl(240 5% 95%);
+  --privacy-medium-soft: hsl(240 5% 48%);
+  --privacy-medium-muted: hsl(240 5% 85%);
   --privacy-low: hsl(240 5% 68%);
+  --privacy-low-fg: hsl(240 5% 10%);
+  --privacy-low-soft: hsl(240 5% 61%);
+  --privacy-low-muted: hsl(240 5% 25%);
   --privacy-public: hsl(40 16% 91%);
+  --privacy-public-fg: hsl(240 5% 10%);
+  --privacy-public-soft: hsl(40 12% 85%);
+  --privacy-public-muted: hsl(240 5% 35%);
 
   /* Maroon: the one accent, used sparingly. */
   --maroon: hsl(0 60% 42%);
