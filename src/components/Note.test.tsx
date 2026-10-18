@@ -43,11 +43,11 @@ const Unlock = ({ nsec, children }: { nsec: string; children: ReactNode }) => {
   return children;
 };
 
-const note = (sk: Uint8Array, content: string): NostrEvent =>
+const note = (sk: Uint8Array, content: string, kind = 1, tags: string[][] = []): NostrEvent =>
   finalizeEvent({
-    kind: 1,
+    kind,
     created_at: Math.floor(Date.now() / 1000),
-    tags: [],
+    tags,
     content,
   }, sk);
 
@@ -216,6 +216,34 @@ describe('Note', () => {
 
     expect(await screen.findByText('the reposted words')).toBeTruthy();
     expect(screen.queryByText(/replying to/)).toBeNull();
+  });
+  it('a generic repost (kind 16) renders the embedded event, never its raw JSON', async () => {
+    const bob = generateSecretKey();
+    // The shape seen in the wild: Amethyst reposting a kind-1111 comment
+    // whose content is an image url — the wrapper carries the whole
+    // event as JSON in content.
+    const inner = note(bob, 'https://liminal.blossom.band/pic.jpg', 1111, [
+      ['r', 'https://liminal.blossom.band/pic.jpg'],
+      ['imeta', 'url https://liminal.blossom.band/pic.jpg', 'm image/jpeg'],
+    ]);
+    const repost = finalizeEvent({
+      kind: 16,
+      created_at: inner.created_at + 5,
+      content: JSON.stringify(inner),
+      tags: [['k', '1111'], ['e', inner.id], ['p', inner.pubkey]],
+    }, generateSecretKey());
+
+    render(
+      <TestApp>
+        <Note event={repost} />
+      </TestApp>,
+    );
+
+    // the embedded event renders as a note — its own counts row proves
+    // the nested Note mounted, and no JSON or raw url leaks as text
+    expect(await screen.findAllByTestId('note-counts')).toHaveLength(2);
+    expect(screen.queryByText(/"id":/)).toBeNull();
+    expect(screen.queryByText('https://liminal.blossom.band/pic.jpg')).toBeNull();
   });
   it('renders the replied-to parent as a full note when it is in the store', async () => {
     const parent = note(generateSecretKey(), 'the parent words');

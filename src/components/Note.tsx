@@ -218,9 +218,11 @@ const KIND_LABELS: Record<number, string> = {
   30023: 'long-form',
 };
 
-/** Embedded event of a kind 6 repost, if parseable. */
+/** Embedded event of a repost, if parseable: kind 6 wraps a note,
+ * kind 16 (NIP-18) wraps any other kind — both carry the event as
+ * JSON in content. Unparseable content renders as text, as before. */
 const repostedEvent = (event: NostrEvent | Rumor): NostrEvent | null => {
-  if (event.kind !== 6) return null;
+  if (event.kind !== 6 && event.kind !== 16) return null;
   try {
     return JSON.parse(event.content) as NostrEvent;
   } catch {
