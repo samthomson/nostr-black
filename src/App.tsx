@@ -43,6 +43,7 @@ const defaultConfig: AppConfig = {
   feedKinds: [...FEED_KINDS],
   defaultReaction: '+',
   mediaCacheMaxMb: 1024,
+  mediaMaxDownloadMb: 32,
 };
 
 export function App() {

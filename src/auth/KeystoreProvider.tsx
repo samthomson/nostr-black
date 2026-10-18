@@ -32,8 +32,11 @@ export const KeystoreProvider = ({ children }: { children: React.ReactNode }) =>
 
   // Identity is the cache key. Switching or dropping the key drops all
   // fetched data with it — one identity must never see another's store.
-  const wipeData = (): void => {
-    const identity = currentPubkey();
+  // The identity is captured by the caller BEFORE lock()/unlock()
+  // zeroes the keystore: read here instead, and logout would flush no
+  // one (null after lock) while an identity switch would flush the new
+  // identity's burners.
+  const wipeData = (identity: string | null): void => {
     void persister.wipe();
     store.clear();
     scheduler.invalidate();
@@ -43,16 +46,17 @@ export const KeystoreProvider = ({ children }: { children: React.ReactNode }) =>
   const login = useCallback((nsec: string): string => {
     const previous = currentPubkey();
     const pubkey = unlock(nsec);
-    if (previous !== null && previous !== pubkey) wipeData();
+    if (previous !== null && previous !== pubkey) wipeData(previous);
     setUnlockedState(true);
     setPk(pubkey);
     return pubkey;
   }, []);
 
   const logout = useCallback(() => {
+    const identity = currentPubkey();
     flushSession();
     lock();
-    wipeData();
+    wipeData(identity);
     setUnlockedState(false);
     setPk(null);
   }, []);

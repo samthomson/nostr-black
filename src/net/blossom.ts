@@ -101,13 +101,26 @@ export const blossomUpload = async (
 };
 
 /** Fetch raw bytes from a blossom server (or any https URL) — the
- * private-media path for ciphertext downloads. Web: fetch. Desktop: the
- * existing GET command, decoded from base64. */
-export const blossomBytes = async (url: string): Promise<Uint8Array> => {
+ * private-media path for ciphertext downloads. Web: fetch, with
+ * Content-Length pre-checked and the body capped at `maxBytes` (the
+ * user's mediaMaxDownloadMb setting threads through here). Desktop:
+ * the existing GET command, whose Rust side enforces its own 32 MB
+ * const cap (src-tauri/src/main.rs). */
+export const blossomBytes = async (url: string, maxBytes = 32 * 1024 * 1024): Promise<Uint8Array> => {
   if (!isDesktop()) {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`fetch failed: ${res.status}`);
-    return new Uint8Array(await res.arrayBuffer() as ArrayBuffer);
+    // Honest servers declare the size up front — reject before reading.
+    const declared = Number(res.headers.get('content-length') ?? Number.NaN);
+    if (declared > maxBytes) {
+      throw new Error(`media too large: ${declared} bytes exceeds ${maxBytes}`);
+    }
+    const ct = new Uint8Array(await res.arrayBuffer() as ArrayBuffer);
+    // Lying or length-free servers are caught by the body itself.
+    if (ct.length > maxBytes) {
+      throw new Error(`media too large: ${ct.length} bytes exceeds ${maxBytes}`);
+    }
+    return ct;
   }
   const { data } = await invoke<{ mime: string; data: string }>('fetch_asset', { url });
   return Uint8Array.from(atob(data), (c) => c.charCodeAt(0));

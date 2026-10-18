@@ -127,13 +127,36 @@ const renderContent = (content: string, grade: PrivacyGrade) =>
     });
 
 
+/** Long urls in gated-media duds, kept to one line: truncated, and
+ * wrapped anywhere (break-all) so no host runs the card wide. */
+const truncatedUrl = (url: string): string => (url.length > 80 ? `${url.slice(0, 77)}…` : url);
+
 /** One media item from an event: <img> or <video> (with controls), fetched
  * through the transport layer via useAsset. Failures are visible — a media
  * layer that fails silently is undebuggable. Images with `onOpen` zoom into
- * the note's lightbox. */
+ * the note's lightbox.
+ *
+ * With media off in settings the item renders a dud card — the url and an
+ * explicit load button — and fetches nothing until clicked: auto-fetching
+ * gated media would beacon every server it names. */
 const MediaItem = ({ url, alt, onOpen, tile = false }: { url: string; alt: string; onOpen?: () => void; tile?: boolean }) => {
-  const { url: src, error, ref } = useAsset(url);
+  const { config } = useAppContext();
+  const [loadRequested, setLoadRequested] = useState(false);
+  const auto = config.mediaEnabled || loadRequested;
+  const { url: src, error, ref } = useAsset(auto ? url : undefined);
   const frame = tile ? 'aspect-square w-full rounded-sm object-cover' : 'max-h-96 w-full rounded-sm object-cover';
+  if (!auto) {
+    return (
+      <div className="flex h-20 w-full flex-col items-center justify-center gap-1 rounded-sm border bg-muted px-2 text-center">
+        <span className="text-muted-foreground w-full break-all font-mono text-[10px]">
+          {truncatedUrl(url)}
+        </span>
+        <Button variant="outline" size="sm" onClick={() => setLoadRequested(true)}>
+          load
+        </Button>
+      </div>
+    );
+  }
   if (!src) {
     if (error) {
       return (
@@ -426,7 +449,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
    *  lets the feed-level default apply (first open pane's note). */
   anchored?: boolean;
   /** Present when the item is editable (private notes): publish a
-   * revision with this content. */
+   *  revision with this content. */
   onEdit?: (content: string) => void;
   /** Present when the parent owns deletion (a private note deletes its
    * whole conversation). Falls back to a single-event NIP-09. */
@@ -440,7 +463,6 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   children?: React.ReactNode;
 }) => {
   const { config } = useAppContext();
-  const showMedia = config.mediaEnabled;
   const { metadata, pending: authorPending } = useProfile(event.pubkey);
   const [expanded, setExpanded] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -579,8 +601,8 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const npub = npubOf(event.pubkey);
   const href = profileHref(event.pubkey);
   const embedded = repostedEvent(event);
-  const media = showMedia ? mediaUrls(event) : [];
-  const allMedia = showMedia ? [...media, ...(embedded ? mediaUrls(embedded) : [])] : [];
+  const media = mediaUrls(event);
+  const allMedia = [...media, ...(embedded ? mediaUrls(embedded) : [])];
   const isLongform = !embedded && event.kind === 30023;
   const longformTitle = isLongform
     ? event.tags.find(([n]) => n === 'title')?.[1]

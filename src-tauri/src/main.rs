@@ -315,6 +315,68 @@ fn guess_content_type(url: &str) -> &'static str {
     }
 }
 
+/// Hard cap on one downloaded media/response body — an unbounded
+/// read_to_end is a remote-controlled memory hose. The JS setting
+/// `mediaMaxDownloadMb` (default 32 MB) governs the JS-side checks
+/// (web fetch plus the pre-decrypt length check); this const governs
+/// the Rust transport, for media GETs and blossom responses alike.
+const MEDIA_MAX_BYTES: usize = 32 * 1024 * 1024;
+
+/// Read one HTTP/1.0 response off `io`: the header block first, then
+/// the body — Content-Length pre-checked against MEDIA_MAX_BYTES before
+/// the body is read, and the incremental read capped at the same bound
+/// so a lying or length-free body can never balloon memory. Returns
+/// (head, body) with the header terminator stripped.
+async fn read_http_response(
+    io: &mut (impl tokio::io::AsyncRead + Unpin),
+) -> Result<(String, Vec<u8>), String> {
+    use tokio::io::AsyncReadExt;
+    let mut raw = Vec::new();
+    let mut chunk = [0u8; 16 * 1024];
+    // Headers first, capped at 64 KiB — bigger is a broken or hostile server.
+    let head_end = loop {
+        if let Some(pos) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+            break pos;
+        }
+        if raw.len() > 64 * 1024 {
+            return Err("http response had no header terminator".into());
+        }
+        let n = io.read(&mut chunk).await.map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err("http response had no header terminator".into());
+        }
+        raw.extend_from_slice(&chunk[..n]);
+    };
+    let head = String::from_utf8_lossy(&raw[..head_end]).to_string();
+    // Content-Length pre-check: an honestly-declared oversized body is
+    // rejected before a byte of it is read.
+    let content_length = head.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        name.eq_ignore_ascii_case("content-length")
+            .then(|| value.trim().parse::<usize>().ok())
+            .flatten()
+    });
+    if content_length.is_some_and(|len| len > MEDIA_MAX_BYTES) {
+        return Err(format!("media too large: content-length over {MEDIA_MAX_BYTES} bytes"));
+    }
+    // Body: whatever the header read already carried past the
+    // terminator, then an incremental read — to Content-Length when
+    // declared, else to EOF (Connection: close) — hard-capped.
+    let mut body = raw.split_off(head_end + 4);
+    let limit = content_length.unwrap_or(MEDIA_MAX_BYTES).min(MEDIA_MAX_BYTES);
+    while body.len() < limit {
+        let n = io.read(&mut chunk).await.map_err(|e| e.to_string())?;
+        if n == 0 {
+            break;
+        }
+        body.extend_from_slice(&chunk[..n]);
+        if body.len() > MEDIA_MAX_BYTES {
+            return Err(format!("media too large: over {MEDIA_MAX_BYTES} bytes"));
+        }
+    }
+    Ok((head, body))
+}
+
 /// Media fetch over the current route (Tor or direct): TLS + minimal HTTP/1.1
 /// GET, hard-capped at 30s — a stalled Tor stream must fail visibly, not
 /// hang the caller forever.
@@ -341,8 +403,9 @@ async fn http_get_media_inner(url: &str) -> Result<Vec<u8>, String> {
     let stream = connect_stream(&host, port).await?;
     // TLS over the stream, then a minimal HTTP/1.0 GET — 1.0 so servers
     // can't use chunked transfer-encoding (we don't de-chunk; chunks would
-    // corrupt image bytes). Connection: close lets read_to_end find the end.
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    // corrupt image bytes). Connection: close ends the body at EOF; the
+    // capped reader bounds what a server can make us buffer.
+    use tokio::io::AsyncWriteExt;
     let connector = tokio_native_tls::TlsConnector::from(
         native_tls::TlsConnector::new().map_err(|e| e.to_string())?,
     );
@@ -355,20 +418,13 @@ async fn http_get_media_inner(url: &str) -> Result<Vec<u8>, String> {
     );
     tls.write_all(request.as_bytes()).await.map_err(|e| e.to_string())?;
 
-    let mut body = Vec::new();
-    tls.read_to_end(&mut body).await.map_err(|e| e.to_string())?;
     // Split headers from body; reject non-2xx so broken images don't cache.
-    if let Some(pos) = body.windows(4).position(|w| w == b"\r\n\r\n") {
-        let head = String::from_utf8_lossy(&body[..pos]).to_string();
-        let status = head.lines().next().unwrap_or_default().to_string();
-        if !status.contains("200") {
-            return Err(format!("http status: {status}"));
-        }
-        body.drain(..pos + 4);
-        Ok(body)
-    } else {
-        Err("http response had no header terminator".into())
+    let (head, body) = read_http_response(&mut tls).await?;
+    let status = head.lines().next().unwrap_or_default().to_string();
+    if !status.contains("200") {
+        return Err(format!("http status: {status}"));
     }
+    Ok(body)
 }
 
 /// Blossom upload (BUD-01): PUT raw bytes with a Nostr auth header, over
@@ -412,7 +468,7 @@ async fn blossom_put_inner(
     let (host, port) = parse_host_port(&host);
 
     let stream = connect_stream(&host, port).await?;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::io::AsyncWriteExt;
     let connector = tokio_native_tls::TlsConnector::from(
         native_tls::TlsConnector::new().map_err(|e| e.to_string())?,
     );
@@ -427,21 +483,17 @@ async fn blossom_put_inner(
     tls.write_all(request.as_bytes()).await.map_err(|e| e.to_string())?;
     tls.write_all(body).await.map_err(|e| e.to_string())?;
 
-    let mut response = Vec::new();
-    tls.read_to_end(&mut response).await.map_err(|e| e.to_string())?;
-    if let Some(pos) = response.windows(4).position(|w| w == b"\r\n\r\n") {
-        let head = String::from_utf8_lossy(&response[..pos]).to_string();
-        let status = head.lines().next().unwrap_or_default().to_string();
-        let code = status.split_whitespace().nth(1).unwrap_or("");
-        if !code.starts_with('2') {
-            return Err(format!("http status: {status}"));
-        }
-        response.drain(..pos + 4);
-        use base64::Engine as _;
-        Ok(base64::engine::general_purpose::STANDARD.encode(&response))
-    } else {
-        Err("http response had no header terminator".into())
+    // The response is the blob descriptor JSON — read through the same
+    // capped reader as media GETs so a hostile server can't balloon
+    // memory with an endless response.
+    let (head, response) = read_http_response(&mut tls).await?;
+    let status = head.lines().next().unwrap_or_default().to_string();
+    let code = status.split_whitespace().nth(1).unwrap_or("");
+    if !code.starts_with('2') {
+        return Err(format!("http status: {status}"));
     }
+    use base64::Engine as _;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&response))
 }
 
 /// Headless transport self-test: `nostr-black --selftest <wss-url>`
@@ -555,4 +607,37 @@ fn main() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_http_response;
+
+    async fn read(bytes: &[u8]) -> Result<(String, Vec<u8>), String> {
+        let mut io = bytes;
+        read_http_response(&mut io).await
+    }
+
+    #[tokio::test]
+    async fn splits_head_from_body() {
+        let (head, body) = read(b"HTTP/1.0 200 OK\r\nContent-Length: 5\r\n\r\nhello")
+            .await
+            .unwrap();
+        assert!(head.starts_with("HTTP/1.0 200"));
+        assert_eq!(body, b"hello");
+    }
+
+    #[tokio::test]
+    async fn rejects_a_declared_content_length_over_the_cap() {
+        let len = super::MEDIA_MAX_BYTES + 1;
+        let raw = format!("HTTP/1.0 200 OK\r\nContent-Length: {len}\r\n\r\nhi");
+        let err = read(raw.as_bytes()).await.unwrap_err();
+        assert!(err.contains("media too large"), "{err}");
+    }
+
+    #[tokio::test]
+    async fn rejects_a_response_without_a_header_terminator() {
+        let err = read(b"not http at all").await.unwrap_err();
+        assert!(err.contains("no header terminator"));
+    }
 }

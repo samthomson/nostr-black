@@ -21,6 +21,10 @@ export interface AppConfig {
   feedKinds: number[];
   /** Desktop only: media cache budget in MB. */
   mediaCacheMaxMb: number;
+  /** Max size of a single downloaded media item, in MB (default 32).
+   * Oversized downloads are rejected with a visible error — a remote
+   * server must never decide how much memory we allocate. */
+  mediaMaxDownloadMb: number;
   /** The emoji a plain heart-click broadcasts. */
   defaultReaction: string;
 }

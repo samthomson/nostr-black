@@ -279,6 +279,29 @@ describe('Note', () => {
       'https://example.com/a.png',
     );
   });
+
+  it('with media off, an image renders a click-to-load dud and no img', async () => {
+    window.localStorage.setItem('test-app-config', JSON.stringify({ mediaEnabled: false }));
+    const user = userEvent.setup();
+    const event = note(generateSecretKey(), 'gated pic https://example.com/a.png');
+
+    render(
+      <TestApp>
+        <Note event={event} />
+      </TestApp>,
+    );
+
+    // the dud shows the url and a load button; nothing is rendered as media
+    expect(await screen.findByText('https://example.com/a.png')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'open image' })).toBeNull();
+    expect(document.querySelector('img.max-h-96')).toBeNull();
+
+    // clicking loads just that item
+    await user.click(screen.getByRole('button', { name: 'load' }));
+    await waitFor(() => {
+      expect(document.querySelector('img.max-h-96')).toHaveAttribute('src', 'https://example.com/a.png');
+    });
+  });
   it('renders a longform as title, stripped body (clamped like a note) and cover — never raw markdown', async () => {
     const event = finalizeEvent({
       kind: 30023,

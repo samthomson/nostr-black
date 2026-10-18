@@ -21,6 +21,7 @@ const AppConfigSchema = z.object({
   imageCompression: z.boolean(),
   feedKinds: z.array(z.number()),
   mediaCacheMaxMb: z.number(),
+  mediaMaxDownloadMb: z.number(),
   defaultReaction: z.string(),
 }) satisfies z.ZodType<AppConfig>;
 

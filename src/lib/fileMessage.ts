@@ -130,10 +130,19 @@ export const mediaImagesOf = (rumor: Rumor): PrivateImage[] => {
 /**
  * Fetch, integrity-check, and decrypt one attachment to a blob url
  * ready for <img>. A wrong sha256 or a failed GCM open throws — corrupt
- * or substituted storage must surface, never render.
+ * or substituted storage must surface, never render. Ciphertext longer
+ * than `maxBytes` (default 32 MB, mirroring the mediaMaxDownloadMb
+ * default) is rejected before the GCM open — over-cap media is a
+ * visible error, never a silent skip.
  */
-export const loadPrivateImage = async (image: PrivateImage): Promise<{ blobUrl: string; mime: string }> => {
-  const ct = await blossomBytes(image.url);
+export const loadPrivateImage = async (
+  image: PrivateImage,
+  maxBytes = 32 * 1024 * 1024,
+): Promise<{ blobUrl: string; mime: string }> => {
+  const ct = await blossomBytes(image.url, maxBytes);
+  if (ct.length > maxBytes) {
+    throw new Error(`media too large: ${ct.length} bytes exceeds ${maxBytes}`);
+  }
   if (image.x && bytesToHex(sha256(ct)) !== image.x) {
     throw new Error('private image integrity check failed');
   }

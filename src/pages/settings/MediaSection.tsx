@@ -9,12 +9,21 @@ export const MediaSection = () => {
   const { config, updateConfig } = useAppContext();
   const mediaCache = useMediaCache();
   const [maxMb, setMaxMbInput] = useState(String(config.mediaCacheMaxMb));
+  const [maxDownloadMb, setMaxDownloadMbInput] = useState(String(config.mediaMaxDownloadMb));
 
   const saveCacheMax = async () => {
     const mb = Math.max(1, Math.floor(Number(maxMb) || 0));
     await mediaCache.setMaxMb(mb);
     updateConfig((current) => ({ ...current, mediaCacheMaxMb: mb }));
     setMaxMbInput(String(mb));
+  };
+
+  /** One media download over the cap is rejected with a visible error —
+   * a server must never decide how much memory we allocate. */
+  const saveMaxDownload = () => {
+    const mb = Math.max(1, Math.floor(Number(maxDownloadMb) || 0));
+    updateConfig((current) => ({ ...current, mediaMaxDownloadMb: mb }));
+    setMaxDownloadMbInput(String(mb));
   };
 
   const clearCache = () => mediaCache.clear();
@@ -25,23 +34,24 @@ export const MediaSection = () => {
         <input
           type="checkbox"
           className="size-4 accent-foreground"
-          checked={config.mediaEnabled}
-          onChange={(e) =>
-            updateConfig((current) => ({ ...current, mediaEnabled: e.target.checked }))}
-        />
-        show images and video
-      </label>
-
-      <label className="flex cursor-pointer items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          className="size-4 accent-foreground"
           checked={config.imageCompression}
           onChange={(e) =>
             updateConfig((current) => ({ ...current, imageCompression: e.target.checked }))}
         />
         compress images on upload
       </label>
+
+      <div className="flex items-center gap-2">
+        <input
+          className="w-20 rounded-sm border bg-transparent px-2 py-1 font-mono text-xs"
+          value={maxDownloadMb}
+          onChange={(e) => setMaxDownloadMbInput(e.target.value)}
+          onBlur={saveMaxDownload}
+          inputMode="numeric"
+          aria-label="max media download MB"
+        />
+        <span className="text-muted-foreground text-xs">MB max per download — larger media is rejected</span>
+      </div>
 
       {mediaCache.enabled && (
         <div className="space-y-1 pt-1">

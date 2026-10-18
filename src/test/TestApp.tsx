@@ -53,6 +53,7 @@ export function TestApp({ children, userState }: TestAppProps) {
     feedKinds: [...FEED_KINDS],
     defaultReaction: "+",
     mediaCacheMaxMb: 1024,
+    mediaMaxDownloadMb: 32,
   };
 
   return (

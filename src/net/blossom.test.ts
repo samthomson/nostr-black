@@ -2,8 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { generateSecretKey, getPublicKey, verifyEvent } from 'nostr-tools';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
-import { blossomAuth, blossomUpload } from './blossom';
-
+import { blossomAuth, blossomBytes, blossomUpload } from './blossom';
 const bytes = (n: number): Uint8Array => Uint8Array.from({ length: n }, (_, i) => i % 251);
 
 describe('blossomAuth', () => {
@@ -78,5 +77,38 @@ describe('blossomUpload', () => {
     respond(200, 'not json');
     await expect(blossomUpload(bytes(16), 'image/png', 'https://srv/', sk)).rejects.toThrow('non-JSON');
     void sha256hex;
+  });
+});
+
+describe('blossomBytes', () => {
+  const fetchMock = vi.fn<typeof fetch>();
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+    return () => vi.unstubAllGlobals();
+  });
+
+  it('returns the fetched bytes', async () => {
+    const payload = new Uint8Array(bytes(8));
+    fetchMock.mockResolvedValue(new Response(payload));
+    await expect(blossomBytes('https://srv/abc')).resolves.toEqual(payload);
+  });
+
+  it('rejects a declared content-length over the cap before reading the body', async () => {
+    fetchMock.mockResolvedValue(new Response(new Uint8Array(bytes(4)), {
+      headers: { 'content-length': '999' },
+    }));
+    await expect(blossomBytes('https://srv/abc', 16)).rejects.toThrow('media too large');
+  });
+
+  it('rejects a body over the cap when the length is absent or lies', async () => {
+    fetchMock.mockResolvedValue(new Response(new Uint8Array(bytes(32))));
+    await expect(blossomBytes('https://srv/abc', 16)).rejects.toThrow('media too large');
+  });
+
+
+  it('rejects non-2xx', async () => {
+    fetchMock.mockResolvedValue(new Response('nope', { status: 404 }));
+    await expect(blossomBytes('https://srv/abc')).rejects.toThrow('404');
   });
 });

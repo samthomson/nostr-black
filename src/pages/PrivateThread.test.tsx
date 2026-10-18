@@ -265,6 +265,47 @@ describe('PrivateThreadPage', () => {
     expect(replyText.compareDocumentPosition(images[1]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it('with media off, a private image renders a dud and its ciphertext is never fetched', async () => {
+    window.localStorage.setItem('test-app-config', JSON.stringify({ mediaEnabled: false }));
+    const alice = generateSecretKey();
+    const bob = generateSecretKey();
+    const offer = requestConnection(alice, getPublicKey(bob));
+    const accepted = acceptConnection(bob, openConnection(bob, offer));
+    const { rumor, replyCek } = makeRumor(getPublicKey(alice), 'secret with a picture');
+    const image = encryptImage(replyCek, new Uint8Array([1, 2, 3, 4, 5]));
+    const uploaded = { ...image, mime: 'image/png', url: 'https://cdn.example/one' };
+    const mediaRumor = remintRumor(rumor, { tags: [...rumor.tags, ...mediaTags([uploaded], replyCek)] });
+    const [note] = wrapPrivateNote(alice, [getPublicKey(bob)], mediaRumor);
+
+    queryRelay.mockImplementation(async (_url, filters) => {
+      if (filters[0].kinds?.includes(30378)) return [accepted];
+      if (filters[0]['#f']) return [note];
+      return [];
+    });
+
+    renderThread(nip19.nsecEncode(bob), mediaRumor.id);
+    await settle();
+    await settle();
+    await settle();
+
+    // the dud shows the url with a load button; the ciphertext — a read
+    // receipt for the hosting server — is never fetched
+    expect(await screen.findByText('secret with a picture')).toBeTruthy();
+    expect(screen.getByText('https://cdn.example/one')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'load' })).toBeTruthy();
+    expect(fetchBlob).not.toHaveBeenCalled();
+    // clicking loads just that image, capped at the configured max
+    fetchBlob.mockResolvedValue(image.ct);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'load' }));
+    await waitFor(() => {
+      expect(fetchBlob).toHaveBeenCalledWith('https://cdn.example/one');
+    });
+    await waitFor(() => {
+      expect(document.querySelector('img.max-h-96')?.getAttribute('src')).toMatch(/^blob:/);
+    });
+  });
+
   it('replying with an image uploads its ciphertext only after confirm; the imeta tag rides the reply rumor', async () => {
     const alice = generateSecretKey();
     const bob = generateSecretKey();

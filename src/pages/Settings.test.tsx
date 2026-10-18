@@ -39,16 +39,32 @@ describe('SettingsPage', () => {
     expect(window.location.pathname).toBe('/settings/network');
   });
 
-  it('renders network, media, and account panels', async () => {
+  it('renders network, media, privacy, and account panels', async () => {
     renderAt('/settings/network');
     expect(await screen.findByText('your relays — where others find you (NIP-65)')).toBeTruthy();
 
     const { unmount: u1 } = renderAt('/settings/media');
-    expect(await screen.findByText('show images and video')).toBeTruthy();
+    expect(await screen.findByText('compress images on upload')).toBeTruthy();
     u1();
+
+    const { unmount: u2 } = renderAt('/settings/privacy');
+    expect(await screen.findByText('show images and video')).toBeTruthy();
+    u2();
 
     renderAt('/settings/account');
     expect(await screen.findByText(/logged in as/)).toBeTruthy();
+  });
+
+  it('privacy panel holds the media gate and the disabled exif strip todo', async () => {
+    renderAt('/settings/privacy');
+    const toggle = await screen.findByLabelText('show images and video');
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeEnabled();
+
+    const exif = screen.getByLabelText(/strip image metadata on upload/);
+    expect(exif).not.toBeChecked();
+    expect(exif).toBeDisabled();
+    expect(screen.getByText('(todo)')).toBeTruthy();
   });
 
   it('redirects unknown sections to network', async () => {
@@ -62,8 +78,8 @@ describe('SettingsPage', () => {
     renderAt('/settings/network');
     expect(await screen.findByText('your relays — where others find you (NIP-65)')).toBeTruthy();
 
-    await user.click(screen.getByRole('link', { name: 'media' }));
+    await user.click(screen.getByRole('link', { name: 'privacy' }));
     expect(await screen.findByText('show images and video')).toBeTruthy();
-    expect(window.location.pathname).toBe('/settings/media');
+    expect(window.location.pathname).toBe('/settings/privacy');
   });
 });

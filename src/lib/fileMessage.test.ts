@@ -114,6 +114,18 @@ describe('fileMessage', () => {
     })).rejects.toThrow('integrity');
   });
 
+  it('rejects ciphertext over the cap before decrypting — media too large, never silent', async () => {
+    const replyCek = randomBytes(32);
+    const encrypted = encryptImage(replyCek, bytes(512));
+    vi.mocked(blossomBytes).mockResolvedValue(encrypted.ct); // 540 bytes > 256
+    await expect(loadPrivateImage({
+      url: 'https://blossom.example/x', mime: 'image/webp', key: bytesToHex(replyCek),
+      x: encrypted.x, ox: encrypted.ox, nonce: encrypted.nonce,
+    }, 256)).rejects.toThrow('media too large');
+    // the configured cap threads down to the fetch, not just the guard
+    expect(blossomBytes).toHaveBeenCalledWith('https://blossom.example/x', 256);
+  });
+
   it('throws when GCM cannot open tampered ciphertext', async () => {
     const replyCek = randomBytes(32);
     const encrypted = encryptImage(replyCek, bytes(512));
