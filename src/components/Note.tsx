@@ -230,18 +230,64 @@ const repostedEvent = (event: NostrEvent | Rumor): NostrEvent | null => {
   }
 };
 
-/** The media grid — the one layout for a note's images/videos, used by
- * the note body and embedded notes alike. */
-const MediaGrid = ({ urls, alt, onOpen }: { urls: readonly string[]; alt: string; onOpen?: (index: number) => void }) => {
-  if (urls.length === 0) return null;
-  const tile = urls.length > 1;
+import { CarouselNav } from '@/components/CarouselNav';
+
+/** Hidden loader — mounting it pulls the image through the transport
+ * (memory-cached, so a later mount renders instantly). Rendered when the
+ * user first interacts with a carousel: seeing one picture signals the
+ * intent to step through the rest. */
+const CarouselPreload = ({ url }: { url: string }) => {
+  useAsset(url);
+  return null;
+};
+
+/** A note's images when there are several: one at a time in a fixed
+ * stage (loading/absent images never resize the note), stepped through
+ * with the lightbox's nav chrome. The first mousedown on the carousel
+ * preloads every other image. The showing image opens the note's
+ * lightbox on that image, like any other media click. */
+const MediaCarousel = ({ urls, alt, onOpen }: { urls: readonly string[]; alt: string; onOpen: (index: number) => void }) => {
+  const { config } = useAppContext();
+  const [index, setIndex] = useState(0);
+  const [engaged, setEngaged] = useState(false);
+  const show = urls[index]!;
   return (
-    <div className={`mt-1 gap-1 ${tile ? 'grid grid-cols-2' : 'flex'}`}>
-      {urls.map((url, i) => (
-        <MediaItem key={url} url={url} alt={alt} tile={tile} onOpen={onOpen ? () => onOpen(i) : undefined} />
+    <div
+      className="mt-1"
+      data-testid="media-carousel"
+      onMouseDown={() => setEngaged(true)}
+    >
+      <div className="aspect-[4/3] w-full overflow-hidden rounded-sm bg-muted">
+        <div className="flex size-full items-center justify-center">
+          <MediaItem url={show} alt={alt} onOpen={() => onOpen(index)} />
+        </div>
+      </div>
+      <CarouselNav count={urls.length} index={index} onIndex={setIndex} />
+      {engaged && config.mediaEnabled && urls.map((url) => (
+        url === show ? null : <CarouselPreload key={url} url={url} />
       ))}
     </div>
   );
+};
+
+/** The media layout for a note: one image renders alone; several render
+ * as the carousel. Used by the note body and embedded notes alike. */
+const MediaGrid = ({ urls, alt, onOpen }: { urls: readonly string[]; alt: string; onOpen?: (index: number) => void }) => {
+  if (urls.length === 0) return null;
+  if (urls.length === 1) {
+    return <div className="mt-1 flex"><MediaItem url={urls[0]!} alt={alt} onOpen={onOpen ? () => onOpen(0) : undefined} /></div>;
+  }
+  if (!onOpen) {
+    // No lightbox to open (a context render): fall back to tiles.
+    return (
+      <div className="mt-1 grid grid-cols-2 gap-1">
+        {urls.map((url) => (
+          <MediaItem key={url} url={url} alt={alt} tile />
+        ))}
+      </div>
+    );
+  }
+  return <MediaCarousel urls={urls} alt={alt} onOpen={onOpen} />;
 };
 
 

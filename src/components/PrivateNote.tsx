@@ -3,7 +3,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { nip19 } from 'nostr-tools';
 import { Note, ReplyCount } from '@/components/Note';
 import { Lightbox } from '@/components/Lightbox';
-import { PrivateMedia } from '@/components/PrivateMedia';
+import { PrivateMedia, PrivateMediaCarousel } from '@/components/PrivateMedia';
 import { decryptedUrlOf } from '@/components/privateMediaCache';
 import { Composer } from '@/components/Composer';
 import { EngagementCount, type EngagementRow } from '@/components/EngagementDialog';
@@ -95,17 +95,23 @@ export const PrivateItem = ({
       >
         {(() => {
           const images = mediaImagesOf(rumor);
-          return images.length > 0 ? (
-            <div className="space-y-1 pt-1">
-              {images.map((image) => (
+          if (images.length === 0) return null;
+          if (images.length === 1) {
+            return (
+              <div className="space-y-1 pt-1">
                 <PrivateMedia
-                  key={image.url}
-                  image={image}
+                  image={images[0]!}
                   onOpen={(blobUrl) => setOpenMedia(decryptedImages.indexOf(blobUrl))}
                 />
-              ))}
-            </div>
-          ) : null;
+              </div>
+            );
+          }
+          return (
+            <PrivateMediaCarousel
+              images={images}
+              onOpen={(index) => setOpenMedia(index)}
+            />
+          );
         })()}
         {/* Deliberate divergence from the public counts row: no repost.
             A public kind 6 would leak the sealed rumor, and "reposting"

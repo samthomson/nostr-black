@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react';
 import { loadPrivateImage, type PrivateImage } from '@/lib/fileMessage';
 import { useAppContext } from '@/hooks/useAppContext';
 import { LightboxTrigger } from '@/components/Lightbox';
+import { CarouselNav } from '@/components/CarouselNav';
 import { Button } from '@/components/ui/button';
 import { CACHE_MAX, cache, type OpenedImage } from '@/components/privateMediaCache';
 
@@ -118,5 +119,65 @@ export const PrivateMedia = ({
     >
       <img src={loaded.blobUrl} alt="" className="max-h-96 w-full rounded-sm object-cover" />
     </LightboxTrigger>
+  );
+};
+
+/**
+ * A private note's images when there are several: one at a time in a
+ * fixed stage (loading/absent images never resize the note), stepped
+ * through with the lightbox's nav chrome. The first mousedown decrypts
+ * every other image into the shared cache — stepping is then instant.
+ * The showing image opens the conversation's lightbox on that image.
+ */
+export const PrivateMediaCarousel = ({
+  images,
+  onOpen,
+}: {
+  images: readonly PrivateImage[];
+  onOpen: (index: number) => void;
+}) => {
+  const { config } = useAppContext();
+  const [index, setIndex] = useState(0);
+  const [engaged, setEngaged] = useState(false);
+  const maxBytes = config.mediaMaxDownloadMb * 1024 * 1024;
+
+  useEffect(() => {
+    if (!engaged || !config.mediaEnabled) return;
+    for (const image of images) {
+      const x = image.x;
+      if (x === undefined || cache.has(x) || inflight.has(x)) continue;
+      void loadOf(x, image, maxBytes).then((opened) => {
+        cache.set(x, opened);
+        while (cache.size > CACHE_MAX) {
+          const oldest = cache.keys().next().value;
+          if (oldest === undefined) break;
+          const evicted = cache.get(oldest);
+          cache.delete(oldest);
+          if (evicted) URL.revokeObjectURL(evicted.blobUrl);
+        }
+      }).catch(() => {
+        // Prefetch is best-effort: PrivateMedia surfaces the real error
+        // when the user actually steps to that image.
+      });
+    }
+  }, [engaged, images, maxBytes, config.mediaEnabled]);
+
+  return (
+    <div
+      className="pt-1"
+      data-testid="media-carousel"
+      onMouseDown={() => setEngaged(true)}
+    >
+      <div className="aspect-[4/3] w-full overflow-hidden rounded-sm bg-muted">
+        <div className="flex size-full items-center justify-center">
+          <PrivateMedia
+            key={images[index]!.url}
+            image={images[index]!}
+            onOpen={() => onOpen(index)}
+          />
+        </div>
+      </div>
+      <CarouselNav count={images.length} index={index} onIndex={setIndex} />
+    </div>
   );
 };

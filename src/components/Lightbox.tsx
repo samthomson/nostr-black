@@ -102,8 +102,9 @@ export const Lightbox = ({
   );
 };
 
-/** Ghost arrow — the modal's own colour, no filled background. */
-const NavButton = ({ label, disabled, onClick, children }: {
+/** Ghost arrow — the modal's own colour, no filled background. Shared
+ * with the note carousel's navigation. */
+export const NavButton = ({ label, disabled, onClick, children }: {
   label: string;
   disabled?: boolean;
   onClick: () => void;

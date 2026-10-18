@@ -275,7 +275,7 @@ describe('Note', () => {
     // Renders the raw bech32 as plain text instead of throwing in nip19.decode.
     expect(await screen.findByText('npub1')).toBeTruthy();
   });
-  it('opens a lightbox with all note images from a feed image click', async () => {
+  it('multi-image notes render a carousel; clicking opens the lightbox on the showing image', async () => {
     const user = userEvent.setup();
     const event = note(
       generateSecretKey(),
@@ -288,23 +288,30 @@ describe('Note', () => {
       </TestApp>,
     );
 
-    // Both images render inline; clicking either opens the lightbox on it.
+    // the carousel shows one image at a time — the note stays one image tall
+    expect(screen.getByTestId('media-carousel')).toBeTruthy();
     const openers = await screen.findAllByRole('button', { name: 'open image' });
-    expect(openers).toHaveLength(2);
-    await user.click(openers[1]);
-
-    const dialog = screen.getByRole('dialog');
-    expect(dialog.querySelector('img:not([aria-hidden])')).toHaveAttribute(
-      'src',
-      'https://example.com/b.png',
-    );
+    expect(openers).toHaveLength(1);
+    expect(document.querySelectorAll('img.max-h-96')).toHaveLength(1);
+    // the lightbox nav chrome: prev/next + one dot per image
+    expect(screen.getByTestId('carousel-nav')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: /^image \d$/ })).toHaveLength(2);
-    expect(screen.queryByTestId('lightbox-counter')).toBeNull();
 
-    await user.click(screen.getByRole('button', { name: 'previous image' }));
+    // the showing image (a.png first) opens the lightbox on that image
+    await user.click(openers[0]!);
     expect(screen.getByRole('dialog').querySelector('img:not([aria-hidden])')).toHaveAttribute(
       'src',
       'https://example.com/a.png',
+    );
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+    // stepping the carousel to the second image, then clicking, opens on b.png
+    await user.click(screen.getByRole('button', { name: 'next image' }));
+    await user.click(screen.getAllByRole('button', { name: 'open image' })[0]!);
+    expect(screen.getByRole('dialog').querySelector('img:not([aria-hidden])')).toHaveAttribute(
+      'src',
+      'https://example.com/b.png',
     );
   });
 
