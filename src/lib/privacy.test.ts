@@ -10,17 +10,25 @@ describe('privacy grades', () => {
   });
 
   it('darker grades take light text, lighter grades take dark text', () => {
-    // black through mid-grey: inverted (light) text
+    // black through mid-grey: light complementary text — each grade's own
+    // -fg token, never a raw theme colour
     for (const grade of ['private', 'high', 'medium'] as const) {
-      expect(PRIVACY[grade].fg).toBe('var(--privacy-public)');
-      expect(PRIVACY[grade].className).toContain('text-privacy-public');
-      expect(PRIVACY[grade].className).toContain('hover:text-privacy-public');
+      expect(PRIVACY[grade].fg).toBe(`var(--privacy-${grade}-fg)`);
+      expect(PRIVACY[grade].className).toContain(`text-privacy-${grade}-fg`);
+      expect(PRIVACY[grade].className).toContain(`hover:text-privacy-${grade}-fg`);
     }
     // light grey through white: dark text
     for (const grade of ['low', 'public'] as const) {
-      expect(PRIVACY[grade].fg).toBe('var(--privacy-private)');
-      expect(PRIVACY[grade].className).toContain('text-privacy-private');
-      expect(PRIVACY[grade].className).toContain('hover:text-privacy-private');
+      expect(PRIVACY[grade].fg).toBe(`var(--privacy-${grade}-fg)`);
+      expect(PRIVACY[grade].className).toContain(`text-privacy-${grade}-fg`);
+      expect(PRIVACY[grade].className).toContain(`hover:text-privacy-${grade}-fg`);
+    }
+  });
+
+  it('every grade defines the full scale: soft surface and muted text', () => {
+    for (const grade of PRIVACY_ORDER) {
+      expect(PRIVACY[grade].soft).toBe(`var(--privacy-${grade}-soft)`);
+      expect(PRIVACY[grade].muted).toBe(`var(--privacy-${grade}-muted)`);
     }
   });
 

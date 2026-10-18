@@ -83,7 +83,7 @@ describe('Lightbox', () => {
     const { rerender } = renderAt(0, vi.fn(), 'private');
     const dialog = screen.getByRole('dialog');
     expect(dialog.style.backgroundColor).toBe('var(--privacy-private)');
-    expect(dialog.style.color).toBe('var(--privacy-public)');
+    expect(dialog.style.color).toBe('var(--privacy-private-fg)');
 
     rerender(<Lightbox urls={urls} index={0} onIndex={vi.fn()} onClose={vi.fn()} alt="note media" grade="public" />);
     expect(screen.getByRole('dialog').style.backgroundColor).toBe('var(--privacy-public)');

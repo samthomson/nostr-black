@@ -19,6 +19,7 @@ import { Composer } from '@/components/Composer';
 
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
+import { ProfileHoverCard } from '@/components/ProfileHoverCard';
 import { useColumns } from '@/components/columns/columnsState';
 import { useAsset } from '@/hooks/useAsset';
 import { profileHref, eventHref, npubOf, formatTimestamp } from '@/lib/format';
@@ -80,10 +81,20 @@ const NostrRef = ({ bech32, grade }: { bech32: string; grade: PrivacyGrade }) =>
     label = 'note';
   }
 
+  // Mentions of a person get the hover card; note refs stay plain links.
+  if (!pubkey) {
+    return (
+      <Link to={`/${bech32}`} className={cn(refClass(grade), 'underline underline-offset-2')}>
+        @{label}
+      </Link>
+    );
+  }
   return (
-    <Link to={`/${bech32}`} className={cn(refClass(grade), 'underline underline-offset-2')}>
-      @{label}
-    </Link>
+    <ProfileHoverCard pubkey={pubkey}>
+      <Link to={`/${bech32}`} className={cn(refClass(grade), 'underline underline-offset-2')}>
+        @{label}
+      </Link>
+    </ProfileHoverCard>
   );
 };
 
@@ -251,10 +262,12 @@ const ReplyContext = ({
   return (
     <div className="text-muted-foreground flex items-center gap-1 text-xs">
       <CornerDownRight className="size-3" />
-      {href ? (
-        <Link to={href} className="underline underline-offset-2 hover:decoration-foreground">
-          replying to {name ?? shortNpub}
-        </Link>
+      {parentPubkey && href ? (
+        <ProfileHoverCard pubkey={parentPubkey}>
+          <Link to={href} className="underline underline-offset-2 hover:decoration-foreground">
+            replying to {name ?? shortNpub}
+          </Link>
+        </ProfileHoverCard>
       ) : (
         <span>replying to…</span>
       )}
@@ -701,9 +714,11 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-baseline gap-2">
             {href ? (
-              <Link to={href} className="truncate text-sm font-bold hover:underline">
-                {displayName ?? `${npub.slice(0, 10)}…`}
-              </Link>
+              <ProfileHoverCard pubkey={event.pubkey}>
+                <Link to={href} className="truncate text-sm font-bold hover:underline">
+                  {displayName ?? `${npub.slice(0, 10)}…`}
+                </Link>
+              </ProfileHoverCard>
             ) : (
               <span className="truncate text-sm font-bold">
                 {displayName ?? `${npub.slice(0, 10)}…`}
