@@ -112,6 +112,10 @@ const xhrUpload = (
   xhr.open('PUT', endpoint);
   xhr.setRequestHeader('Authorization', authorization);
   xhr.setRequestHeader('Content-Type', type);
+  // Match the desktop transport's 300s cap (src-tauri/src/main.rs): a
+  // hung server must surface as a retryable timeout, not an infinite
+  // spinner the only escape from which is cancel.
+  xhr.timeout = 300_000;
   xhr.upload.onprogress = (e) => {
     if (e.lengthComputable) onProgress?.(e.loaded, e.total);
   };
