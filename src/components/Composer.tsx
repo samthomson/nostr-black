@@ -155,6 +155,14 @@ export const Composer = ({
         onClick={syncTypeahead}
         placeholder={placeholder}
         aria-label={placeholder}
+        rows={1}
+        className={cn(
+          'block w-full resize-none overflow-y-auto border-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground',
+          variant !== 'edit' && (grade === 'private' ? 'placeholder:text-privacy-private-muted' : 'placeholder:text-privacy-public-muted'),
+          compact
+            ? 'max-h-24 min-h-8 px-3 py-1.5'
+            : 'max-h-40 min-h-12 px-4 py-3 transition-[height] duration-200 ease-out',
+        )}
         onBlur={(e) => {
           // moving focus into the typeahead dropdown must not close it —
           // only a blur to somewhere else does
