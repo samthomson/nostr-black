@@ -50,7 +50,11 @@ export interface PendingBroadcast {
   labels?: readonly string[];
   uploads?: PendingUploads;
   buildEvents?: (uploaded: readonly UploadedFile[]) => readonly NostrEvent[] | Promise<readonly NostrEvent[]>;
-  controls?: ReactNode;
+  /** Rebuild this broadcast signed by the given key — the identity
+   *  choice behind the modal's standard burner switch (null = the real
+   *  identity). Present only where identity is a choice; deletions and
+   *  own-record writes are pinned and omit it. May re-sign async. */
+  setBurner?: (sk: Uint8Array | null) => PendingBroadcast | Promise<PendingBroadcast>;
   /** Present when the payload is revisable text: re-signs/re-wraps and
    *  re-previews as it changes, so the queued events always match. */
   onEdit?: (content: string) => void;
@@ -156,7 +160,8 @@ export const useBroadcastFlow = (): {
       identityPubkey={pending.identityPubkey}
       identityNote={pending.identityNote}
       relays={pending.relays}
-      controls={pending.controls}
+      setBurner={pending.setBurner}
+      onRepreview={request}
       onEdit={pending.onEdit}
       layers={pending.layers ?? pending.events?.map((event) => ({ name: 'event', decoded: event })) ?? []}
       extraRelays={pending.extraRelays}

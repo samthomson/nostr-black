@@ -1,5 +1,6 @@
-import { Loader2, Radio } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { Loader2, Radio, RefreshCw } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
+import { generateSecretKey } from 'nostr-tools';
 import {
   Dialog,
   DialogContent,
@@ -17,6 +18,7 @@ import { cn } from '@/lib/utils';
 import type { PrivacyGrade } from '@/lib/privacy';
 import type { ReactNode } from 'react';
 import type { EventLayer } from '@/lib/feedEncryption';
+import type { PendingBroadcast } from '@/hooks/useBroadcastFlow';
 
 /**
  * The one broadcast modal. Structure:
@@ -34,7 +36,7 @@ export const BroadcastDialog = ({
   grade,
   label,
   layers,
-  controls,
+  setBurner,
   identityPubkey,
   identityNote,
   relays,
@@ -44,6 +46,7 @@ export const BroadcastDialog = ({
   uploads,
   error,
   onEdit,
+  onRepreview,
   onBroadcast,
   busy = false,
   phase = 'idle',
@@ -62,9 +65,12 @@ export const BroadcastDialog = ({
   identityNote?: string;
   relays: readonly string[];
   extraRelays?: readonly string[];
-  controls?: ReactNode;
+  setBurner?: (sk: Uint8Array | null) => PendingBroadcast | Promise<PendingBroadcast>;
   error?: string | null;
   onEdit?: (content: string) => void;
+  /** Swap in a re-signed draft after a burner change (or edit) — the
+   *  flow's request() re-opens the modal on the next pending. */
+  onRepreview: (pending: PendingBroadcast) => void;
   /** Deferred blossom uploads, stated in the config rows and the CTA:
    * they run on confirm — the button says "upload … + broadcast" and
    * the step line narrates the run. */
@@ -78,8 +84,10 @@ export const BroadcastDialog = ({
   /** A run is in flight — the footer locks. */
   busy?: boolean;
 }) => {
-  const burner = identityNote === 'burner';
-  const { metadata } = useProfile(burner ? undefined : identityPubkey);
+  // The standard burner switch below: present only when the caller
+  // supplied `setBurner` — the identity is a choice for this broadcast.
+  const burnerOn = identityNote === 'burner';
+  const { metadata } = useProfile(burnerOn ? undefined : identityPubkey);
   const displayName = metadata?.display_name || metadata?.name;
   const onTor = useIsTor();
   // A text payload (content + optional edit tab) and a structured preview
@@ -106,6 +114,19 @@ export const BroadcastDialog = ({
   const targets = withDiscovery && extraRelays
     ? [...new Set([...relays, ...extraRelays])]
     : relays;
+  // The standard burner switch: the modal owns the identity choice —
+  // toggle and rotate re-sign via the caller's `setBurner`. Last toggle
+  // wins: a slow async re-sign drops out when a newer one was requested.
+  const signSeq = useRef(0);
+  const signAs = (key: Uint8Array | null): void => {
+    if (!setBurner) return;
+    const seq = ++signSeq.current;
+    void Promise.resolve(setBurner(key)).then((next) => {
+      if (seq === signSeq.current) onRepreview(next);
+    });
+  };
+  const onBurnerToggle = () => signAs(burnerOn ? null : generateSecretKey());
+  const onBurnerRotate = () => signAs(generateSecretKey());
   const style = PRIVACY[grade];
 
   return (
@@ -263,15 +284,27 @@ export const BroadcastDialog = ({
                   </>
                 ) : (
                   <>
-                    <Chip>{burner ? 'burner' : (displayName ?? 'anon')}</Chip>
+                    <Chip>{burnerOn ? 'burner' : (displayName ?? 'anon')}</Chip>
                     <Chip>{shortNpub(identityPubkey, 24)}</Chip>
-                    {!burner && identityNote && (
+                    {!burnerOn && identityNote && (
                       <span className="font-mono text-[10px] leading-none opacity-50">{identityNote}</span>
                     )}
                   </>
                 )}
               </div>
-              {controls && <div className="w-full">{controls}</div>}
+              {setBurner && (
+                <div className="flex flex-wrap items-center gap-4">
+                  <DraftSwitch on={burnerOn} onToggle={onBurnerToggle} label="burner" ariaLabel="broadcast via a burner" />
+                  {burnerOn && (
+                    <DraftAction
+                      icon={<RefreshCw className="size-3" />}
+                      onClick={onBurnerRotate}
+                      label="new burner"
+                      ariaLabel="generate a new burner key"
+                    />
+                  )}
+                </div>
+              )}
             </DraftRow>
           </div>
         </div>

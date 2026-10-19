@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { nowSec } from '@/lib/timestamp';
 import { Link, useNavigate } from 'react-router-dom';
-import { nip10, nip19 } from 'nostr-tools';
+import { finalizeEvent, getPublicKey, nip10, nip19 } from 'nostr-tools';
 import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat, Trash2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { Rumor } from '@/lib/feedEncryption';
@@ -26,7 +26,9 @@ import { profileHref, eventHref, npubOf, formatTimestamp } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { PIN_OFFSET } from '@/lib/anchorSpacer';
 import { clientTagOf } from '@/lib/clientTag';
-import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
+import { useBroadcastFlow, type PendingBroadcast } from '@/hooks/useBroadcastFlow';
+import { useSessionKey } from '@/data/hooks/useSessionKey';
+import { rememberBurner } from '@/auth/burners';
 
 import { useRouting } from '@/data/hooks/useRouting';
 import { PRIVACY, type PrivacyGrade } from '@/lib/privacy';
@@ -417,15 +419,11 @@ const NoteMeta = ({
 }) => {
   if ((!foundOn || foundOn.length === 0) && !route && !client) return null;
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-1 border-t pt-1.5">
+    <div className="mt-1 flex flex-wrap items-center gap-1 pt-1.5">
       {foundOn?.map((url) => (
         <RelayPill key={url} url={url} />
       ))}
-      {client && (
-        <span className="rounded-sm border px-1 py-0.5 font-mono text-[10px] leading-none text-muted-foreground">
-          via {client}
-        </span>
-      )}
+      {client && <Chip>via {client}</Chip>}
       {route && <RoutePill route={route} />}
     </div>
   );
@@ -540,6 +538,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const mine = !!user && event.pubkey === user.pubkey;
   const { request, dialog: broadcastDialog } = useBroadcastFlow();
   const { relays: planRelays } = useRouting();
+  const sessionSk = useSessionKey();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
 
@@ -549,37 +548,48 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   };
 
   // A repost is a broadcast like everything else — same modal, same
-  // queue, signed by the session signer. Clicking again takes it back.
-  const confirmRepost = async () => {
+  // queue. The identity is a choice: the modal's burner switch
+  // re-signs the kind 6 under a throwaway key before anything queues.
+  // Clicking again takes it back — that deletion is pinned to the key
+  // the repost was published with.
+  const repostRequest = (burner: Uint8Array | null): PendingBroadcast => {
+    const signer = burner ?? sessionSk!;
+    const identity = burner ? getPublicKey(burner) : user!.pubkey;
+    const engaged = finalizeEvent({
+      kind: 6, content: '',
+      tags: [['e', event.id], ['p', event.pubkey]],
+      created_at: nowSec(),
+    }, signer);
+    return {
+      grade: burner ? 'medium' : 'public',
+      label: 'repost',
+      content: `repost of ${event.id.slice(0, 16)}…`,
+      identityPubkey: identity,
+      identityNote: burner ? 'burner' : undefined,
+      relays: planRelays({ kind: 'publish', event: engaged }),
+      events: [engaged],
+      setBurner: (next) => repostRequest(next),
+      onEnqueued: () => { if (burner) rememberBurner(user!.pubkey, identity); },
+    };
+  };
+  const confirmRepost = () => {
     if (reposted) {
       const mine = feed.reposts.find((r) => r.pubkey === user!.pubkey)!;
-      const deletion = await user!.signer.signEvent({
+      void user!.signer.signEvent({
         kind: 5, content: '', tags: [['e', mine.id]], created_at: nowSec(),
-      });
-      request({
-        grade: 'public',
-        label: 'repost deletion',
-        content: 'delete your repost',
-        identityPubkey: user!.pubkey,
-        relays: planRelays({ kind: 'publish', event: deletion }),
-        events: [deletion],
+      }).then((deletion) => {
+        request({
+          grade: 'public',
+          label: 'repost deletion',
+          content: 'delete your repost',
+          identityPubkey: user!.pubkey,
+          relays: planRelays({ kind: 'publish', event: deletion }),
+          events: [deletion],
+        });
       });
       return;
     }
-    const target = event as NostrEvent;
-    const engaged = await user!.signer.signEvent({
-      kind: 6, content: '',
-      tags: [['e', target.id], ['p', target.pubkey]],
-      created_at: nowSec(),
-    });
-    request({
-      grade: 'public',
-      label: 'repost',
-      content: `repost of ${target.id.slice(0, 16)}…`,
-      identityPubkey: user!.pubkey,
-      relays: planRelays({ kind: 'publish', event: engaged }),
-      events: [engaged],
-    });
+    request(repostRequest(null));
   };
 
   // Public deletion previews in the broadcast modal like everything
@@ -704,46 +714,56 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
     ...(nip10Ref?.reply?.relays ?? nip10Ref?.root?.relays ?? []),
     ...(foundOn ?? []),
   ];
-  const parent = useEvent(parentId, { author: taggedAuthor, hints: parentHints });
-  const quoted = useEvent(quotedId, { author: quotedAuthor, hints: quotedRelays });
   const feed = useEngagementFeed(isPrivate ? undefined : event.id);
   const reposted = !!user && feed.reposts.some((r) => r.pubkey === user.pubkey);
   const reacted = !!user && feed.reactions.some((r) => r.pubkey === user.pubkey);
-
+  const quoted = useEvent(quotedId, { author: quotedAuthor, hints: quotedRelays });
+  const parent = useEvent(parentId, { author: taggedAuthor, hints: parentHints });
   // A reaction is a broadcast like everything else: the heart opens the
   // modal (pre-filled with the chosen emoji), confirmation enqueues. The
   // heart toggles — engaging again un-reacts via a kind 5 of your own.
-  const react = async (emoji: string) => {
+  // The identity is a choice: the modal's burner switch re-signs the
+  // kind 7 under a throwaway key; the un-react is pinned to whichever
+  // key the visible reaction was published with.
+  const reactionRequest = (emoji: string, burner: Uint8Array | null): PendingBroadcast => {
+    const signer = burner ?? sessionSk!;
+    const identity = burner ? getPublicKey(burner) : user!.pubkey;
+    const reaction = finalizeEvent({
+      kind: 7, content: emoji,
+      tags: [['e', event.id], ['p', event.pubkey]],
+      created_at: nowSec(),
+    }, signer);
+    return {
+      grade: burner ? 'medium' : 'public',
+      label: 'reaction',
+      content: `${emoji} on ${event.id.slice(0, 16)}…`,
+      identityPubkey: identity,
+      identityNote: burner ? 'burner' : undefined,
+      relays: planRelays({ kind: 'publish', event: reaction }),
+      events: [reaction],
+      setBurner: (next) => reactionRequest(emoji, next),
+      onEnqueued: () => { if (burner) rememberBurner(user!.pubkey, identity); },
+    };
+  };
+  const react = (emoji: string) => {
     if (!user) return;
-    const target = event as NostrEvent;
     const mine = feed.reactions.find((r) => r.pubkey === user.pubkey);
     if (mine) {
-      const deletion = await user.signer.signEvent({
+      void user.signer.signEvent({
         kind: 5, content: '', tags: [['e', mine.id]], created_at: nowSec(),
-      });
-      request({
-        grade: 'public',
-        label: 'reaction deletion',
-        content: `delete your ${mine.content} reaction`,
-        identityPubkey: user.pubkey,
-        relays: planRelays({ kind: 'publish', event: deletion }),
-        events: [deletion],
+      }).then((deletion) => {
+        request({
+          grade: 'public',
+          label: 'reaction deletion',
+          content: `delete your ${mine.content} reaction`,
+          identityPubkey: user.pubkey,
+          relays: planRelays({ kind: 'publish', event: deletion }),
+          events: [deletion],
+        });
       });
       return;
     }
-    const reaction = await user.signer.signEvent({
-      kind: 7, content: emoji,
-      tags: [['e', target.id], ['p', target.pubkey]],
-      created_at: nowSec(),
-    });
-    request({
-      grade: 'public',
-      label: 'reaction',
-      content: `${emoji} on ${target.id.slice(0, 16)}…`,
-      identityPubkey: user.pubkey,
-      relays: planRelays({ kind: 'publish', event: reaction }),
-      events: [reaction],
-    });
+    request(reactionRequest(emoji, null));
   };
   // Prefer the fetched parent's pubkey; fall back to NIP-10 e-tag author or
   // a lone p tag. Never profiles.at(-1).

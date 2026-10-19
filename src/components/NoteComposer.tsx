@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { useState } from 'react';
 import { nowSec } from '@/lib/timestamp';
-import { generateSecretKey, getPublicKey, finalizeEvent, nip10 } from 'nostr-tools';
+import { getPublicKey, finalizeEvent, nip10 } from 'nostr-tools';
 import { rememberBurner } from '@/auth/burners';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useBroadcastFlow, type PendingBroadcast, type UploadedFile } from '@/hooks/useBroadcastFlow';
@@ -12,7 +11,6 @@ import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { clientTagOf } from '@/lib/clientTag';
 import type { ClientTagConfig } from '@/contexts/AppContext';
-import { DraftAction, DraftSwitch } from '@/components/BroadcastDialog';
 import { useAppContext } from '@/hooks/useAppContext';
 import { useAttachments } from '@/hooks/useAttachments';
 import { prepareImage } from '@/lib/imageCompress';
@@ -38,27 +36,20 @@ export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
   const { myWrite } = useRouting();
   const { request, dialog } = useBroadcastFlow();
   const [draft, setDraft] = useState('');
-  const [burnerSk, setBurnerSk] = useState<Uint8Array | null>(null);
   const { config } = useAppContext();
   const upload = useBlossomUpload();
   const { servers } = useBlossomServers();
   const { attachments, addFiles, remove: removeAttachment, clear } = useAttachments();
 
-  // The live burner, readable from event handlers that fire after the
-  // pending preview was built (the modal's edit tab). Reading state here
-  // must never see a stale null — that would re-sign as the real identity.
-  const burnerRef = useRef(burnerSk);
-  useEffect(() => { burnerRef.current = burnerSk; }, [burnerSk]);
-
   if (!user || !sk) return null;
   // Broadcast targets are known before preview: our declared write set.
   const publishTargets = myWrite;
 
-  /** The current preview for the draft as it stands. `nextBurner`
-   * overrides the live value — the toggle/rotate know the key they are
-   * switching to before React has committed it. */
-  const previewOf = (content: string, nextBurner?: Uint8Array | null): PendingBroadcast => {
-    const burner = nextBurner !== undefined ? nextBurner : burnerRef.current;
+  /** The current preview for the draft as it stands. `burner` re-signs
+   *  under the given key (null = the session identity) — the modal's
+   *  standard burner switch calls it; nothing here tracks the choice,
+   *  the returned pending is the state. */
+  const previewOf = (content: string, burner: Uint8Array | null): PendingBroadcast => {
     const pk = burner ? getPublicKey(burner) : null;
     const signer = burner ?? sk;
     const staged = attachments.map((a) => a.file);
@@ -70,22 +61,10 @@ export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
       identityNote: pk ? 'burner' : undefined,
       relays: publishTargets,
       extraRelays: DEFAULT_DISCOVERY_RELAYS.filter((url) => !publishTargets.includes(url)),
-      controls: (
-        <div className="flex flex-wrap items-center gap-4">
-          <DraftSwitch on={burner !== null} onToggle={() => toggleBurner(content, burner)} label="burner" ariaLabel="broadcast via a burner" />
-          {burner && (
-            <DraftAction
-              icon={<RefreshCw className="size-3" />}
-              onClick={() => rotateBurner(content)}
-              label="new burner"
-              ariaLabel="generate a new burner key"
-            />
-          )}
-        </div>
-      ),
+      setBurner: (next) => previewOf(content, next),
       onEdit: (next) => {
         setDraft(next);
-        request(previewOf(next));
+        request(previewOf(next, burner));
       },
       // No images: everything signs upfront, as it always has. With
       // images: the compressed bytes upload on confirm — burner mode
@@ -126,39 +105,23 @@ export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
             ),
           ],
         }),
-      // The queued broadcast is the commit point: clear the draft and the
-      // burner so the next compose starts clean. The burner pubkey is
-      // remembered so the feed keeps rendering its notes as yours.
+      // The queued broadcast is the commit point: clear the draft and
+      // the burner so the next compose starts clean. The burner pubkey
+      // is remembered so the feed keeps rendering its notes as yours.
       onEnqueued: () => {
-        if (burner) rememberBurner(user.pubkey, getPublicKey(burner));
+        if (burner) rememberBurner(user.pubkey, pk!);
         setDraft('');
-        setBurnerSk(null);
         clear();
       },
     };
   };
 
-  /** Rotating the burner re-previews like every other draft change: new
-   * key, re-signed event — never a stale identity on screen. */
-  const rotateBurner = (content: string) => {
-    const next = generateSecretKey();
-    setBurnerSk(next);
-    request(previewOf(content, next));
-  };
-
-  /** Toggling re-previews in place: new identity, greyer grade,
-   * re-signed — with the value it is switching to, not the stale one. */
-  const toggleBurner = (content: string, current: Uint8Array | null) => {
-    const next = current ? null : generateSecretKey();
-    setBurnerSk(next);
-    request(previewOf(content, next));
-  };
-
   const submit = () => {
     const text = draft.trim();
     if (!text && attachments.length === 0) return;
-    request(previewOf(text));
+    request(previewOf(text, null));
   };
+
 
   return (
     <>

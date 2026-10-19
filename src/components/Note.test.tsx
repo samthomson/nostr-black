@@ -9,6 +9,7 @@ import { useLayoutEffect, type ReactNode } from 'react';
 import { TestApp } from '@/test/TestApp';
 import { Note } from '@/components/Note';
 import { useKeystore } from '@/auth/useKeystore';
+import { burnersOf, resetBurners } from '@/auth/burners';
 
 const queryRelay = vi.fn<(url: string, filters: NostrFilter[]) => Promise<NostrEvent[]>>();
 const publish = vi.fn<(event: NostrEvent, relays: string[]) => Promise<void>>();
@@ -53,6 +54,7 @@ const note = (sk: Uint8Array, content: string, kind = 1, tags: string[][] = []):
 
 beforeEach(() => {
   resetQueue();
+  resetBurners();
   queryRelay.mockReset();
   queryRelay.mockResolvedValue([]);
   publish.mockReset();
@@ -134,7 +136,6 @@ describe('Note', () => {
     expect(publish).not.toHaveBeenCalled();
     expect(queuedEntries()).toHaveLength(0);
   });
-
   it('the heart opens the broadcast modal; confirming enqueues the kind 7', async () => {
     const alice = generateSecretKey();
     const target = note(alice, 'react target');
@@ -156,6 +157,47 @@ describe('Note', () => {
     expect(reaction.content).toBe('+');
     expect(reaction.tags).toContainEqual(['e', target.id]);
     expect(verifyEvent(reaction)).toBe(true);
+  });
+
+  it('reacting via the burner switch signs the kind 7 with a throwaway key and remembers it', async () => {
+    const alice = generateSecretKey();
+    const identity = getPublicKey(alice);
+    const target = note(generateSecretKey(), 'react as burner');
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <Note event={target} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'react' }));
+    // the switch is the modal's, not the note's — flipping it re-signs
+    // the kind 7 before anything is queued
+    await user.click(await screen.findByRole('switch', { name: 'broadcast via a burner' }));
+    await confirmBroadcast(user);
+
+    const [reaction] = publish.mock.calls[0];
+    expect(reaction.kind).toBe(7);
+    expect(reaction.pubkey).not.toBe(identity);
+    expect(reaction.tags).toContainEqual(['e', target.id]);
+    expect(burnersOf(identity)).toContain(reaction.pubkey);
+  });
+
+  it('deletion has no burner switch: a kind 5 must match the key it deletes', async () => {
+    const alice = generateSecretKey();
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <Note event={note(alice, 'delete me')} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'delete note' }));
+    expect(screen.queryByRole('switch', { name: 'broadcast via a burner' })).toBeNull();
   });
 
   it('clicking the heart again un-reacts — a kind 5 of your own reaction', async () => {
@@ -183,6 +225,29 @@ describe('Note', () => {
     expect(deletion.kind).toBe(5);
     expect(deletion.tags).toContainEqual(['e', publish.mock.calls[0][0].id]);
     expect(deletion.pubkey).toBe(getPublicKey(alice));
+  });
+  it('reposting via the burner switch signs the kind 6 with a throwaway key and remembers it', async () => {
+    const alice = generateSecretKey();
+    const identity = getPublicKey(alice);
+    const target = note(generateSecretKey(), 'repost as burner');
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <Note event={target} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'repost' }));
+    await user.click(await screen.findByRole('switch', { name: 'broadcast via a burner' }));
+    await confirmBroadcast(user);
+
+    const [repost] = publish.mock.calls[0];
+    expect(repost.kind).toBe(6);
+    expect(repost.pubkey).not.toBe(identity);
+    expect(repost.tags).toContainEqual(['e', target.id]);
+    expect(burnersOf(identity)).toContain(repost.pubkey);
   });
 
   it('offers no actions on someone else\'s note', async () => {
