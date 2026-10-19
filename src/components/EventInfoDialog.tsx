@@ -42,14 +42,15 @@ const Toggle = ({ title, children }: { title: string; children: React.ReactNode 
   );
 };
 
-/** Formatted JSON — 4-space indent, the house style. */
-const JsonBlock = ({ value }: { value: NostrEvent | RumorJson }) => (
+/** Formatted JSON — 4-space indent, the house style. Exported for the
+ *  broadcast queue viewer, which previews its own events. */
+export const JsonBlock = ({ value }: { value: NostrEvent | RumorJson }) => (
   <pre className="max-h-64 overflow-auto rounded-sm bg-muted p-3 font-mono text-xs leading-relaxed break-all whitespace-pre-wrap">
     {JSON.stringify(value, null, 4)}
   </pre>
 );
 
-type RumorJson = { kind: number; [key: string]: unknown };
+export type RumorJson = { kind: number; [key: string]: unknown };
 
 const layerTitle = (layer: EventLayer, i: number): string => {
   const kind = typeof layer.decoded === 'object' && layer.decoded !== null && 'kind' in layer.decoded
