@@ -10,7 +10,7 @@ import { grantClearnetConsent } from '@/lib/torConsent';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
 import { useIsDesktop } from '@/hooks/useTransport';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 
@@ -182,13 +182,8 @@ const Index = () => {
   });
 
   const { user } = useCurrentUser();
-  const location = useLocation();
-  const from = (location.state as { from?: string } | null)?.from;
 
   if (!user) return <Landing />;
-
-  // Sent here by the gate while logged out: go back where you were going.
-  if (from && from !== '/') return <Navigate to={from} replace />;
 
   // Logged in, the landing has done its job — the app is the feeds.
   return <Navigate to="/public-feed" replace />;
