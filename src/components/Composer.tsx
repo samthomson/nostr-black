@@ -247,7 +247,9 @@ export const Composer = ({
 
       <div className={cn(
         'flex items-center justify-between gap-2 transition-opacity duration-200',
-        variant === 'edit' ? '' : 'opacity-0 group-focus-within:opacity-100',
+        variant === 'edit' || value.trim() !== '' || (attachments?.length ?? 0) > 0
+          ? ''
+          : 'opacity-0 group-focus-within:opacity-100',
         compact ? 'px-2 py-1' : 'px-3 py-2',
       )}>
         <div className="flex items-center gap-1">

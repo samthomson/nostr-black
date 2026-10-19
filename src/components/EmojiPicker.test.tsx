@@ -118,6 +118,18 @@ describe('Composer emoji button', () => {
     expect(cta.textContent).toContain('broadcast');
     expect(footer.className).toContain('justify-between');
   });
+
+  it('shows the actions once there is draft text, even without focus', () => {
+    render(<Harness initial="hi" showAttach />);
+    const footer = screen.getByRole('button', { name: 'add emoji' }).closest('div.flex.items-center.justify-between')!;
+    expect(footer.className).not.toContain('opacity-0');
+  });
+
+  it('hides the actions while empty and unfocused', () => {
+    render(<Harness showAttach />);
+    const footer = screen.getByRole('button', { name: 'add emoji' }).closest('div.flex.items-center.justify-between')!;
+    expect(footer.className).toContain('opacity-0');
+  });
 });
 
 describe('Composer `:` typeahead', () => {
