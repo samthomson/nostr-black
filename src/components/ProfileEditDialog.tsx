@@ -416,7 +416,6 @@ export const ProfileEditDialog = ({
       uploads: {
         count: stagedNow.length,
         server,
-        signUploadsWith: sk ?? undefined,
         // The session key gates the whole run — without it the blossom
         // auth event can't sign. A clear error here lands in the modal's
         // error line ("upload failed: …"); the assertion instead would

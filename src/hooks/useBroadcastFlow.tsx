@@ -16,15 +16,13 @@ export interface UploadedFile {
 /** Blossom uploads deferred until the user confirms: nothing leaves
  * the device before the broadcast button. `run` sends the bytes,
  * `buildEvents` then builds the events that reference the returned
- * urls. `signUploadsWith` signs the kind-24242 blossom auth — private
- * uploads use a throwaway key, public ones the note signer. */
+ * urls. */
 export interface PendingUploads {
   count: number;
   server: string;
   /** Local blob urls of the staged files — the modal preview shows the
    *  pictures before the upload has run and produced real urls. */
   previews?: readonly string[];
-  signUploadsWith?: Uint8Array;
   run: (onProgress?: (done: number, total: number, loaded: number, fileBytes: number) => void) => Promise<UploadedFile[]>;
 }
 

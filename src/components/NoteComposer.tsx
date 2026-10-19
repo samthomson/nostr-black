@@ -98,7 +98,6 @@ export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
             count: staged.length,
             server: servers[0]!,
             previews: attachments.map((a) => a.previewUrl),
-            signUploadsWith: signer,
             run: async (onProgress?: (done: number, total: number, loaded: number, fileBytes: number) => void): Promise<UploadedImage[]> => {
               const uploaded: UploadedImage[] = [];
               for (let i = 0; i < staged.length; i++) {

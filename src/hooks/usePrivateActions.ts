@@ -1,4 +1,4 @@
-import { generateSecretKey, getPublicKey } from 'nostr-tools';
+import { getPublicKey } from 'nostr-tools';
 import type { NostrEvent } from '@nostrify/nostrify';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { useRouting } from '@/data/hooks/useRouting';
@@ -63,26 +63,27 @@ export const usePrivateActions = () => {
   };
 
   /** The deferred uploads for pre-encrypted images: ciphertext to the
-   * first blossom server, the kind-24242 auth signed by a throwaway —
-   * it correlates with nothing, not even the burner. The Content-Type
-   * is the image's real mime, not octet-stream: some blossom servers
-   * (e.g. primal's) reject generic blobs outright, and the bytes are
-   * opaque to the server either way — the mime describes the container,
-   * the AES-GCM ciphertext stays unreadable regardless.
+   * first blossom server, the kind-24242 auth signed by the session key.
+   * The auth event never reaches a relay — only the blossom server sees
+   * it — so it reveals nothing beyond "this identity uploaded opaque
+   * bytes at this time", and it's the only signing key a pubkey-scoped
+   * allowlist server can accept (a throwaway would 415 forever). The
+   * Content-Type is the image's real mime, not octet-stream: some
+   * blossom servers (e.g. primal's) reject generic blobs outright, and
+   * the bytes are opaque to the server either way — the mime describes
+   * the container, the AES-GCM ciphertext stays unreadable regardless.
    * Sequential, so each image's bytes-visible progress is real. */
   const uploadsOf = (media: readonly StagedImage[], previews?: readonly string[]): PendingUploads => {
-    const throwaway = generateSecretKey();
     const server = servers[0]!;
     return {
       count: media.length,
       server,
       previews,
-      signUploadsWith: throwaway,
       run: async (onProgress?: (done: number, total: number, loaded: number, fileBytes: number) => void) => {
         const uploaded: UploadedFile[] = [];
         for (let i = 0; i < media.length; i++) {
           const image = media[i]!;
-          const blob = await upload(image.ct, image.mime, throwaway, server, (loaded, total) => {
+          const blob = await upload(image.ct, image.mime, key, server, (loaded, total) => {
             onProgress?.(i, media.length, loaded, total);
           });
           uploaded.push({ url: blob.url, sha256: blob.sha256, mime: image.mime });
