@@ -5,7 +5,7 @@ import { Page } from '@/components/Page';
 import { ProfileEditDialog } from '@/components/ProfileEditDialog';
 import { FollowButton } from '@/components/FollowButton';
 import { MuteButton } from '@/components/MuteButton';
-import { FollowsDialog } from '@/components/FollowsDialog';
+import { ConnectionsDialog, type ConnectionsTab } from '@/components/ConnectionsDialog';
 import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
 import { ProfileBanner } from '@/components/ProfileBanner';
 import { Note } from '@/components/Note';
@@ -17,17 +17,17 @@ import { useFollowList, useProfile, useRelayList } from '@/data/hooks/useProfile
 import { useAuthorActivity } from '@/data/hooks/useAuthorActivity';
 import { useProfilePrivateNotes } from '@/data/hooks/useProfilePrivateNotes';
 import { usePrivateActions } from '@/hooks/usePrivateActions';
-import { npubOf } from '@/lib/format';
+import { npubOf, plural } from '@/lib/format';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { NpubCopy } from '@/components/NpubCopy';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
+import { parseFollows } from '@/lib/outbox';
 import { Card, CardContent } from '@/components/ui/card';
 import { FeedSkeleton } from '@/components/NoteSkeleton';
 import { useMemo, useState } from 'react';
 import { Pencil } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { Button } from '@/components/ui/button';
-
 
 const countLabel = (n: number, pending: boolean, capped = false): string => {
   if (pending) return '—';
@@ -58,7 +58,12 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
     ...privateNotes.posts.map((post) => ({ id: post.note.wrapper.id, ts: post.note.rumor.created_at, kind: 'private' as const, post })),
     ...activity.activity.map((event) => ({ id: event.id, ts: event.created_at, kind: 'activity' as const, event })),
   ].sort((a, b) => b.ts - a.ts), [notes.notes, privateNotes.posts, activity.activity]);
-  const [followsOpen, setFollowsOpen] = useState(false);
+  const [connectionsOpen, setConnectionsOpen] = useState(false);
+  const [connectionsTab, setConnectionsTab] = useState<ConnectionsTab>('following');
+  const openConnections = (tab: ConnectionsTab) => {
+    setConnectionsTab(tab);
+    setConnectionsOpen(true);
+  };
   const [editOpen, setEditOpen] = useState(false);
   const { user } = useCurrentUser();
   const ownProfile = !!user && user.pubkey === pubkey;
@@ -155,20 +160,28 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
           <div className="text-privacy-public-muted mt-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <button
               type="button"
-              onClick={() => setFollowsOpen(true)}
+              onClick={() => openConnections('following')}
               className="cursor-pointer hover:underline"
             >
               <span className="text-privacy-public-fg font-medium">{countLabel(follows.count, follows.pending)}</span>
-              {' '}following
+              {' '}{plural(follows.count, 'following', 'following')}
             </button>
-            <span>
+            <button
+              type="button"
+              onClick={() => openConnections('followers')}
+              className="cursor-pointer hover:underline"
+            >
               <span className="text-privacy-public-fg font-medium">{countLabel(followers.count, followers.pending, followers.capped)}</span>
-              {' '}followers
-            </span>
-            <span>
+              {' '}{plural(followers.count, 'follower', 'followers')}
+            </button>
+            <button
+              type="button"
+              onClick={() => openConnections('relays')}
+              className="cursor-pointer hover:underline"
+            >
               <span className="text-privacy-public-fg font-medium">{uniqueRelays || '—'}</span>
-              {' '}relays
-            </span>
+              {' '}{plural(uniqueRelays, 'relay', 'relays')}
+            </button>
           </div>
         </div>
       </div>
@@ -211,8 +224,16 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
           </CardContent>
         </Card>
       )}
-
-      <FollowsDialog followList={follows.event} open={followsOpen} onOpenChange={setFollowsOpen} />
+      <ConnectionsDialog
+        following={parseFollows(follows.event)}
+        followers={followers.pubkeys}
+        read={relayList.list.read}
+        write={relayList.list.write}
+        tab={connectionsTab}
+        onTab={setConnectionsTab}
+        open={connectionsOpen}
+        onOpenChange={setConnectionsOpen}
+      />
       {ownProfile && <ProfileEditDialog open={editOpen} onOpenChange={setEditOpen} />}
       {dialog}
       {openMedia !== null && gallery[openMedia] && (

@@ -86,3 +86,47 @@ describe('Profile lightbox', () => {
     expect(screen.queryByRole('button', { name: 'open banner image' })).toBeNull();
   });
 });
+describe('Profile header stats', () => {
+  it('pluralizes each stat for counts of one and opens the following dialog', async () => {
+    const user = userEvent.setup();
+    const sk = generateSecretKey();
+    const profile = metadata(sk, { name: 'pat' });
+    const contactList = finalizeEvent(
+      { kind: 3, created_at: 1, tags: [['p', 'a'.repeat(64)]], content: '' },
+      sk,
+    );
+    const relayList = finalizeEvent(
+      { kind: 10002, created_at: 1, tags: [['r', 'wss://one.example/']], content: '' },
+      sk,
+    );
+    store.ingest([profile, contactList, relayList], '');
+    queryRelay.mockImplementation(async (_url, filters) => {
+      const kinds = filters[0].kinds;
+      if (kinds?.includes(3)) return [contactList];
+      if (kinds?.includes(10002)) return [relayList];
+      return [];
+    });
+
+    render(
+      <TestApp>
+        <ProfilePage pubkey={profile.pubkey} />
+      </TestApp>,
+    );
+
+    // singular for a count of one
+    expect(await screen.findByText('pat')).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.textContent === '1 following')).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.textContent === '1 relay')).toBeTruthy();
+
+    // "following" opens the one dialog on its tab
+    await user.click(screen.getByRole('button', { name: /following/ }));
+    expect(await screen.findByRole('dialog')).toBeTruthy();
+    expect(screen.getByText(/following 1/)).toBeTruthy();
+
+    // the three tabs are present; relays opens the relay list
+    expect(screen.getByRole('tab', { name: 'followers' })).toBeTruthy();
+    await user.click(screen.getByRole('tab', { name: 'relays' }));
+    expect(screen.getByText(/relays 1/)).toBeTruthy();
+    expect(screen.getByText('wss://one.example/')).toBeTruthy();
+  });
+});

@@ -59,6 +59,11 @@ export const hostOf = (url: string): string => {
   }
 };
 
+/** Singular when the count is exactly one, otherwise plural:
+ *  `plural(1, 'follower', 'followers')` → "follower", `plural(3, …)` → "followers". */
+export const plural = (count: number, singular: string, many: string): string =>
+  count === 1 ? singular : many;
+
 /** Short `aaaa…bbbb` form for long hex strings. */
 export const shortHex = (hex: string): string => `${hex.slice(0, 8)}…${hex.slice(-4)}`;
 
