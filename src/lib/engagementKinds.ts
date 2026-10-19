@@ -9,5 +9,3 @@
 export const ENGAGEMENT_TABS = ['reactions', 'reposts'] as const;
 export type EngagementTab = (typeof ENGAGEMENT_TABS)[number];
 
-/** The long-press picker's choices — '+' is the NIP-25 default. */
-export const EMOJI_CHOICES = ['+', '❤', '😂', '🙏', '🔥', '👏', '😭', '🤔'] as const;

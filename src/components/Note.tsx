@@ -946,6 +946,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
                 tab="reactions"
                 reactions={feed.reactions}
                 reposts={feed.reposts}
+                choices={config.reactionChoices}
                 onEngage={() => void react(config.defaultReaction)}
                 onChoose={(emoji) => void react(emoji)}
                 ariaLabel="react"

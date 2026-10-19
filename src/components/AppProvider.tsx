@@ -11,8 +11,8 @@ interface AppProviderProps {
   defaultConfig: AppConfig;
 }
 
-
-// Zod schema for AppConfig validation
+/** The pre-six-slot preset row, for folding stored configs forward. */
+const LEGACY_REACTION_PRESETS = ['+', '❤', '😂', '🙏', '🔥', '👏', '😭', '🤔'];
 const AppConfigSchema = z.object({
   theme: z.enum(['dark', 'light', 'system']),
   discoveryRelays: z.array(z.url()),
@@ -23,6 +23,7 @@ const AppConfigSchema = z.object({
   mediaCacheMaxMb: z.number(),
   mediaMaxDownloadMb: z.number(),
   defaultReaction: z.string(),
+  reactionChoices: z.array(z.string()).length(6),
   clientTag: z.object({
     mode: z.enum(['none', 'black', 'spoof']),
     spoof: z.array(z.string()),
@@ -59,10 +60,19 @@ export function AppProvider(props: AppProviderProps) {
     []
   );
 
-  const config = useMemo(
-    () => ({ ...defaultConfig, ...rawConfig }),
-    [defaultConfig, rawConfig]
-  );
+  const config = useMemo(() => {
+    const merged = { ...defaultConfig, ...rawConfig };
+    // One-shot migration: a stored config predates reactionChoices, so
+    // its old eight presets and a custom defaultReaction need folding
+    // into the new six slots (custom default first, old presets after).
+    if (!rawConfig.reactionChoices && 'reactionChoices' in defaultConfig) {
+      const legacy: string[] = rawConfig.defaultReaction
+        ? [rawConfig.defaultReaction, ...LEGACY_REACTION_PRESETS]
+        : [...LEGACY_REACTION_PRESETS];
+      merged.reactionChoices = [...new Set(legacy)].slice(0, 6);
+    }
+    return merged;
+  }, [defaultConfig, rawConfig]);
 
   // Runtime, non-persisted: when the last NIP-65 discovery attempt finished.
 

@@ -53,6 +53,7 @@ export function TestApp({ children, userState }: TestAppProps) {
     imageCompression: true,
     feedKinds: [...FEED_KINDS],
     defaultReaction: "+",
+    reactionChoices: ['+', '❤', '😂', '🙏', '🔥', '👏'],
     clientTag: { mode: 'none', spoof: [...COMMON_CLIENTS] },
     mediaCacheMaxMb: 1024,
     mediaMaxDownloadMb: 32,

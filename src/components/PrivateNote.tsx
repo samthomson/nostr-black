@@ -135,6 +135,7 @@ export const PrivateItem = ({
             tab="reactions"
             reactions={reactions as readonly EngagementRow[]}
             reposts={[]}
+            choices={config.reactionChoices}
             onEngage={() => onReact?.(rumor, config.defaultReaction)}
             onChoose={(emoji) => onReact?.(rumor, emoji)}
             ariaLabel="react"

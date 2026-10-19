@@ -42,6 +42,7 @@ const defaultConfig: AppConfig = {
   mediaEnabled: true,
   imageCompression: true,
   defaultReaction: '+',
+  reactionChoices: ['+', '❤', '😂', '🙏', '🔥', '👏'],
   feedKinds: [...FEED_KINDS],
   clientTag: { mode: 'none', spoof: [...COMMON_CLIENTS] },
   mediaCacheMaxMb: 1024,

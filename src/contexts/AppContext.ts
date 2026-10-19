@@ -27,6 +27,8 @@ export interface AppConfig {
   mediaMaxDownloadMb: number;
   /** The emoji a plain heart-click broadcasts. */
   defaultReaction: string;
+  /** The long-press picker's preset row — exactly six, user-editable. */
+  reactionChoices: string[];
   /** What the app stamps as the event `client` tag — published metadata,
    * so it is always a deliberate choice. `none` sends no tag at all. */
   clientTag: ClientTagConfig;

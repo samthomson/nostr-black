@@ -5,8 +5,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useProfiles } from '@/data/hooks/useProfile';
 import { npubOf, profileHref } from '@/lib/format';
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { SmilePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { EMOJI_CHOICES, ENGAGEMENT_TABS, type EngagementTab } from '@/lib/engagementKinds';
+import { ENGAGEMENT_TABS, type EngagementTab } from '@/lib/engagementKinds';
+import { EmojiPicker } from '@/components/EmojiPicker';
 
 /** A person in the viewer, whatever they did. */
 export interface EngagementRow {
@@ -122,6 +125,7 @@ export const EngagementCount = ({
   tab,
   reactions,
   reposts,
+  choices,
   onEngage,
   onChoose,
   onShow,
@@ -138,6 +142,9 @@ export const EngagementCount = ({
   tab: EngagementTab;
   reactions: readonly EngagementRow[];
   reposts: readonly EngagementRow[];
+  /** The user's six preset reactions — present on reaction affordances
+   *  only (the long-press menu maps over it). */
+  choices?: readonly string[];
   /** Icon click — the action, whatever it is for this kind. */
   onEngage: () => void;
   /** Present (reactions) when an emoji picker is offered on long-press. */
@@ -205,25 +212,40 @@ export const EngagementCount = ({
       )}
 
       {pickerOpen && (
-        <Dialog open onOpenChange={setPickerOpen}>
-          <DialogContent className="max-w-[95vw] p-4 sm:max-w-xs">
-            <DialogHeader className="pb-1">
-              <DialogTitle className="text-sm font-semibold">react with</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-4 gap-1">
-              {EMOJI_CHOICES.map((emoji) => (
+        <Popover open onOpenChange={setPickerOpen}>
+          <PopoverAnchor asChild>
+            <span className="inline-flex" />
+          </PopoverAnchor>
+          <PopoverContent align="start" className="w-auto p-2">
+            <div className="flex items-center gap-1">
+              {choices?.map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
-                  className="cursor-pointer rounded-sm px-2 py-1.5 text-base hover:bg-accent"
+                  aria-label={`react with ${emoji}`}
+                  className="flex size-8 cursor-pointer items-center justify-center rounded-sm text-lg hover:bg-accent"
                   onClick={() => { setPickerOpen(false); onChoose?.(emoji); }}
                 >
                   {emoji}
                 </button>
               ))}
+              <Popover modal>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label="more emoji"
+                    className="text-muted-foreground hover:text-foreground flex size-8 cursor-pointer items-center justify-center rounded-sm text-lg hover:bg-accent"
+                  >
+                    <SmilePlus className="size-4" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-auto p-0">
+                  <EmojiPicker compact onSelect={(emoji) => { setPickerOpen(false); onChoose?.(emoji); }} />
+                </PopoverContent>
+              </Popover>
             </div>
-          </DialogContent>
-        </Dialog>
+          </PopoverContent>
+        </Popover>
       )}
 
       <EngagementDialog
