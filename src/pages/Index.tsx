@@ -81,7 +81,6 @@ const Landing = () => {
             <PrivacyTag grade="public" /> stuff you do is white,{' '}
             <PrivacyTag grade="private" /> black.
             <br />
-            there's a big <PrivacyTag grade="medium">grey area</PrivacyTag> inbetween…
           </p>
         </div>
 
@@ -163,6 +162,14 @@ const Landing = () => {
             )}
           </AnimateHeight>
         </div>
+
+        <footer className="text-muted-foreground flex w-full flex-col items-center gap-1.5 border-t pt-4 text-xs">
+          <span className="text-center">
+            private primitives built on{' '}
+            <a href="https://github.com/nostr-protocol/nips/pull/2488" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">nips#2488</a>
+          </span>
+          <a href="https://github.com/samthomson/nostr-black" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">source</a>
+        </footer>
       </div>
     </div>
   );
