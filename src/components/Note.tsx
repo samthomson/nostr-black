@@ -538,6 +538,10 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const mine = !!user && event.pubkey === user.pubkey;
   const { request, dialog: broadcastDialog } = useBroadcastFlow();
   const { relays: planRelays } = useRouting();
+  // Where this note circulates and where its author reads: the audience
+  // any engagement on it (reply, reaction, repost, deletion) addresses
+  // alongside our own outbox.
+  const parentAudience = { foundOn: foundOn ?? [], author: event.pubkey };
   const sessionSk = useSessionKey();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -566,7 +570,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
       content: `repost of ${event.id.slice(0, 16)}…`,
       identityPubkey: identity,
       identityNote: burner ? 'burner' : undefined,
-      relays: planRelays({ kind: 'publish', event: engaged }),
+      relays: planRelays({ kind: 'publish', eventKind: engaged.kind, parent: parentAudience }),
       events: [engaged],
       setBurner: (next) => repostRequest(next),
       onEnqueued: () => { if (burner) rememberBurner(user!.pubkey, identity); },
@@ -583,7 +587,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
           label: 'repost deletion',
           content: 'delete your repost',
           identityPubkey: user!.pubkey,
-          relays: planRelays({ kind: 'publish', event: deletion }),
+          relays: planRelays({ kind: 'publish', eventKind: deletion.kind, parent: parentAudience }),
           events: [deletion],
         });
       });
@@ -611,7 +615,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
         label: 'deletion',
         content: 'delete this event from your relays',
         identityPubkey: (event as NostrEvent).pubkey,
-        relays: planRelays({ kind: 'publish', event: deletion }),
+        relays: planRelays({ kind: 'publish', eventKind: deletion.kind, parent: parentAudience }),
         events: [deletion],
       });
     })();
@@ -739,7 +743,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
       content: `${emoji} on ${event.id.slice(0, 16)}…`,
       identityPubkey: identity,
       identityNote: burner ? 'burner' : undefined,
-      relays: planRelays({ kind: 'publish', event: reaction }),
+      relays: planRelays({ kind: 'publish', eventKind: reaction.kind, parent: parentAudience }),
       events: [reaction],
       setBurner: (next) => reactionRequest(emoji, next),
       onEnqueued: () => { if (burner) rememberBurner(user!.pubkey, identity); },
@@ -757,7 +761,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
           label: 'reaction deletion',
           content: `delete your ${mine.content} reaction`,
           identityPubkey: user.pubkey,
-          relays: planRelays({ kind: 'publish', event: deletion }),
+          relays: planRelays({ kind: 'publish', eventKind: deletion.kind, parent: parentAudience }),
           events: [deletion],
         });
       });

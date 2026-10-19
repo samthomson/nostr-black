@@ -6,6 +6,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { useBroadcastFlow, type PendingBroadcast, type UploadedFile } from '@/hooks/useBroadcastFlow';
 import { Composer } from '@/components/Composer';
 import { useRouting } from '@/data/hooks/useRouting';
+import { store, eventKey } from '@/data/store';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -33,7 +34,7 @@ interface UploadedImage extends UploadedFile {
 export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
   const { user } = useCurrentUser();
   const sk = useSessionKey();
-  const { myWrite } = useRouting();
+  const { myWrite, relays } = useRouting();
   const { request, dialog } = useBroadcastFlow();
   const [draft, setDraft] = useState('');
   const { config } = useAppContext();
@@ -42,8 +43,18 @@ export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
   const { attachments, addFiles, remove: removeAttachment, clear } = useAttachments();
 
   if (!user || !sk) return null;
-  // Broadcast targets are known before preview: our declared write set.
-  const publishTargets = myWrite;
+  // Broadcast targets are known before preview: our declared write set,
+  // and for a reply also the parent's audience — the relays it
+  // circulates on and its author's inbox, who the p tag addresses.
+  const parentAudience = parent && {
+    foundOn: store.get(eventKey(parent.id)).foundOn ?? [],
+    author: parent.pubkey,
+  };
+  // A plain note goes to our write set; a reply also reaches the
+  // parent's audience, deduped by the routing module.
+  const publishTargets = parent
+    ? relays({ kind: 'publish', eventKind: 1, parent: parentAudience ?? undefined })
+    : myWrite;
 
   /** The current preview for the draft as it stands. `burner` re-signs
    *  under the given key (null = the session identity) — the modal's

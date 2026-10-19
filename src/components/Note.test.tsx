@@ -10,6 +10,7 @@ import { TestApp } from '@/test/TestApp';
 import { Note } from '@/components/Note';
 import { useKeystore } from '@/auth/useKeystore';
 import { burnersOf, resetBurners } from '@/auth/burners';
+import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
 
 const queryRelay = vi.fn<(url: string, filters: NostrFilter[]) => Promise<NostrEvent[]>>();
 const publish = vi.fn<(event: NostrEvent, relays: string[]) => Promise<void>>();
@@ -157,6 +158,37 @@ describe('Note', () => {
     expect(reaction.content).toBe('+');
     expect(reaction.tags).toContainEqual(['e', target.id]);
     expect(verifyEvent(reaction)).toBe(true);
+  });
+
+  it('a reaction is delivered to the parent audience too', async () => {
+    const alice = generateSecretKey();
+    const target = note(alice, 'react target');
+    const user = userEvent.setup();
+    // alice's declared inbox; the note itself was found on a foreign relay
+    store.ingest([finalizeEvent({
+      kind: 10002, created_at: 1, tags: [['r', 'wss://alice-in/', 'read']], content: '',
+    }, alice)], 'wss://discovery/');
+
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(generateSecretKey())}>
+          <Note event={target} foundOn={['wss://circulated/']} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    await user.click(await screen.findByRole('button', { name: 'react' }));
+    await confirmBroadcast(user);
+
+    await waitFor(() => expect(publish).toHaveBeenCalledTimes(1));
+    const [, targets] = publish.mock.calls[0];
+    // my outbox (discovery fallback) ∪ where the note circulates ∪
+    // its author's inbox.
+    expect(new Set(targets)).toEqual(new Set([
+      ...DEFAULT_DISCOVERY_RELAYS,
+      'wss://circulated/',
+      'wss://alice-in/',
+    ]));
   });
 
   it('reacting via the burner switch signs the kind 7 with a throwaway key and remembers it', async () => {

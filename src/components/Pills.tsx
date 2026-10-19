@@ -27,10 +27,28 @@ export const Chip = ({
   </span>
 );
 
-/** A relay host chip — the one rendering of a relay anywhere. */
-export const RelayPill = ({ url, dimmed = false }: { url: string; dimmed?: boolean }) => (
-  <Chip dimmed={dimmed}>{hostOf(url)}</Chip>
-);
+/** A relay host chip — the one rendering of a relay anywhere. With
+ *  `onToggle` it is a switch: tap to include/exclude the relay from the
+ *  broadcast (the broadcast modal's per-relay row). */
+export const RelayPill = ({ url, dimmed = false, onToggle, ariaLabel }: {
+  url: string;
+  dimmed?: boolean;
+  onToggle?: () => void;
+  ariaLabel?: string;
+}) => onToggle
+  ? (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={!dimmed}
+      aria-label={ariaLabel ?? `toggle ${hostOf(url)}`}
+      onClick={onToggle}
+      className="cursor-pointer"
+    >
+      <Chip dimmed={dimmed}>{hostOf(url)}</Chip>
+    </button>
+  )
+  : <Chip dimmed={dimmed}>{hostOf(url)}</Chip>;
 
 /** The transport route chip: `⏁ tor` / `clearnet`. */
 export const RoutePill = ({ route }: { route: RouteValue }) => (

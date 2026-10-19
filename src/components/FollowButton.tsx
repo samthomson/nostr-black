@@ -51,7 +51,7 @@ export const FollowButton = ({ pubkey, compact = false }: {
         label: follows ? 'unfollow' : 'follow',
         content: `${verb} ${npubOf(pubkey).slice(0, 16)}…`,
         identityPubkey: user.pubkey,
-        relays: relays({ kind: 'publish', event: updated }),
+        relays: relays({ kind: 'publish', eventKind: updated.kind }),
         events: [updated],
       });
     } finally {

@@ -32,7 +32,7 @@ export function usePublishRelayList() {
       // Routed against the *draft* list, not the synced one: this event is
       // what changes where we write, so it has to reach the relays it names.
       await publish(event, flattenPlan(relayPlan(
-        { kind: 'publish', event },
+        { kind: 'publish', eventKind: event.kind },
         { myRelays: relays, discovery: config.discoveryRelays, authorRelays: new Map() },
       )));
 

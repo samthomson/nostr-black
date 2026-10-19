@@ -27,7 +27,7 @@ import type { PendingBroadcast } from '@/hooks/useBroadcastFlow';
  * - the note: preview/event tabs, colour-swatched with a soft gradient
  *   edge so the grade reads without clashing with the modal chrome;
  * - the note's config: structured `label: value` rows — route, relays
- *   (discovery greyed until toggled), identity;
+ *   (each an on/off switch), identity;
  * - footer: broadcast.
  */
 export const BroadcastDialog = ({
@@ -110,10 +110,14 @@ export const BroadcastDialog = ({
     el.setSelectionRange(el.value.length, el.value.length);
   }, []);
   const [layer, setLayer] = useState(0);
-  const [withDiscovery, setWithDiscovery] = useState(false);
-  const targets = withDiscovery && extraRelays
-    ? [...new Set([...relays, ...extraRelays])]
-    : relays;
+  // The relay row, deduped and in the caller's order. Every relay is a
+  // per-relay switch: tap to drop it from (or add it back to) the
+  // broadcast — the discovery set arrives dimmed, off by default.
+  const initial = [...new Set([...relays, ...(extraRelays ?? [])])];
+  const [excluded, setExcluded] = useState<ReadonlySet<string>>(
+    () => new Set((extraRelays ?? []).filter((url) => !relays.includes(url))),
+  );
+  const targets = initial.filter((url) => !excluded.has(url));
   // The standard burner switch: the modal owns the identity choice —
   // toggle and rotate re-sign via the caller's `setBurner`. Last toggle
   // wins: a slow async re-sign drops out when a newer one was requested.
@@ -259,16 +263,20 @@ export const BroadcastDialog = ({
 
             <DraftRow label="relays">
               <div className="flex min-w-0 flex-wrap gap-1">
-                {relays.map((url) => <RelayPill key={url} url={url} />)}
-                {extraRelays?.map((url) => (
-                  <RelayPill key={url} url={url} dimmed={!withDiscovery} />
+                {initial.map((url) => (
+                  <RelayPill
+                    key={url}
+                    url={url}
+                    dimmed={excluded.has(url)}
+                    onToggle={() => setExcluded((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(url)) next.delete(url);
+                      else next.add(url);
+                      return next;
+                    })}
+                  />
                 ))}
               </div>
-              {extraRelays && extraRelays.length > 0 && (
-                <div className="w-full">
-                  <DraftSwitch on={withDiscovery} onToggle={() => setWithDiscovery(!withDiscovery)} label="discovery" />
-                </div>
-              )}
             </DraftRow>
 
             <DraftRow label="as">
@@ -388,9 +396,9 @@ const DraftRow = ({ label, children }: { label: string; children: React.ReactNod
 );
 
 /**
- * The one switch used inside the draft: discovery, burner — any
- * boolean. Same size as the chips (font-mono text-[10px]), same
- * fg-tint, so the grid reads as one system.
+ * The one switch used inside the draft: burner — any boolean. Same size
+ * as the chips (font-mono text-[10px]), same fg-tint, so the grid reads
+ * as one system.
  */
 export const DraftSwitch = ({
   on,

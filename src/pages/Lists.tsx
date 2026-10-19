@@ -114,7 +114,7 @@ export const ListPage = ({ kind, title }: { kind: ListKind; title: string }) => 
         label: `${noun} move`,
         content: `move ${npubOf(pubkey).slice(0, 16)}… ${from} → ${to}`,
         identityPubkey: user.pubkey,
-        relays: relays({ kind: 'publish', event: signed }),
+        relays: relays({ kind: 'publish', eventKind: signed.kind }),
         events: [signed],
       });
     })();
@@ -144,7 +144,7 @@ export const ListPage = ({ kind, title }: { kind: ListKind; title: string }) => 
         label: kind === 'follows' ? 'follows to private' : 'mutes to private',
         content: `seal ${publicItems.length} ${kind === 'follows' ? 'follows' : 'mutes'} — only you can read them`,
         identityPubkey: user.pubkey,
-        relays: relays({ kind: 'publish', event: signed }),
+        relays: relays({ kind: 'publish', eventKind: signed.kind }),
         events: [signed],
       });
       setConfirmBulk(false);

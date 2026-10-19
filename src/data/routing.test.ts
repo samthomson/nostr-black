@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-import type { NostrEvent } from '@nostrify/nostrify';
 import {
   relayPlan,
   flattenPlan,
@@ -25,8 +24,6 @@ const entry = (url: string, read = true, write = true): RelayEntry => ({ url, re
 
 const list = (write: string[], read: string[] = []): RelayList => ({ read, write });
 
-const event = (kind: number): NostrEvent =>
-  ({ kind, id: 'x', pubkey: 'p', created_at: 0, tags: [], content: '', sig: '' }) as NostrEvent;
 
 const ALICE = 'a'.repeat(64);
 const BOB = 'b'.repeat(64);
@@ -173,13 +170,15 @@ describe('resolveById', () => {
       ['wss://hint/'],
       ['wss://mine/'],
       ['wss://alice/'],
+      DISCOVERY,
     ]);
   });
 
-  it('skips the hint tier when there are none, and the author tier when unknown', () => {
+  it('falls back to discovery when no hints and no known author', () => {
     const plan = relayPlan({ kind: 'resolveById', id: 'note1' }, ctx());
-    expect(plan.tiers).toHaveLength(1);
-    expect(tierRelays(plan.tiers[0])).toEqual(DISCOVERY);
+    // no hints and my read relays fall back to discovery, so both tiers
+    // name discovery — flattened once.
+    expect(flattenPlan(plan)).toEqual(DISCOVERY);
   });
 
   it('asks every tier about the same event id', () => {
@@ -237,21 +236,42 @@ describe('publish', () => {
 
   it('sends discoverable kinds to our write relays and discovery', () => {
     for (const kind of DISCOVERABLE_KINDS) {
-      const plan = relayPlan({ kind: 'publish', event: event(kind) }, self);
+      const plan = relayPlan({ kind: 'publish', eventKind: kind }, self);
       expect(flattenPlan(plan)).toEqual(['wss://mine/', ...DISCOVERY]);
     }
   });
 
   it('keeps everything else on our write relays only', () => {
     for (const kind of [1, 7, 1111, 10000, 30000]) {
-      const plan = relayPlan({ kind: 'publish', event: event(kind) }, self);
+      const plan = relayPlan({ kind: 'publish', eventKind: kind }, self);
       expect(flattenPlan(plan)).toEqual(['wss://mine/']);
     }
   });
 
+  it('delivers a tagged event to the parent audience too', () => {
+    const lists = new Map([[ALICE, list(['wss://alice-out/'], ['wss://alice-in/'])]]);
+    const world = ctx({
+      myRelays: [entry('wss://mine/')],
+      authorRelays: { get: (pubkey) => lists.get(pubkey) },
+    });
+    const parent = { foundOn: ['wss://circulated/', 'wss://mine/'], author: ALICE };
+    const plan = relayPlan({ kind: 'publish', eventKind: 7, parent }, world);
+    // deduped: the parent's foundOn overlapping our outbox collapses;
+    // the author's inbox rides along; discovery stays out (kind 7).
+    expect(flattenPlan(plan)).toEqual(['wss://mine/', 'wss://circulated/', 'wss://alice-in/']);
+  });
+
+  it('routes an engagement without a known parent audience like a plain publish', () => {
+    const plan = relayPlan(
+      { kind: 'publish', eventKind: 1, parent: { foundOn: [], author: BOB } },
+      self,
+    );
+    expect(flattenPlan(plan)).toEqual(['wss://mine/']);
+  });
+
   it('keeps private envelopes off discovery', () => {
     for (const kind of [1370, 1470, 30378, 124]) {
-      const plan = relayPlan({ kind: 'publish', event: event(kind) }, self);
+      const plan = relayPlan({ kind: 'publish', eventKind: kind }, self);
       expect(flattenPlan(plan)).toEqual(['wss://mine/']);
     }
   });
@@ -259,12 +279,12 @@ describe('publish', () => {
   it('does not broadcast an encrypted list to discovery', () => {
     // kind 10000 (mute list) carries encrypted content; the ciphertext is
     // safe but the publish timing is not.
-    const plan = relayPlan({ kind: 'publish', event: event(10000) }, self);
+    const plan = relayPlan({ kind: 'publish', eventKind: 10000 }, self);
     expect(flattenPlan(plan)).not.toContain(DISCOVERY[0]);
   });
 
   it('carries no per-relay narrowing', () => {
-    const plan = relayPlan({ kind: 'publish', event: event(1) }, self);
+    const plan = relayPlan({ kind: 'publish', eventKind: 1 }, self);
     expect([...plan.tiers[0].groups.values()]).toEqual([[]]);
   });
 });
@@ -276,6 +296,6 @@ describe('flattenPlan', () => {
       { kind: 'resolveById', id: 'note1', author: ALICE, hints: ['wss://shared/'] },
       ctx({ myRelays: [entry('wss://mine/')], authorRelays }),
     );
-    expect(flattenPlan(plan)).toEqual(['wss://shared/', 'wss://mine/']);
+    expect(flattenPlan(plan)).toEqual(['wss://shared/', 'wss://mine/', ...DISCOVERY]);
   });
 });

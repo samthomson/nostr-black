@@ -1,4 +1,3 @@
-import type { NostrEvent } from '@nostrify/nostrify';
 import { buildRelayGroups, type RelayList } from '@/lib/outbox';
 
 /**
@@ -75,7 +74,17 @@ export type Intent =
       /** Set only for an opened thread — adds the root author's inbox. */
       rootAuthor?: string;
     }
-  | { kind: 'publish'; event: NostrEvent };
+  | {
+      kind: 'publish';
+      /** The event's kind — selects the discoverable-kind widening. */
+      eventKind: number;
+      /** Present for engagement (reply, reaction, repost — and the
+       *  deletions that take them back): the parent note's audience.
+       *  A tagged event addresses its author's inbox and everyone
+       *  already reading the note, wherever it circulates — delivered
+       *  alongside our write relays. */
+      parent?: { foundOn: readonly string[]; author?: string };
+    };
 
 /**
  * Kinds whose whole purpose is to be findable by strangers, so publishing
@@ -218,9 +227,18 @@ export const relayPlan = (intent: Intent, ctx: RoutingContext): RelayPlan => {
     }
 
     case 'publish': {
-      const targets = DISCOVERABLE_KINDS.has(intent.event.kind)
-        ? [...myWriteRelays(ctx), ...ctx.discovery]
-        : myWriteRelays(ctx);
+      // The audience: our followers read our outbox. An event that tags
+      // someone (a reply, reaction, repost — or the deletion that takes
+      // one back) also addresses the tagged person's inbox and everyone
+      // already reading the parent note, wherever it circulates.
+      const targets = new Set(myWriteRelays(ctx));
+      if (DISCOVERABLE_KINDS.has(intent.eventKind)) {
+        for (const url of ctx.discovery) targets.add(url);
+      }
+      if (intent.parent) {
+        for (const url of intent.parent.foundOn) targets.add(url);
+        for (const url of authorRead(ctx, intent.parent.author)) targets.add(url);
+      }
       return { tiers: [uniform(targets, [])] };
     }
   }

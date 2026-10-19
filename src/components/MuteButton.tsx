@@ -54,7 +54,7 @@ export const MuteButton = ({ pubkey, compact = false }: {
         label: muted ? 'unmute' : 'mute',
         content: `${verb} ${npubOf(pubkey).slice(0, 16)}…`,
         identityPubkey: user.pubkey,
-        relays: relays({ kind: 'publish', event: updated }),
+        relays: relays({ kind: 'publish', eventKind: updated.kind }),
         events: [updated],
       });
     } finally {
