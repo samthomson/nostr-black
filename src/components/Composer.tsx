@@ -59,7 +59,12 @@ export const Composer = ({
   // The reply composer is compact: one line tall, growing to three before
   // it scrolls; padding and footer shrink to match.
   const compact = variant === 'reply';
-  const canSubmit = (value.trim().length > 0 || (attachments?.length ?? 0) > 0) && !busy;
+  // There is a draft when the note has any prospective content.
+  const draft = value.trim().length > 0 || (attachments?.length ?? 0) > 0;
+  const canSubmit = draft && !busy;
+  // The footer starts hidden and only shows once there is something to
+  // act on; focus reveals it too (the `group-focus-within` class below).
+  const showActions = variant === 'edit' || draft;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
 
@@ -247,9 +252,7 @@ export const Composer = ({
 
       <div className={cn(
         'flex items-center justify-between gap-2 transition-opacity duration-200',
-        variant === 'edit' || value.trim() !== '' || (attachments?.length ?? 0) > 0
-          ? ''
-          : 'opacity-0 group-focus-within:opacity-100',
+        showActions ? '' : 'opacity-0 group-focus-within:opacity-100',
         compact ? 'px-2 py-1' : 'px-3 py-2',
       )}>
         <div className="flex items-center gap-1">
