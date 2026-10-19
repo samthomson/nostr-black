@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
+import { finalizeEvent, generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import { useLayoutEffect, type ReactNode } from 'react';
 import { TestApp } from '@/test/TestApp';
 import { NoteComposer } from '@/components/NoteComposer';
 import { useKeystore } from '@/auth/useKeystore';
 import { queuedEntries, resetQueue } from '@/data/publish/queue';
 import { burnersOf, resetBurners } from '@/auth/burners';
+import { store } from '@/data/store';
 
 const publish = vi.fn<(event: { pubkey: string; kind: number }, relays: string[]) => Promise<void>>();
 
@@ -142,6 +143,38 @@ describe('NoteComposer', () => {
     await waitFor(() => expect(box).toHaveValue(''));
   });
 
+  it('a typed mention publishes its NIP-27 p tag alongside the content entity', async () => {
+    const sk = generateSecretKey();
+    const skShan = generateSecretKey();
+    const shan = getPublicKey(skShan);
+    const profile = finalizeEvent({
+      kind: 0,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [],
+      content: JSON.stringify({ display_name: 'Shan' }),
+    }, skShan);
+    store.ingest([profile], '');
+    const user = userEvent.setup();
+    render(
+      <TestApp userState={{ follows: { pubkeys: [shan], updatedAt: 1 } }}>
+        <Unlock nsec={nip19.nsecEncode(sk)}>
+          <NoteComposer />
+        </Unlock>
+      </TestApp>,
+    );
+
+    const box = await screen.findByRole('textbox', { name: "what's happening?" });
+    await user.type(box, 'hey @sha');
+    const row = await screen.findByRole('option', { name: /Shan/ });
+    await user.click(within(row).getByRole('button'));
+    await user.click(screen.getByRole('button', { name: 'broadcast' }));
+    await confirmBroadcast(user);
+
+    await waitFor(() => expect(publish).toHaveBeenCalled());
+    const [note] = publish.mock.calls[0];
+    expect((note as unknown as { tags: string[][] }).tags).toContainEqual(['p', shan]);
+    expect((note as unknown as { content: string }).content).toContain(`nostr:${nip19.npubEncode(shan)}`);
+  });
   it('editing in the modal keeps the burner identity — never falls back to the real key', async () => {
     const sk = generateSecretKey();
     const identity = getPublicKey(sk);

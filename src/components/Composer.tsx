@@ -1,13 +1,16 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react';
 import { Loader2, Paperclip, Smile, X } from 'lucide-react';
 import { UPLOADABLE_IMAGE_ACCEPT } from '@/lib/imageCompress';
 import { EmojiPicker } from '@/components/EmojiPicker';
+import { MentionPicker } from '@/components/MentionPicker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { PRIVACY, PRIVACY_BUTTON, type PrivacyGrade } from '@/lib/privacy';
 import { searchEmoji } from '@/lib/emojiData';
+import { mentionEntityOf, searchMentions, type MentionCandidate } from '@/lib/mentions';
 import { cn } from '@/lib/utils';
 import type { Attachment } from '@/hooks/useAttachments';
+import { useMentionCandidates } from '@/data/hooks/useMentionCandidates';
 
 type ComposerVariant = 'post' | 'reply' | 'edit';
 
@@ -21,6 +24,10 @@ type ComposerVariant = 'post' | 'reply' | 'edit';
  * scrolls. Presentational only — the caller owns the draft, the staged
  * attachments and their upload. Emoji goes in two ways: the smiley button
  * (full picker) or typing `:query` (typeahead; enter picks, esc dismisses).
+ * People mention the same two-step way: typing `@query` opens the
+ * follows typeahead; picking one replaces the run with a NIP-27 entity
+ * (`nostr:npub1…`) and reports the pubkey upstream so the broadcast
+ * carries its `p` tag.
  */
 export const Composer = ({
   value,
@@ -46,10 +53,10 @@ export const Composer = ({
   grade: PrivacyGrade;
   /** Staged images, shown as a thumbnail strip under the text. */
   attachments?: readonly Attachment[];
-  /** Present to offer the attach button; receives picked image files. */
-  onAddFiles?: (files: File[]) => void;
   /** Remove one staged image (its X). */
   onRemoveAttachment?: (id: string) => void;
+  /** Present to offer the attach button; receives picked image files. */
+  onAddFiles?: (files: File[]) => void;
 }) => {
   const placeholder =
     variant === 'post' ? (grade === 'private' ? 'what are you doing?' : "what's happening?")
@@ -68,32 +75,59 @@ export const Composer = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
 
-  // `:` typeahead — when the caret sits in a `:query` run, the same
-  // picker UI opens as a small dropdown, live-filtered by the query;
-  // picking one replaces the whole run with the emoji. Escape dismisses
-  // it until the query changes — otherwise refocusing the textarea
-  // (still inside the `:` run) instantly reopens it.
-  const [typeahead, setTypeahead] = useState<{ query: string; start: number } | null>(null);
-  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
-  const hasMatches = typeahead ? searchEmoji(typeahead.query, 1).length > 0 : false;
-  const open = typeahead !== null && hasMatches && dismissedAt !== typeahead.start;
+  // `:` / `@` typeahead — when the caret sits in a `:query` or `@query`
+  // run, a dropdown opens: the emoji picker or the follows list,
+  // live-filtered by the query; picking one replaces the whole run. A
+  // mention pick also reports the pubkey upstream (NIP-27 p tag).
+  // Escape dismisses until the query changes — otherwise refocusing the
+  // textarea (still inside the run) instantly reopens it.
+  type TypeaheadRun = { trigger: ':' | '@'; query: string; start: number };
+  const [typeahead, setTypeahead] = useState<TypeaheadRun | null>(null);
+  // Escape dismisses the dropdown; any draft edit or blur resets the
+  // latch — both are the user re-engaging, so the next `@run` reopens.
+  // Only refocusing with an untouched draft stays dismissed (the
+  // original latch goal: refocus must not resurrect a dismissed
+  // dropdown). The old position-keyed latch never reset, so deleting
+  // and retyping the same `@` at the same index stayed shut forever.
+  const [dismissedGeneration, setDismissedGeneration] = useState<number | null>(null);
+  const [generation, bumpGeneration] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    bumpGeneration();
+  }, [value]);
+  // Mention rows: the candidates the current query matches, with the
+  // keyboard-highlighted one. The `@` dropdown opens as soon as the run
+  // exists — while the follow list is still syncing it says so, and a
+  // synced-but-empty list gets "no matches". Never a silent nothing.
+  const { candidates: mentionCandidates, synced: followsSynced } = useMentionCandidates();
+  const [highlight, setHighlight] = useState(0);
+  const mentionMatches =
+    typeahead?.trigger === '@' ? searchMentions(typeahead.query, mentionCandidates) : [];
+  const emojiHasMatches = typeahead?.trigger === ':' ? searchEmoji(typeahead.query, 1).length > 0 : false;
+  const open = typeahead !== null
+    && dismissedGeneration !== generation
+    && (typeahead.trigger === ':' ? emojiHasMatches : true);
+
   /** The dropdown's search input — ArrowDown hands it focus, and from
    *  there frimousse owns arrows + Enter like any picker. */
   const dropdownRef = useRef<HTMLInputElement>(null);
 
-  /** The `:query` run the caret is in, or null. Max 32 chars, no
-   *  whitespace — past that it's prose, not a shortcode. */
-  const typeaheadRun = (text: string, caret: number): { query: string; start: number } | null => {
+  /** The `:query` / `@query` run the caret is in, or null. Max 32
+   *  chars, no whitespace — past that it's prose, not a search. The
+   *  trigger must start the run: word-internal `@` and `:` never open
+   *  anything (`a@b`, `won't` are safe). */
+  const typeaheadRun = (text: string, caret: number): TypeaheadRun | null => {
     let start = -1;
+    let trigger: ':' | '@' = ':';
     for (let i = caret - 1; i >= 0 && caret - i <= 32; i--) {
       const ch = text[i];
-      if (ch === ' ' || ch === '\n' || ch === ':') {
-        start = ch === ':' ? i : -1;
+      if (ch === ' ' || ch === '\n' || ch === ':' || ch === '@') {
+        start = ch === ':' || ch === '@' ? i : -1;
+        trigger = ch === '@' ? '@' : ':';
         break;
       }
     }
     if (start === -1) return null;
-    return { query: text.slice(start + 1, caret), start };
+    return { trigger, query: text.slice(start + 1, caret), start };
   };
 
   /** Re-read the caret after a value change / click / arrow key. Reads
@@ -103,11 +137,19 @@ export const Composer = ({
     const el = textareaRef.current;
     if (!el) {
       setTypeahead(null);
+      setHighlight(0);
       return;
     }
     const caret = el.selectionStart ?? 0;
-    setTypeahead(caret !== el.selectionEnd ? null : typeaheadRun(el.value, caret));
+    const next = caret !== el.selectionEnd ? null : typeaheadRun(el.value, caret);
+    // A new run or a changed query resets the highlight to the first
+    // row — retyping after Escape must land on the best match, not
+    // wherever the previous session left off.
+    if (next?.start !== typeahead?.start || next?.query !== typeahead?.query) setHighlight(0);
+    setTypeahead(next);
   };
+  // The highlight follows the list: a filtered row set clamps it.
+  const clampedHighlight = Math.min(highlight, Math.max(mentionMatches.length - 1, 0));
 
   const pickTypeahead = (emoji: string) => {
     if (!typeahead) return;
@@ -119,6 +161,26 @@ export const Composer = ({
     requestAnimationFrame(() => {
       el?.focus();
       const caret = typeahead.start + emoji.length + 1;
+      el?.setSelectionRange(caret, caret);
+    });
+  };
+
+  /** Replaces the `@run` with the NIP-27 entity (`nostr:npub1…`) plus a
+   *  separating space — the next keystroke must not glue onto the
+   *  bech32. The entity lands as prose, so the render side already
+   *  links it, and the publishers derive its `p` tag from the content
+   *  at sign time. */
+  const pickMention = (candidate: MentionCandidate) => {
+    if (!typeahead || typeahead.trigger !== '@') return;
+    const el = textareaRef.current;
+    const end = el?.selectionStart ?? 0;
+    const entity = `${mentionEntityOf(candidate)} `;
+    const next = `${value.slice(0, typeahead.start)}${entity}${value.slice(end)}`;
+    onChange(next);
+    setTypeahead(null);
+    requestAnimationFrame(() => {
+      el?.focus();
+      const caret = typeahead.start + entity.length;
       el?.setSelectionRange(caret, caret);
     });
   };
@@ -180,10 +242,37 @@ export const Composer = ({
           // "don't submit" pattern. Plain Enter submits only in the
           // reply composer; elsewhere it needs meta/ctrl.
           //
-          // While the typeahead dropdown is up, ArrowDown hands focus to
-          // it — from there frimousse owns the keys (arrows walk the
-          // grid, Enter picks, Escape… handled in the dropdown below).
-          if (open && e.key === 'ArrowDown') {
+          // While a typeahead dropdown is up the arrows and Enter belong
+          // to it: the emoji picker takes focus with ArrowDown (frimousse
+          // owns the keys from there); the mention list walks its rows
+          // in place and Enter picks the highlighted one.
+          // Escape (from the textarea, without the ArrowDown handoff)
+          // dismisses the dropdown, latched to this run, like Escape in
+          // the dropdown itself.
+          if (open && e.key === 'Escape') {
+            e.preventDefault();
+            setDismissedGeneration(generation);
+            setTypeahead(null);
+            setHighlight(0);
+            return;
+          }
+          if (open && typeahead.trigger === '@') {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault();
+              setHighlight(Math.min(clampedHighlight + 1, mentionMatches.length - 1));
+              return;
+            }
+            if (e.key === 'ArrowUp') {
+              e.preventDefault();
+              setHighlight(Math.max(clampedHighlight - 1, 0));
+              return;
+            }
+            if (e.key === 'Enter' && mentionMatches[clampedHighlight]) {
+              e.preventDefault();
+              pickMention(mentionMatches[clampedHighlight]!);
+              return;
+            }
+          } else if (open && e.key === 'ArrowDown') {
             e.preventDefault();
             dropdownRef.current?.focus();
             return;
@@ -203,7 +292,7 @@ export const Composer = ({
         }}
       />
 
-      {open && (
+      {open && typeahead.trigger === ':' && (
         <div className="relative px-3">
           {/* anchored dropdown under the input — the same picker UI as the
               smiley button, compact and query-driven by the `:` run */}
@@ -214,7 +303,7 @@ export const Composer = ({
               // this run) and hand the caret back to the textarea
               if (e.key === 'Escape') {
                 e.stopPropagation();
-                setDismissedAt(typeahead.start);
+                setDismissedGeneration(generation);
                 setTypeahead(null);
                 textareaRef.current?.focus();
               }
@@ -225,6 +314,35 @@ export const Composer = ({
               query={typeahead.query}
               searchRef={dropdownRef}
               onSelect={pickTypeahead}
+            />
+          </div>
+        </div>
+      )}
+
+      {open && typeahead.trigger === '@' && (
+        <div className="relative px-3">
+          {/* anchored follows dropdown under the input, keyboard-lit by
+              the composer — rows highlight in place, Enter picks */}
+          <div
+            className="absolute top-1 left-3 z-40 shadow-md"
+            onKeyDown={(e) => {
+              // Escape dismisses (latched to this run) and hands the
+              // caret back to the textarea
+              if (e.key === 'Escape') {
+                e.stopPropagation();
+                setDismissedGeneration(generation);
+                setTypeahead(null);
+                textareaRef.current?.focus();
+              }
+            }}
+          >
+            <MentionPicker
+              matches={mentionMatches}
+              query={typeahead.query}
+              syncing={!followsSynced}
+              highlighted={clampedHighlight}
+              onHighlight={setHighlight}
+              onPick={pickMention}
             />
           </div>
         </div>

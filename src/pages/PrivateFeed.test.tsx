@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
+import { finalizeEvent, generateSecretKey, getPublicKey, nip19 } from 'nostr-tools';
 import type { NostrEvent, NostrFilter } from '@nostrify/nostrify';
 import { useLayoutEffect, type ReactNode } from 'react';
 import { TestApp } from '@/test/TestApp';
@@ -369,6 +369,56 @@ describe('PrivateFeedPage', () => {
     const revision = publish.mock.calls.map(([ev]) => ev).find((ev) => ev.kind === 1470);
     expect(revision).toBeTruthy();
     expect(revision!.tags).toContainEqual(['n', noteIdOf(replyCek)]);
+  });
+
+  it('a private mention: typeahead pick publishes the entity and its p tag inside the sealed rumor, and the feed renders the name', async () => {
+    const alice = generateSecretKey();
+    const bob = generateSecretKey();
+    const offer = requestConnection(alice, getPublicKey(bob));
+    const accepted = acceptConnection(bob, openConnection(bob, offer));
+    const bobProfile = finalizeEvent({
+      kind: 0,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [],
+      content: JSON.stringify({ display_name: 'Shan' }),
+    }, bob);
+
+    queryRelay.mockImplementation(async (_url, filters) => {
+      if (filters[0].kinds?.includes(30378)) return [accepted];
+      if (filters[0].kinds?.includes(0)) return [bobProfile];
+      return [];
+    });
+
+    render(
+      <TestApp userState={{ follows: { pubkeys: [getPublicKey(bob)], updatedAt: 1 } }}>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <PrivateFeedPage />
+        </Unlock>
+      </TestApp>,
+    );
+    await settle();
+    await settle();
+    await settle();
+
+    const user = userEvent.setup();
+    const box = await screen.findByRole('textbox', { name: 'what are you doing?' });
+    await user.type(box, 'secret hi @sha');
+    const row = await screen.findByRole('option', { name: /Shan/ });
+    await user.click(within(row).getByRole('button'));
+    await user.click(screen.getByRole('button', { name: 'broadcast' }));
+    await confirmBroadcast(user);
+    await settle();
+
+    // The sealed wrapper opens back with the entity in the content and
+    // the mention p tag on the rumor — nothing readable on the wrapper.
+    const wrapper = publish.mock.calls.map(([ev]) => ev).find((ev) => ev.kind === 1370)!;
+    const opened = openPrivateNote(alice, wrapper);
+    expect(opened.rumor.content).toContain(`nostr:${nip19.npubEncode(getPublicKey(bob))}`);
+    expect(opened.rumor.tags).toContainEqual(['p', getPublicKey(bob)]);
+    expect(wrapper.content).not.toContain(getPublicKey(bob));
+
+    // The feed renders the mention as the person's name.
+    expect(await screen.findByText(/Shan/)).toBeTruthy();
   });
 
   it('sends staged images as imeta tags on the note itself — ciphertext uploaded only once the modal confirms', async () => {

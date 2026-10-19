@@ -17,6 +17,7 @@ import { useAttachments } from '@/hooks/useAttachments';
 import { prepareImage } from '@/lib/imageCompress';
 import { useBlossomUpload } from '@/hooks/useBlossomUpload';
 import { useBlossomServers } from '@/data/hooks/useBlossomServers';
+import { mentionedPubkeysOf, pTagsOf } from '@/lib/mentions';
 
 /** One confirmed upload, as the note references it (NIP-92 imeta). */
 interface UploadedImage extends UploadedFile {
@@ -30,6 +31,10 @@ interface UploadedImage extends UploadedFile {
  * re-previews (new identity, one grade greyer, re-signed event) before
  * anything is queued. Staged images compress and upload only when the
  * modal confirms, then the note builds from the returned urls.
+ * Mentions are NIP-27: the composer's `@` typeahead writes
+ * `nostr:npub1…` entities, and every entity in the content gets its
+ * `p` tag at sign time — content is the source of truth, so modal
+ * edits never orphan a tag.
  */
 export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
   const { user } = useCurrentUser();
@@ -172,6 +177,9 @@ const signedNote = (
   const tag = clientTagOf(policy, content);
   if (tag) tags.push(['client', tag]);
   if (parent) tags.push(...replyTagsOf(parent));
+  tags.push(...pTagsOf([parent?.pubkey, ...mentionedPubkeysOf(content)].filter(
+    (pubkey): pubkey is string => !!pubkey,
+  )));
   for (const image of uploaded) {
     tags.push([
       'imeta',

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { nowSec } from '@/lib/timestamp';
 import { Link, useNavigate } from 'react-router-dom';
-import { finalizeEvent, getPublicKey, nip10, nip19 } from 'nostr-tools';
+import { finalizeEvent, getPublicKey, nip10 } from 'nostr-tools';
 import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat, Trash2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { Rumor } from '@/lib/feedEncryption';
@@ -32,8 +32,8 @@ import { rememberBurner } from '@/auth/burners';
 
 import { useRouting } from '@/data/hooks/useRouting';
 import { PRIVACY, type PrivacyGrade } from '@/lib/privacy';
-import { mediaUrls, MEDIA_URL, VIDEO_URL } from '@/lib/mediaUrls';
-import { sanitizeUrl } from '@/lib/sanitizeUrl';
+import { mediaUrls, VIDEO_URL } from '@/lib/mediaUrls';
+import { RenderedContent } from '@/components/RenderedContent';
 
 
 /** Content/image budget past which a note is collapsed with a fade. */
@@ -48,104 +48,6 @@ const stripMd = (md: string): string => md
   .replace(/^#{1,6}\s+/gm, '')
   .replace(/[*_`>~]/g, '')
   .trim();
-/** Link/accent colour for a privacy-graded surface: maroon pops on the
- * light public surface; on dark grades the grade's own fg keeps links
- * readable. */
-const refClass = (grade: PrivacyGrade): string =>
-  grade === 'public' ? 'text-maroon' : 'text-privacy-private-fg';
-
-
-/** Renders a bech32 id (npub/note/nevent/naddr…) as a link to its route. */
-const NostrRef = ({ bech32, grade }: { bech32: string; grade: PrivacyGrade }) => {
-  const decoded = (() => {
-    try {
-      return nip19.decode(bech32);
-    } catch {
-      return null;
-    }
-  })();
-
-  const pubkey = decoded
-    ? decoded.type === 'npub' ? decoded.data
-      : decoded.type === 'nprofile' ? decoded.data.pubkey
-      : undefined
-    : undefined;
-  const { metadata } = useProfile(pubkey);
-
-  // Untrusted event content: a malformed bech32 renders as plain text,
-  // never crashes the whole feed.
-  if (!decoded) return <span>{bech32}</span>;
-
-  let label = `${bech32.slice(0, 10)}…`;
-  if (decoded.type === 'npub' || decoded.type === 'nprofile') {
-    label = metadata?.display_name || metadata?.name || label;
-  } else if (decoded.type === 'note' || decoded.type === 'nevent' || decoded.type === 'naddr') {
-    label = 'note';
-  }
-
-  // Mentions of a person get the hover card; note refs stay plain links.
-  if (!pubkey) {
-    return (
-      <Link to={`/${bech32}`} className={cn(refClass(grade), 'underline underline-offset-2')}>
-        @{label}
-      </Link>
-    );
-  }
-  return (
-    <ProfileHoverCard pubkey={pubkey}>
-      <Link to={`/${bech32}`} className={cn(refClass(grade), 'underline underline-offset-2')}>
-        @{label}
-      </Link>
-    </ProfileHoverCard>
-  );
-};
-
-/**
- * Renders note content as safe React nodes: nostr: entities (NIP-21),
- * non-image URLs and hashtags. Image URLs are hoisted out of the text into
- * the note's media grid — one way to render images, not two. Never uses
- * innerHTML — event content is untrusted (see AGENTS.md).
- */
-const renderContent = (content: string, grade: PrivacyGrade) =>
-  content
-    .split(/(nostr:[a-z0-9]+|@(?:npub|nprofile|note|nevent|naddr)1[a-z0-9]+|https?:\/\/[^\s]+|#[\p{L}\p{N}_]+)/gu)
-    .filter(Boolean)
-    .filter((token) => !(token.startsWith('http') && MEDIA_URL.test(token)))
-    .map((token, i) => {
-      if (token.startsWith('nostr:')) {
-        return <NostrRef key={i} bech32={token.slice(6)} grade={grade} />;
-      }
-      if (/^@(npub|nprofile|note|nevent|naddr)1/.test(token)) {
-        return <NostrRef key={i} bech32={token.slice(1)} grade={grade} />;
-      }
-      if (/^https?:\/\//.test(token)) {
-        const safe = sanitizeUrl(token);
-        // http/non-https links still render as text — clicking out is
-        // https-only in this app, but the words aren't lost.
-        if (!safe) return token;
-        return (
-          <a
-            key={i}
-            href={safe}
-            className={cn(refClass(grade), 'underline underline-offset-2 break-all')}
-            rel="noopener noreferrer nofollow"
-            target="_blank"
-          >
-            {token}
-          </a>
-        );
-      }
-      if (token.startsWith('#')) {
-        return (
-          <span key={i} className={refClass(grade)}>
-            {token}
-          </span>
-        );
-      }
-      return token;
-    });
-
-
 /** Long urls in gated-media duds, kept to one line: truncated, and
  * wrapped anywhere (break-all) so no host runs the card wide. */
 const truncatedUrl = (url: string): string => (url.length > 80 ? `${url.slice(0, 77)}…` : url);
@@ -892,7 +794,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
               )}
               {!embedded && (
                 <div className="mt-1 whitespace-pre-wrap break-words text-sm">
-                  {renderContent(renderedText, grade)}
+                  <RenderedContent content={renderedText} grade={grade} />
                 </div>
               )}
               {!embedded && <MediaGrid urls={media} alt={altText} onOpen={setOpenMedia} />}

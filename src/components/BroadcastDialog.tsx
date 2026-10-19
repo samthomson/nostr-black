@@ -18,6 +18,7 @@ import { cn } from '@/lib/utils';
 import type { PrivacyGrade } from '@/lib/privacy';
 import type { ReactNode } from 'react';
 import type { EventLayer } from '@/lib/feedEncryption';
+import { RenderedContent } from '@/components/RenderedContent';
 import type { PendingBroadcast } from '@/hooks/useBroadcastFlow';
 
 /**
@@ -183,7 +184,11 @@ export const BroadcastDialog = ({
               <div className="text-sm">{preview}</div>
             ) : tab === 'preview' ? (
               <div className="space-y-2">
-                {content && <div className="text-sm break-words whitespace-pre-wrap">{content}</div>}
+                {content && (
+                  <div className="text-sm break-words whitespace-pre-wrap">
+                    <RenderedContent content={content} grade={grade} keepMediaUrls />
+                  </div>
+                )}
                 {uploads?.previews && uploads.previews.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {uploads.previews.map((url) => (
