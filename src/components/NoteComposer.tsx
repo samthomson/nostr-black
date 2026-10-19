@@ -99,16 +99,23 @@ export const NoteComposer = ({ parent }: { parent?: NostrEvent }) => {
             server: servers[0]!,
             previews: attachments.map((a) => a.previewUrl),
             signUploadsWith: signer,
-            run: (): Promise<UploadedImage[]> => Promise.all(staged.map(async (file) => {
-              const compressed = await prepareImage(file, config.imageCompression);
-              const blob = await upload(compressed.bytes, compressed.type, signer, servers[0]);
-              return {
-                url: blob.url,
-                sha256: blob.sha256,
-                mime: compressed.type,
-                dim: compressed.width > 0 ? `${compressed.width}x${compressed.height}` : undefined,
-              };
-            })),
+            run: async (onProgress?: (done: number, total: number, loaded: number, fileBytes: number) => void): Promise<UploadedImage[]> => {
+              const uploaded: UploadedImage[] = [];
+              for (let i = 0; i < staged.length; i++) {
+                const file = staged[i]!;
+                const compressed = await prepareImage(file, config.imageCompression);
+                const blob = await upload(compressed.bytes, compressed.type, signer, servers[0], (loaded, total) => {
+                  onProgress?.(i, staged.length, loaded, total);
+                });
+                uploaded.push({
+                  url: blob.url,
+                  sha256: blob.sha256,
+                  mime: compressed.type,
+                  dim: compressed.width > 0 ? `${compressed.width}x${compressed.height}` : undefined,
+                });
+              }
+              return uploaded;
+            },
           },
           buildEvents: (uploaded) => [
             signedNote(

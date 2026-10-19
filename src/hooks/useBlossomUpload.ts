@@ -20,11 +20,13 @@ export const useBlossomUpload = (): ((
   /** Overrides the resolved server — deferred broadcasts state theirs
    *  in the modal's upload line and must send exactly there. */
   server?: string,
+  /** Upload progress: bytes sent / total for this blob. */
+  onProgress?: (loaded: number, total: number) => void,
 ) => Promise<UploadedBlob>) => {
   const { servers } = useBlossomServers();
   return useCallback(
-    (bytes: Uint8Array, type: string, signWith: Uint8Array, server?: string) =>
-      blossomUpload(bytes, type, server ?? servers[0]!, signWith),
+    (bytes: Uint8Array, type: string, signWith: Uint8Array, server?: string, onProgress?: (loaded: number, total: number) => void) =>
+      blossomUpload(bytes, type, server ?? servers[0]!, signWith, onProgress),
     [servers],
   );
 };

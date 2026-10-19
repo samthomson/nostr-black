@@ -26,7 +26,7 @@ const Harness = ({ pending }: { pending: PendingBroadcast }) => {
 const confirmBroadcast = async (user: { click: (el: Element) => Promise<void> }) => {
   const dialog = await screen.findByRole('dialog');
   for (const b of await within(dialog).findAllByRole('button')) {
-    if ((b.textContent ?? '').trim() === 'broadcast') {
+    if (/^(broadcast|upload .+ \+ broadcast)$/.test((b.textContent ?? '').trim())) {
       await user.click(b);
       return;
     }
@@ -110,7 +110,8 @@ describe('useBroadcastFlow deferred uploads', () => {
 
     // the user retries and the server answers — same modal, same request
     run.mockResolvedValue([{ url: 'https://cdn.example/b.png', sha256: 'b'.repeat(64), mime: 'image/png' }]);
-    await confirmBroadcast(user);
+    // After a failure the CTA relabels to retry — match the new label.
+    await user.click(screen.getByRole('button', { name: 'retry upload + broadcast' }));
     await waitFor(() => expect(publish).toHaveBeenCalled());
     expect(run).toHaveBeenCalledTimes(2);
   });

@@ -59,6 +59,7 @@ export const blossomUpload = async (
   type: string,
   server: string,
   sk: Uint8Array,
+  onProgress?: (loaded: number, total: number) => void,
 ): Promise<UploadedBlob> => {
   const sha256hex = bytesToHex(sha256(bytes));
   const authorization = `Nostr ${btoa(JSON.stringify(blossomAuth(sk, sha256hex)))}`;
@@ -73,13 +74,10 @@ export const blossomUpload = async (
       body: toBase64(bytes),
     }));
   } else {
-    const res = await fetch(endpoint, {
-      method: 'PUT',
-      headers: { Authorization: authorization, 'Content-Type': type },
-      body: bytes as Uint8Array<ArrayBuffer>,
-    });
-    if (!res.ok) throw new Error(`blossom upload failed: ${res.status} ${await res.text()}`);
-    raw = await res.text();
+    // XHR, not fetch: fetch cannot report upload progress at all, and
+    // iOS Safari is unreliable PUTting raw typed-array bodies — the
+    // Blob wrapper is the portable shape on every engine.
+    raw = await xhrUpload(endpoint, authorization, type, bytes, onProgress);
   }
 
   const descriptor = (() => {
@@ -98,6 +96,36 @@ export const blossomUpload = async (
     url: descriptor.url ?? `${server.replace(/\/+$/, '')}/${sha256hex}`,
     size: descriptor.size ?? bytes.length,
   };
+};
+
+/** One PUT via XHR with upload progress. The body is a Blob — the
+ * typed-array-to-BodyInit coercion is where mobile Safari breaks. */
+const xhrUpload = (
+  endpoint: string,
+  authorization: string,
+  type: string,
+  bytes: Uint8Array,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<string> => {
+  const { promise, reject, resolve } = Promise.withResolvers<string>();
+  const xhr = new XMLHttpRequest();
+  xhr.open('PUT', endpoint);
+  xhr.setRequestHeader('Authorization', authorization);
+  xhr.setRequestHeader('Content-Type', type);
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) onProgress?.(e.loaded, e.total);
+  };
+  xhr.onload = () => {
+    if (xhr.status >= 200 && xhr.status < 300) {
+      resolve(xhr.responseText);
+    } else {
+      reject(new Error(`blossom upload failed: ${xhr.status} ${xhr.responseText.slice(0, 200)}`));
+    }
+  };
+  xhr.onerror = () => reject(new Error('upload failed — network error (offline, blocked, or the server is unreachable)'));
+  xhr.ontimeout = () => reject(new Error('upload timed out'));
+  xhr.send(new Blob([bytes as Uint8Array<ArrayBuffer>], { type }));
+  return promise;
 };
 
 /** Fetch raw bytes from a blossom server (or any https URL) — the

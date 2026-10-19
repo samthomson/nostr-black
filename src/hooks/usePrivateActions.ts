@@ -9,16 +9,12 @@ import { useBroadcastFlow, type PendingUploads, type UploadedFile } from '@/hook
 import { store } from '@/data/store';
 import { mediaTags } from '@/lib/fileMessage';
 import { conversationOf, type Conversation, type OpenedReply } from '@/lib/feedEncryptionRead';
-import { makeRumor, wrapPrivateNote, wrapPrivateReply, type OpenedNote, type EventLayer, type Rumor } from '@/lib/feedEncryption';
+import { makeRumor, wrapPrivateNote, wrapPrivateReply, type OpenedNote, type EventLayer, type Rumor, deletePrivateEvent, makeRevision, privateNoteLayers } from '@/lib/feedEncryption';
 import { remintRumor } from '@/lib/fileMessage';
 import type { StagedImage } from '@/hooks/usePrivateImagePrep';
-import {
-  KIND_PRIVATE_NOTE,
-  deletePrivateEvent,
-  makeRevision,
-  privateNoteLayers,
-} from '@/lib/feedEncryption';
-
+import { useAppContext } from '@/hooks/useAppContext';
+import { clientTagOf } from '@/lib/clientTag';
+import { KIND_PRIVATE_NOTE } from '@/lib/feedEncryption';
 /**
  * The private conversation actions — post, reply, react, edit, delete —
  * shared by every surface that shows an opened private note (the feed and
@@ -33,7 +29,7 @@ export const usePrivateActions = () => {
   const { request, dialog } = useBroadcastFlow();
   const upload = useBlossomUpload();
   const { servers } = useBlossomServers();
-  // The pages render these actions only behind their session-key guard.
+  const { config } = useAppContext();
   const key = sk!;
   const publishTargets = myWrite;
   const discoveryTargets = DEFAULT_DISCOVERY_RELAYS.filter((url) => !publishTargets.includes(url));
@@ -68,7 +64,8 @@ export const usePrivateActions = () => {
 
   /** The deferred uploads for pre-encrypted images: ciphertext to the
    * first blossom server, the kind-24242 auth signed by a throwaway —
-   * it correlates with nothing, not even the burner. */
+   * it correlates with nothing, not even the burner. Sequential, so
+   * each image's bytes-visible progress is real, not interleaved. */
   const uploadsOf = (media: readonly StagedImage[], previews?: readonly string[]): PendingUploads => {
     const throwaway = generateSecretKey();
     const server = servers[0]!;
@@ -77,10 +74,17 @@ export const usePrivateActions = () => {
       server,
       previews,
       signUploadsWith: throwaway,
-      run: async () => Promise.all(media.map(async (image) => {
-        const blob = await upload(image.ct, 'application/octet-stream', throwaway, server);
-        return { url: blob.url, sha256: blob.sha256, mime: image.mime };
-      })),
+      run: async (onProgress?: (done: number, total: number, loaded: number, fileBytes: number) => void) => {
+        const uploaded: UploadedFile[] = [];
+        for (let i = 0; i < media.length; i++) {
+          const image = media[i]!;
+          const blob = await upload(image.ct, 'application/octet-stream', throwaway, server, (loaded, total) => {
+            onProgress?.(i, media.length, loaded, total);
+          });
+          uploaded.push({ url: blob.url, sha256: blob.sha256, mime: image.mime });
+        }
+        return uploaded;
+      },
     };
   };
 
@@ -92,14 +96,21 @@ export const usePrivateActions = () => {
     handlers: { onEdit?: (content: string) => void; onEnqueued?: () => void } = {},
     previews?: readonly string[],
   ): void => {
-    // The conversation was minted at submit start — its reply CEK
-    // encrypted the images. The media tags land on the minted shell
-    // with the note's content: one event, image attached to its note.
-    const rumorOf = (urls: readonly string[]): Rumor =>
-      remintRumor(cekAndRumor.rumor, {
+    // The client tag policy is honored here exactly as on public notes:
+    // the tag rides the sealed rumor, visible only to conversation
+    // holders — what your connections learn is which app you use, a
+    // deliberate setting, not an accident.
+    const rumorOf = (urls: readonly string[]): Rumor => {
+      const client = clientTagOf(config.clientTag, content);
+      return remintRumor(cekAndRumor.rumor, {
         content,
-        tags: [...cekAndRumor.rumor.tags, ...mediaTags(media.map((image, i) => ({ ...image, url: urls[i]! })), cekAndRumor.replyCek)],
+        tags: [
+          ...cekAndRumor.rumor.tags,
+          ...(client ? [['client', client]] : []),
+          ...mediaTags(media.map((image, i) => ({ ...image, url: urls[i]! })), cekAndRumor.replyCek),
+        ],
       });
+    };
     if (media.length === 0) {
       const events = wrapPrivateNote(key, peers, rumorOf([]));
       privateRequest('private note', content, { events }, {
@@ -138,7 +149,10 @@ export const usePrivateActions = () => {
       });
       return;
     }
-    const { rumor } = makeRumor(me, emoji, [['e', target.id]], 7);
+    const { rumor } = makeRumor(me, emoji, [
+      ['e', target.id],
+      ...(clientTagOf(config.clientTag, emoji) ? [['client', clientTagOf(config.clientTag, emoji)!]] : []),
+    ], 7);
     const event = wrapPrivateReply(key, parent.replyCek, rumor);
     privateRequest('reaction', `${emoji} on ${target.content.slice(0, 64)}`, { events: [event] }, {
       extraRelays: discoveryTargets,
@@ -150,6 +164,7 @@ export const usePrivateActions = () => {
     const eventOf = (urls: readonly string[]): NostrEvent => {
       const { rumor } = makeRumor(getPublicKey(key), content, [
         ['e', parent.rumor.id],
+        ...(clientTagOf(config.clientTag, content) ? [['client', clientTagOf(config.clientTag, content)!]] : []),
         ...mediaTags(media.map((image, i) => ({ ...image, url: urls[i]! })), parent.replyCek),
       ]);
       return wrapPrivateReply(key, parent.replyCek, rumor);
@@ -173,7 +188,11 @@ export const usePrivateActions = () => {
     // the key, so one revision covers the whole audience — no slots,
     // no aliases, no connection state.
     const revision = makeRevision(getPublicKey(key), parent.rumor, content);
-    const event = wrapPrivateReply(key, parent.replyCek, revision);
+    const client = clientTagOf(config.clientTag, content);
+    const tagged: Rumor = client
+      ? { ...revision, tags: [...revision.tags, ['client', client]] }
+      : revision;
+    const event = wrapPrivateReply(key, parent.replyCek, tagged);
     privateRequest('revision', content, { events: [event] }, {
       extraRelays: discoveryTargets,
       layers: privateNoteLayers(key, event, parent.replyCek),

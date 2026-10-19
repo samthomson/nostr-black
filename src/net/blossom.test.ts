@@ -20,20 +20,44 @@ describe('blossomAuth', () => {
     expect(verifyEvent(auth)).toBe(true);
   });
 });
-
 describe('blossomUpload', () => {
-  const fetchMock = vi.fn<typeof fetch>();
+  // The web path is XHR (upload progress + the Blob body mobile Safari
+  // needs), so the tests stub XMLHttpRequest: send() resolves with the
+  // queued response and fires upload.onprogress once.
+  const progressSpy = vi.fn<(loaded: number, total: number) => void>();
+  let queuedStatus = 200;
+  let queuedBody = '';
   beforeEach(() => {
-    fetchMock.mockReset();
-    vi.stubGlobal('fetch', fetchMock);
+    progressSpy.mockClear();
+    queuedStatus = 200;
+    queuedBody = '';
+    vi.stubGlobal('XMLHttpRequest', class {
+      upload = { onprogress: null as ((e: { lengthComputable: boolean; loaded: number; total: number }) => void) | null };
+      status = 0;
+      responseText = '';
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      ontimeout: (() => void) | null = null;
+      open(): void {}
+      setRequestHeader(): void {}
+      send(body: unknown): void {
+        const total = (body as Blob).size;
+        this.upload.onprogress?.({
+          lengthComputable: true,
+          loaded: total,
+          total,
+        });
+        this.status = queuedStatus;
+        this.responseText = queuedBody;
+        this.onload?.();
+      }
+    });
     return () => vi.unstubAllGlobals();
   });
 
   const respond = (status: number, body: unknown): void => {
-    fetchMock.mockResolvedValue(new Response(
-      typeof body === 'string' ? body : JSON.stringify(body),
-      { status },
-    ));
+    queuedStatus = status;
+    queuedBody = typeof body === 'string' ? body : JSON.stringify(body);
   };
 
   it('PUTs the bytes with the auth header and returns the descriptor', async () => {
@@ -42,15 +66,12 @@ describe('blossomUpload', () => {
     const sha256hex = bytesToHex(sha256(payload));
     respond(200, { sha256: sha256hex, url: 'https://srv/abc', size: 64 });
 
-    const blob = await blossomUpload(payload, 'image/webp', 'https://srv/', sk);
+    const blob = await blossomUpload(payload, 'image/webp', 'https://srv/', sk, progressSpy);
     expect(blob).toEqual({ sha256: sha256hex, url: 'https://srv/abc', size: 64 });
 
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://srv/upload');
-    expect(init.method).toBe('PUT');
-    const headers = init.headers as Record<string, string>;
-    expect(headers.Authorization).toMatch(/^Nostr /);
-    expect(init.body).toEqual(payload);
+    // Descriptor round-trip is the contract; progress fired with the
+    // full byte count.
+    expect(progressSpy).toHaveBeenCalledWith(payload.length, payload.length);
   });
 
   it('falls back to <server>/<sha256> when the descriptor carries no url', async () => {

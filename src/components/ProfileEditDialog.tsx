@@ -421,13 +421,18 @@ export const ProfileEditDialog = ({
         // auth event can't sign. A clear error here lands in the modal's
         // error line ("upload failed: …"); the assertion instead would
         // surface a TypeError from inside the crypto.
-        run: async () => {
+        run: async (onProgress?: (done: number, total: number, loaded: number, fileBytes: number) => void) => {
           if (!sk) throw new Error('logged out — relogin to upload');
-          return Promise.all(stagedNow.map(async ({ file }) => {
+          const uploaded: { url: string; sha256: string; mime: string }[] = [];
+          for (let i = 0; i < stagedNow.length; i++) {
+            const { file } = stagedNow[i]!;
             const compressed = await prepareImage(file, config.imageCompression);
-            const blob = await upload(compressed.bytes, compressed.type, sk, server);
-            return { url: blob.url, sha256: blob.sha256, mime: compressed.type };
-          }));
+            const blob = await upload(compressed.bytes, compressed.type, sk, server, (loaded, total) => {
+              onProgress?.(i, stagedNow.length, loaded, total);
+            });
+            uploaded.push({ url: blob.url, sha256: blob.sha256, mime: compressed.type });
+          }
+          return uploaded;
         },
       },
       buildEvents: (uploaded) => kindZeroOf(uploaded.map((file) => file.url), stagedNow),

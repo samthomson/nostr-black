@@ -25,7 +25,7 @@ export interface PendingUploads {
    *  pictures before the upload has run and produced real urls. */
   previews?: readonly string[];
   signUploadsWith?: Uint8Array;
-  run: () => Promise<UploadedFile[]>;
+  run: (onProgress?: (done: number, total: number, loaded: number, fileBytes: number) => void) => Promise<UploadedFile[]>;
 }
 
 /** One broadcast, previewed and awaiting confirmation. */
@@ -88,10 +88,14 @@ export const useBroadcastFlow = (): {
    * "1/2 uploading…" then "2/2 broadcasting…" so the button press has
    * visible progress instead of a silent disabled beat. */
   const [phase, setPhase] = useState<'idle' | 'uploading' | 'broadcasting'>('idle');
+  /** Upload progress: images finished, total images, and the current
+   * image's bytes sent/total — the modal's bar. */
+  const [progress, setProgress] = useState<{ done: number; total: number; loaded: number; fileBytes: number } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   const request = useCallback((next: PendingBroadcast) => {
     setUploadError(null);
+    setProgress(null);
     setPhase('idle');
     setPending(next);
   }, []);
@@ -122,10 +126,14 @@ export const useBroadcastFlow = (): {
     setUploadError(null);
     setBusy(true);
     setPhase('uploading');
-    void live.uploads.run()
+    setProgress({ done: 0, total: live.uploads.count, loaded: 0, fileBytes: 0 });
+    void live.uploads.run((done, total, loaded, fileBytes) => {
+      if (stillLive()) setProgress({ done, total, loaded, fileBytes });
+    })
       .then((uploaded) => Promise.resolve(live.buildEvents!(uploaded)))
       .then((events) => {
         if (!stillLive()) return;
+        setProgress(null);
         setPhase('broadcasting');
         setTimeout(() => { if (stillLive()) commit(events); }, 600);
       })
@@ -140,6 +148,7 @@ export const useBroadcastFlow = (): {
       open
       onOpenChange={(open) => { if (!open) setPending(null); }}
       error={uploadError}
+      progress={progress}
       busy={busy}
       phase={phase}
       grade={pending.grade}

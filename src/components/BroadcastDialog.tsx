@@ -47,6 +47,7 @@ export const BroadcastDialog = ({
   onBroadcast,
   busy = false,
   phase = 'idle',
+  progress = null,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -70,7 +71,9 @@ export const BroadcastDialog = ({
   uploads?: { count: number; server: string; previews?: readonly string[] };
   /** Which half of an upload+broadcast run is live. */
   phase?: 'idle' | 'uploading' | 'broadcasting';
-  /** Confirm: run deferred uploads, then enqueue the events. */
+  /** Live upload progress: images done/total plus the current image's
+   *  bytes sent — the bar under the step line. */
+  progress?: { done: number; total: number; loaded: number; fileBytes: number } | null;
   onBroadcast: (targets: readonly string[]) => void;
   /** A run is in flight — the footer locks. */
   busy?: boolean;
@@ -274,18 +277,32 @@ export const BroadcastDialog = ({
         </div>
 
         {error && (
-          <p className="text-red-500 shrink-0 px-4 pt-2 font-mono text-[10px] leading-relaxed">
-            upload failed: {error}
-          </p>
+          <div className="shrink-0 space-y-2 px-4 pt-2 font-mono text-[10px] leading-relaxed">
+            <p className="text-red-500">upload failed: {error}</p>
+            <p className="text-muted-foreground">
+              your images are still staged — retry, or cancel to keep editing.
+            </p>
+          </div>
         )}
 
         {/* The run, narrated: uploads then broadcast — both visible,
-            neither silent. */}
+            neither silent. The bar tracks the current image's bytes. */}
         {busy && uploads && (
-          <div className="shrink-0 px-4 pt-2 font-mono text-[10px] leading-relaxed">
+          <div className="shrink-0 space-y-1.5 px-4 pt-2 font-mono text-[10px] leading-relaxed">
             <p className={phase === 'uploading' ? 'text-foreground' : 'text-muted-foreground'}>
               {phase === 'uploading' ? '›' : '✓'} 1/2 uploading image{uploads.count === 1 ? '' : 's'}…
+              {phase === 'uploading' && progress && progress.total > 1 && (
+                <span className="text-muted-foreground"> {Math.min(progress.done + 1, progress.total)}/{progress.total}</span>
+              )}
             </p>
+            {phase === 'uploading' && progress && progress.fileBytes > 0 && (
+              <div className="bg-muted h-1.5 w-full overflow-hidden rounded-sm">
+                <div
+                  className="bg-foreground h-full transition-[width] duration-150"
+                  style={{ width: `${Math.round((progress.loaded / progress.fileBytes) * 100)}%` }}
+                />
+              </div>
+            )}
             {phase === 'broadcasting' && (
               <p className="text-foreground">› 2/2 broadcasting {label}…</p>
             )}
@@ -310,6 +327,8 @@ export const BroadcastDialog = ({
                 <Loader2 className="size-3.5 animate-spin" />
                 {phase === 'uploading' ? 'uploading…' : 'broadcasting…'}
               </>
+            ) : error ? (
+              'retry upload + broadcast'
             ) : uploads ? (
               `upload ${uploads.count === 1 ? 'image' : `${uploads.count} images`} + broadcast`
             ) : (
