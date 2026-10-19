@@ -64,8 +64,12 @@ export const usePrivateActions = () => {
 
   /** The deferred uploads for pre-encrypted images: ciphertext to the
    * first blossom server, the kind-24242 auth signed by a throwaway —
-   * it correlates with nothing, not even the burner. Sequential, so
-   * each image's bytes-visible progress is real, not interleaved. */
+   * it correlates with nothing, not even the burner. The Content-Type
+   * is the image's real mime, not octet-stream: some blossom servers
+   * (e.g. primal's) reject generic blobs outright, and the bytes are
+   * opaque to the server either way — the mime describes the container,
+   * the AES-GCM ciphertext stays unreadable regardless.
+   * Sequential, so each image's bytes-visible progress is real. */
   const uploadsOf = (media: readonly StagedImage[], previews?: readonly string[]): PendingUploads => {
     const throwaway = generateSecretKey();
     const server = servers[0]!;
@@ -78,7 +82,7 @@ export const usePrivateActions = () => {
         const uploaded: UploadedFile[] = [];
         for (let i = 0; i < media.length; i++) {
           const image = media[i]!;
-          const blob = await upload(image.ct, 'application/octet-stream', throwaway, server, (loaded, total) => {
+          const blob = await upload(image.ct, image.mime, throwaway, server, (loaded, total) => {
             onProgress?.(i, media.length, loaded, total);
           });
           uploaded.push({ url: blob.url, sha256: blob.sha256, mime: image.mime });
