@@ -28,6 +28,7 @@ import { PIN_OFFSET } from '@/lib/anchorSpacer';
 import { clientTagOf } from '@/lib/clientTag';
 import { useBroadcastFlow, type PendingBroadcast } from '@/hooks/useBroadcastFlow';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
+import { useTentative } from '@/data/hooks/useTentative';
 import { rememberBurner } from '@/auth/burners';
 
 import { useRouting } from '@/data/hooks/useRouting';
@@ -435,6 +436,10 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const [infoOpen, setInfoOpen] = useState(false);
   const [openMedia, setOpenMedia] = useState<number | null>(null);
   const isPrivate = wrapper !== undefined;
+  // A live optimistic copy reads its store entity key: the wrapper id for
+  // sealed items (the store holds kind 1370/1470 wrappers), the event id
+  // for public ones. Dimmed until the relay-confirmed copy arrives.
+  const tentative = useTentative(isPrivate ? wrapper?.id : event.id);
   const grade: PrivacyGrade = isPrivate ? 'private' : 'public';
   const { user } = useCurrentUser();
   const mine = !!user && event.pubkey === user.pubkey;
@@ -677,7 +682,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const clientTag = event.tags.find(([n]) => n === 'client')?.[1];
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
   return (
-    <Card data-anchor={isAnchored || undefined} className={cn('py-0', PRIVACY[grade].surface)}>
+    <Card data-anchor={isAnchored || undefined} className={cn('py-0 transition-opacity', tentative && 'opacity-50', PRIVACY[grade].surface)}>
       <CardContent className="flex gap-3 px-4 py-3">
         {href ? (
           <ProfileHoverCard pubkey={event.pubkey}>

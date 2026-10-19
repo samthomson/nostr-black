@@ -57,6 +57,14 @@ export interface EntityState {
   readonly settledAt?: number;
   /** Relays this event came back from — the engagement relay set. */
   readonly foundOn?: readonly string[];
+  /**
+   * True while this event is a local optimistic copy awaiting its relay
+   * confirmation. Set only by `ingestTentative`; cleared the moment the
+   * same event (same id) arrives through normal ingest — the real note
+   * replaces the tentative one and the flag drops. Entities without the
+   * flag are settled truth, whatever their source.
+   */
+  readonly tentative?: boolean;
 }
 
 
@@ -95,6 +103,14 @@ export interface EventStore {
    * activity timeline (profile/follow/relay changes) reads this. */
   queryReplaceableHistory(kind: number, pubkey: string): NostrEvent[];
   /** Newest-first, for feed reads. */
+  /**
+   * Local optimistic ingest: publish a signed event into the store
+   * before the relay confirms it, flagged `tentative`. It renders
+   * immediately (dimmed) and is replaced by the real copy the moment
+   * the subscription delivers the same id. Does not write to disk and
+   * does not touch `foundOn` — this copy came from us, not a relay.
+   */
+  ingestTentative(events: readonly NostrEvent[]): void;
   queryByAuthors(authors: readonly string[], kinds: readonly number[], range?: TimeRange): NostrEvent[];
   /** Every stored event of this kind. Reverse lookups (followers) use this. */
   queryByKind(kind: number): NostrEvent[];
@@ -180,6 +196,7 @@ export const createStore = (): EventStore => {
     event: NostrEvent,
     foundOn: readonly string[],
     current: EntityState | undefined,
+    tentative = false,
   ): { key: EntityKey; refs: EntityKey[] } | undefined => {
     const key = keyForEvent(event);
     if (isReplaceable(event.kind)) {
@@ -190,11 +207,19 @@ export const createStore = (): EventStore => {
         replaceableHistory.set(key, history);
       }
     }
+    // The real copy already holds this entity: an optimistic copy must not
+    // overwrite or downgrade it, and a real arrival over a tentative copy
+    // drops the flag (replacement is the whole point of the optimisation).
     if (current?.event && !supersedes(event, current.event)) {
       if (current.event.id === event.id) {
         const merged = [...new Set([...(current.foundOn ?? []), ...foundOn])];
-        if (merged.length !== (current.foundOn?.length ?? 0)) {
-          entities.set(key, { ...current, foundOn: merged });
+        const flagsChanged = tentative ? false : current.tentative === true;
+        if (merged.length !== (current.foundOn?.length ?? 0) || flagsChanged) {
+          entities.set(key, {
+            ...current,
+            foundOn: merged,
+            ...(tentative ? {} : { tentative: false }),
+          });
           return { key, refs: [] };
         }
       }
@@ -205,7 +230,12 @@ export const createStore = (): EventStore => {
       ? [...new Set([...(current.foundOn ?? []), ...foundOn])]
       : [...foundOn];
 
-    entities.set(key, { event, settledAt: current?.settledAt, foundOn: merged });
+    entities.set(key, {
+      event,
+      settledAt: current?.settledAt,
+      foundOn: merged,
+      ...(tentative ? { tentative: true } : {}),
+    });
     // Replaceable/addressable events also live at their id key: opening a
     // note by id (the thread page) must find the feed's copy in the store
     // instead of re-resolving it from relays.
@@ -213,7 +243,12 @@ export const createStore = (): EventStore => {
     const idKey = eventKey(event.id);
     if (idKey !== key) {
       const byId = entities.get(idKey);
-      entities.set(idKey, { event, settledAt: byId?.settledAt, foundOn: merged });
+      entities.set(idKey, {
+        event,
+        settledAt: byId?.settledAt,
+        foundOn: merged,
+        ...(tentative ? { tentative: true } : {}),
+      });
       refs.push(idKey);
     }
     return { key, refs };
@@ -232,6 +267,23 @@ export const createStore = (): EventStore => {
       changed.add(result.key);
       for (const ref of result.refs) refTargets.add(ref);
       applyDeletion(event, changed);
+    }
+
+    notify(changed);
+    notify(refTargets);
+    notifyIngest([...changed]);
+  };
+
+  const ingestTentative = (events: readonly NostrEvent[]): void => {
+    const changed = new Set<EntityKey>();
+    const refTargets = new Set<EntityKey>();
+
+    for (const event of events) {
+      if (isEphemeral(event.kind)) continue;
+      const result = put(event, [], entities.get(keyForEvent(event)), true);
+      if (!result) continue;
+      changed.add(result.key);
+      for (const ref of result.refs) refTargets.add(ref);
     }
 
     notify(changed);
@@ -290,6 +342,7 @@ export const createStore = (): EventStore => {
   return {
     get,
     ingest,
+    ingestTentative,
     restore,
     settle,
     unsettle,

@@ -12,7 +12,7 @@ vi.mock('@/net/net', async (importOriginal) => ({
 // SUT (which imports publish at module scope) is evaluated.
 const { enqueue, retryBroadcast, dismiss, resetQueue, queuedEntries, sentEntries } =
   await import('@/data/publish/queue');
-const { store } = await import('@/data/store');
+const { store, eventKey } = await import('@/data/store');
 
 const note = (content: string): NostrEvent =>
   finalizeEvent({ kind: 1, created_at: 1, tags: [], content }, generateSecretKey());
@@ -23,6 +23,35 @@ beforeEach(() => {
   resetQueue();
   store.clear();
   localStorage.removeItem('broadcast.queue');
+});
+
+describe('optimistic ingest', () => {
+  it('shows the event in the store immediately, flagged tentative, before publish resolves', async () => {
+    // publish hangs: the relay round-trip never completes, yet the note is
+    // already in the store as a tentative copy.
+    const { promise, resolve } = Promise.withResolvers<void>();
+    publish.mockImplementation(() => promise);
+
+    const event = note('optimistic');
+    enqueue('note', event, ['wss://a/']);
+
+    expect(store.get(eventKey(event.id)).event).toBe(event);
+    expect(store.get(eventKey(event.id)).tentative).toBe(true);
+
+    // the real copy arrives once publish resolves; the flag clears
+    resolve();
+    await waitForSettle();
+    expect(store.get(eventKey(event.id)).tentative).toBe(false);
+  });
+
+  it('a failed broadcast keeps the tentative copy (still queued, not yet relayed)', async () => {
+    publish.mockRejectedValue(new Error('offline'));
+    const event = note('still pending');
+    enqueue('note', event, ['wss://a/']);
+
+    await waitForSettle();
+    expect(store.get(eventKey(event.id)).tentative).toBe(true);
+  });
 });
 
 describe('broadcast queue', () => {

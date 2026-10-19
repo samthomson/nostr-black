@@ -433,3 +433,44 @@ describe('NIP-09 deletion', () => {
     expect(store.getEvent(note.id)).toBeDefined();
   });
 });
+
+describe('optimistic ingest (tentative)', () => {
+  const note = event({ id: 'e'.repeat(64), kind: 1, content: 'hello' });
+
+  it('flags an optimistic copy tentative and renders it immediately', () => {
+    const store = createStore();
+    store.ingestTentative([note]);
+    expect(store.getEvent(note.id)).toBe(note);
+    expect(store.get(eventKey(note.id)).tentative).toBe(true);
+  });
+
+  it('clears the flag when the real copy arrives under the same id', () => {
+    const store = createStore();
+    store.ingestTentative([note]);
+    store.ingest([note], 'wss://relay/');
+    expect(store.get(eventKey(note.id)).tentative).toBe(false);
+    // the relay-added provenance is preserved on top of the optimistic copy
+    expect(store.get(eventKey(note.id)).foundOn).toEqual(['wss://relay/']);
+  });
+
+  it('does not downgrade a real copy that already exists', () => {
+    const store = createStore();
+    store.ingest([note], 'wss://relay/');
+    store.ingestTentative([note]);
+    expect(store.get(eventKey(note.id)).tentative).not.toBe(true);
+    expect(store.get(eventKey(note.id)).foundOn).toEqual(['wss://relay/']);
+  });
+
+  it('indexes refs so a tentative reply/reaction counts immediately', () => {
+    const store = createStore();
+    store.ingest([note], 'wss://relay/');
+    const reply = event({ id: 'f'.repeat(64), kind: 1, tags: [['e', note.id]], created_at: 2000 });
+    store.ingestTentative([reply]);
+    expect(store.getRefs(note.id).has(reply.id)).toBe(true);
+
+    // the real copy replaces it and keeps the ref indexed
+    store.ingest([reply], 'wss://relay/');
+    expect(store.getRefs(note.id).has(reply.id)).toBe(true);
+    expect(store.get(eventKey(reply.id)).tentative).toBe(false);
+  });
+});

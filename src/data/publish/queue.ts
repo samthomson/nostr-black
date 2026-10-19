@@ -116,14 +116,20 @@ const attempt = async (id: string): Promise<void> => {
   }
 };
 
-/** Queue a signed event for broadcast. Fires the first attempt
- * immediately; the caller does not wait on it. */
+/** Queue a signed event for broadcast. The event enters the store
+ * optimistically — flagged tentative, rendered dimmed immediately — so
+ * the note (post, reply, reaction, repost) reads back the moment it is
+ * composed, not after the relay round-trip. The real copy arriving
+ * through the subscription replaces it and clears the flag; `refreshFeeds`
+ * here keeps live feeds in step without waiting for the next poll. */
 export const enqueue = (label: string, event: NostrEvent, relays: string[]): string => {
   if (relays.length === 0) throw new Error('no relays to broadcast to');
   const id = crypto.randomUUID();
   entries = [...entries, { id, label, event, relays, createdAt: Date.now(), status: 'queued', attempts: 0 }];
   persist();
   notify();
+  store.ingestTentative([event]);
+  refreshFeeds();
   void attempt(id);
   return id;
 };

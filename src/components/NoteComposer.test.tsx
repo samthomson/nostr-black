@@ -8,7 +8,7 @@ import { NoteComposer } from '@/components/NoteComposer';
 import { useKeystore } from '@/auth/useKeystore';
 import { queuedEntries, resetQueue } from '@/data/publish/queue';
 import { burnersOf, resetBurners } from '@/auth/burners';
-import { store } from '@/data/store';
+import { store, eventKey } from '@/data/store';
 
 const publish = vi.fn<(event: { pubkey: string; kind: number }, relays: string[]) => Promise<void>>();
 
@@ -63,6 +63,31 @@ describe('NoteComposer', () => {
 
     await waitFor(() => expect(box).toHaveValue(''));
     expect(publish).toHaveBeenCalled();
+  });
+
+  it('ingests the note optimistically into the store before the relay confirms', async () => {
+    const sk = generateSecretKey();
+    const user = userEvent.setup();
+    // publish hangs — the relay never confirms, so the tentative flag has
+    // nowhere to go but stay set.
+    publish.mockImplementation(() => new Promise(() => {}));
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(sk)}>
+          <NoteComposer />
+        </Unlock>
+      </TestApp>,
+    );
+
+    const box = await screen.findByRole('textbox', { name: "what's happening?" });
+    await user.type(box, 'optimistic');
+    await user.click(screen.getByRole('button', { name: 'broadcast' }));
+    await confirmBroadcast(user);
+
+    const [note] = publish.mock.calls[0]! as unknown as [{ id: string }];
+    expect(store.getEvent(note.id)?.id).toBe(note.id);
+    expect(store.get(eventKey(note.id)).tentative).toBe(true);
+    expect(store.get(eventKey(note.id)).foundOn).toEqual([]);
   });
 
   it('keeps the draft when the broadcast is cancelled', async () => {
