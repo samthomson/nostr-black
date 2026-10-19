@@ -133,7 +133,7 @@ export const PrivateItem = ({
             pending={pending}
             mine={!!user && reactions.some((r) => r.pubkey === user.pubkey)}
             tab="reactions"
-            reactions={reactions as readonly EngagementRow[]}
+            reactions={reactions.map((r) => ({ ...r, grade: 'private' as const })) as readonly EngagementRow[]}
             reposts={[]}
             choices={config.reactionChoices}
             onEngage={() => onReact?.(rumor, config.defaultReaction)}

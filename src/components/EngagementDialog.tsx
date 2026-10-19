@@ -9,6 +9,8 @@ import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/compon
 import { SmilePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ENGAGEMENT_TABS, type EngagementTab } from '@/lib/engagementKinds';
+import { PRIVACY, onGrade, type PrivacyGrade } from '@/lib/privacy';
+import { PrivacyTag } from '@/components/PrivacyTag';
 import { EmojiPicker } from '@/components/EmojiPicker';
 
 /** A person in the viewer, whatever they did. */
@@ -17,6 +19,8 @@ export interface EngagementRow {
   /** What they did — an emoji reaction, or nothing for a repost. */
   content?: string;
   id: string;
+  /** The reaction's privacy: public kind-7 or a sealed private reaction. */
+  grade: PrivacyGrade;
 }
 
 /** Hold the icon this long before the picker opens instead of the click. */
@@ -55,22 +59,28 @@ export const EngagementDialog = ({
               : reposts.length === 1 ? '1 repost' : `${reposts.length} reposts`}
           </DialogTitle>
         </DialogHeader>
-        <div className="flex gap-1 border-b px-4 pt-2">
-          {ENGAGEMENT_TABS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-selected={tab === id}
-              onClick={() => onTab(id)}
-              className={cn(
-                'cursor-pointer rounded-sm px-2 py-1 text-xs transition-colors',
-                tab === id ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {id}
-            </button>
-          ))}
+        <div className="flex gap-1 border-b px-4 py-2">
+          {ENGAGEMENT_TABS.map((id) => {
+            const count = id === 'reactions' ? reactions.length : reposts.length;
+            return (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={tab === id}
+                onClick={() => onTab(id)}
+                className={cn(
+                  'flex cursor-pointer items-center gap-1.5 rounded-sm px-2 py-1 text-xs transition-colors',
+                  tab === id ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {id}
+                <span className={cn('font-mono text-[10px] leading-none', tab === id ? 'opacity-80' : 'opacity-60')}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
         <ul className="max-h-[60dvh] divide-y overflow-y-auto">
           {rows.map((row) => {
@@ -81,7 +91,10 @@ export const EngagementDialog = ({
                 <Link
                   to={profileHref(row.pubkey) ?? '#'}
                   onClick={() => onOpenChange(false)}
-                  className="flex items-center gap-3 px-4 py-2.5 hover:bg-accent"
+                  className={cn(
+                    'flex items-center gap-3 px-4 py-2.5 transition-colors',
+                    PRIVACY[row.grade].surface,
+                  )}
                 >
                   <ProfileAvatar
                     pubkey={row.pubkey}
@@ -91,11 +104,15 @@ export const EngagementDialog = ({
                   />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-sm font-medium">{name ?? '…'}</span>
-                    <span className="text-muted-foreground block truncate font-mono text-xs">
+                    <span className={cn('block truncate font-mono text-xs', onGrade(row.grade).muted)}>
                       {npubOf(row.pubkey)}
                     </span>
                   </span>
-                  {row.content && <span className="shrink-0 text-sm">{row.content}</span>}
+                  {row.content && (
+                    <span className="shrink-0">
+                      <PrivacyTag grade={row.grade}>{row.content}</PrivacyTag>
+                    </span>
+                  )}
                 </Link>
               </li>
             );

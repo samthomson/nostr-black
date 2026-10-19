@@ -932,8 +932,8 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
                 pending={feed.pending}
                 mine={reposted}
                 tab="reposts"
-                reactions={feed.reactions}
-                reposts={feed.reposts}
+                reactions={feed.reactions.map((r) => ({ ...r, grade: 'public' as const }))}
+                reposts={feed.reposts.map((r) => ({ ...r, grade: 'public' as const }))}
                 onEngage={() => void confirmRepost()}
                 ariaLabel="repost"
               />
@@ -944,8 +944,8 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
                 pending={feed.pending}
                 mine={reacted}
                 tab="reactions"
-                reactions={feed.reactions}
-                reposts={feed.reposts}
+                reactions={feed.reactions.map((r) => ({ ...r, grade: 'public' as const }))}
+                reposts={feed.reposts.map((r) => ({ ...r, grade: 'public' as const }))}
                 choices={config.reactionChoices}
                 onEngage={() => void react(config.defaultReaction)}
                 onChoose={(emoji) => void react(emoji)}
