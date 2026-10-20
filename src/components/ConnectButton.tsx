@@ -5,7 +5,7 @@ import { useRouting } from '@/data/hooks/useRouting';
 import { useConnections } from '@/data/hooks/useConnections';
 import { useBroadcastFlow } from '@/hooks/useBroadcastFlow';
 import { DEFAULT_DISCOVERY_RELAYS } from '@/lib/appRelays';
-import { requestConnection, type ConnectionRecord } from '@/lib/feedEncryption';
+import { requestConnection, acceptConnection, type ConnectionRecord } from '@/lib/feedEncryption';
 import { npubOf } from '@/lib/format';
 import { PRIVACY, PRIVACY_BUTTON } from '@/lib/privacy';
 import { cn } from '@/lib/utils';
@@ -34,16 +34,26 @@ export const ConnectButton = ({ pubkey, compact = false }: {
   if (!sk) return null;
   if (pubkey === getPublicKey(sk)) return null;
   const existing: ConnectionRecord | undefined = records.find((r) => r.peer === pubkey);
-  if (existing && (existing.state === 'connected' || existing.state === 'request')) return null;
+  // An incoming request — they signed, I didn't — means this button should
+  // accept their connection, not mint a competing one. A pair has exactly
+  // one kind 30378 `d` (connAddrOf is ECDH-symmetric), so accepting writes
+  // the same replaceable event with my signature added.
+  const incoming = existing?.state === 'request'
+    && !existing.payload.sigs.some((s) => s.pk === getPublicKey(sk));
+  if (existing && !incoming) return null;
 
   const send = () => {
     setBusy(true);
     try {
-      const event = requestConnection(sk, pubkey);
+      const event = incoming
+        ? acceptConnection(sk, existing!)
+        : requestConnection(sk, pubkey);
       request({
         grade: 'private',
-        label: 'connection request',
-        content: `connect with ${npubOf(pubkey).slice(0, 20)}… — one signature, awaiting theirs`,
+        label: incoming ? 'connection accept' : 'connection request',
+        content: incoming
+          ? `accept ${npubOf(pubkey).slice(0, 20)}… — two signatures, connected`
+          : `connect with ${npubOf(pubkey).slice(0, 20)}… — one signature, awaiting theirs`,
         identityPubkey: getPublicKey(sk),
         identityNote: 'connection key',
         relays: myWrite,
@@ -65,7 +75,7 @@ export const ConnectButton = ({ pubkey, compact = false }: {
         className={cn(!compact && PRIVACY_BUTTON, PRIVACY.private.className)}
         onClick={send}
       >
-        connect
+        {incoming ? 'accept' : 'connect'}
       </Button>
       {dialog}
     </>
