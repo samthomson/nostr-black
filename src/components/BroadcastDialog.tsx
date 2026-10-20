@@ -1,4 +1,4 @@
-import { Loader2, Radio, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronUp, Loader2, Radio, RefreshCw } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
 import { generateSecretKey } from 'nostr-tools';
 import {
@@ -111,14 +111,40 @@ export const BroadcastDialog = ({
     el.setSelectionRange(el.value.length, el.value.length);
   }, []);
   const [layer, setLayer] = useState(0);
-  // The relay row, deduped and in the caller's order. Every relay is a
-  // per-relay switch: tap to drop it from (or add it back to) the
-  // broadcast — the discovery set arrives dimmed, off by default.
+  // The client tag stamped on the drafted event, pulled from the decoded
+  // layers (the rumour for sealed broadcasts, the event itself for public).
+  const clientTag = (() => {
+    for (const { decoded } of layers) {
+      if (typeof decoded !== 'object' || decoded === null || !('tags' in decoded)) continue;
+      const tags = decoded.tags;
+      if (!Array.isArray(tags)) continue;
+      const tag = tags.find((t): t is string[] => Array.isArray(t) && t[0] === 'client');
+      if (tag?.[1]) return tag[1];
+    }
+    return undefined;
+  })();
+  // The extra technical rows (route, uploads, relays, client tag) collapse
+  // behind a toggle; identity + burner always stay visible above the CTA.
+  const [showDetails, setShowDetails] = useState(false);
   const initial = [...new Set([...relays, ...(extraRelays ?? [])])];
   const [excluded, setExcluded] = useState<ReadonlySet<string>>(
     () => new Set((extraRelays ?? []).filter((url) => !relays.includes(url))),
   );
   const targets = initial.filter((url) => !excluded.has(url));
+  // The discovery set behaves as one group: a single switch toggles every
+  // extra relay on/off. Individual pills still fine-tune below it.
+  const discoveryUrls = [...new Set(extraRelays ?? [])].filter((url) => !relays.includes(url));
+  const discoveryOn = discoveryUrls.length > 0 && discoveryUrls.every((url) => !excluded.has(url));
+  const toggleDiscovery = () => {
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      for (const url of discoveryUrls) {
+        if (discoveryOn) next.add(url);
+        else next.delete(url);
+      }
+      return next;
+    });
+  };
   // The standard burner switch: the modal owns the identity choice —
   // toggle and rotate re-sign via the caller's `setBurner`. Last toggle
   // wins: a slow async re-sign drops out when a newer one was requested.
@@ -149,7 +175,7 @@ export const BroadcastDialog = ({
             grade colour is the draft, so everything inside it adapts
             (fg-based tints, no theme-coloured chrome mixed in). */}
         <div
-          className="mx-4 shrink-0 overflow-hidden rounded-sm"
+          className="mx-4 min-h-0 shrink overflow-y-auto rounded-sm"
           style={{
             background: `linear-gradient(160deg, ${style.bg} 0%, color-mix(in srgb, ${style.bg} 82%, var(--background)) 100%)`,
             color: style.fg,
@@ -251,39 +277,6 @@ export const BroadcastDialog = ({
             className="space-y-1.5 px-3 pt-2 pb-3"
             style={{ borderTop: '1px solid color-mix(in srgb, currentColor 12%, transparent)' }}
           >
-            <DraftRow label="via">
-              <RoutePill route={onTor ? 'tor' : 'direct'} />
-            </DraftRow>
-
-            {uploads && (
-              <DraftRow label="upload">
-                <div className="flex min-w-0 flex-wrap items-center gap-1">
-                  <span className="font-mono text-[10px] leading-none">
-                    {uploads.count} image{uploads.count === 1 ? '' : 's'} →
-                  </span>
-                  <RelayPill url={uploads.server} />
-                </div>
-              </DraftRow>
-            )}
-
-            <DraftRow label="relays">
-              <div className="flex min-w-0 flex-wrap gap-1">
-                {initial.map((url) => (
-                  <RelayPill
-                    key={url}
-                    url={url}
-                    dimmed={excluded.has(url)}
-                    onToggle={() => setExcluded((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(url)) next.delete(url);
-                      else next.add(url);
-                      return next;
-                    })}
-                  />
-                ))}
-              </div>
-            </DraftRow>
-
             <DraftRow label="as">
               <div className="flex min-w-0 flex-wrap items-center gap-1">
                 {identityNote === 'burner-signed' ? (
@@ -319,6 +312,72 @@ export const BroadcastDialog = ({
                 </div>
               )}
             </DraftRow>
+
+            <DraftRow label="via">
+              <RoutePill route={onTor ? 'tor' : 'direct'} />
+            </DraftRow>
+
+            {uploads && (
+              <DraftRow label="upload">
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
+                  <span className="font-mono text-[10px] leading-none">
+                    {uploads.count} image{uploads.count === 1 ? '' : 's'} →
+                  </span>
+                  <RelayPill url={uploads.server} />
+                </div>
+              </DraftRow>
+            )}
+
+            {/* Collapsible technical details — relays and client tag.
+                Hidden by default so the modal stays scannable on mobile;
+                the CTA and identity always stay above the fold. */}
+            <button
+              type="button"
+              onClick={() => setShowDetails((v) => !v)}
+              aria-expanded={showDetails}
+              className="flex w-full cursor-pointer items-center gap-1.5 font-mono text-[10px] leading-none opacity-50 transition-opacity hover:opacity-100"
+            >
+              {showDetails ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
+              {showDetails ? 'hide details' : 'show details'}
+              <span className="opacity-50">· {targets.length} relay{targets.length === 1 ? '' : 's'}</span>
+            </button>
+
+            {showDetails && (
+              <div className="space-y-1.5">
+                {clientTag ? (
+                  <DraftRow label="client">
+                    <Chip>{clientTag}</Chip>
+                  </DraftRow>
+                ) : (
+                  <DraftRow label="client">
+                    <span className="font-mono text-[10px] leading-none opacity-50">none</span>
+                  </DraftRow>
+                )}
+
+                <DraftRow label="relays">
+                  <div className="flex min-w-0 flex-wrap gap-1">
+                    {initial.map((url) => (
+                      <RelayPill
+                        key={url}
+                        url={url}
+                        dimmed={excluded.has(url)}
+                        onToggle={() => setExcluded((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(url)) next.delete(url);
+                          else next.add(url);
+                          return next;
+                        })}
+                      />
+                    ))}
+                  </div>
+                  {discoveryUrls.length > 0 && (
+                    <div className="w-full">
+                      <DraftSwitch on={discoveryOn} onToggle={toggleDiscovery} label="discovery" ariaLabel="enable all discovery relays" />
+                    </div>
+                  )}
+                </DraftRow>
+              </div>
+            )}
           </div>
         </div>
 
