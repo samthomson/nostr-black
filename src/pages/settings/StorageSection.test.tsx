@@ -77,7 +77,7 @@ const confirmBroadcast = async (user: { click: (el: Element) => Promise<void> })
 };
 
 describe('StorageSection', () => {
-  it('shows declared, nip-65-derived and default servers with their sources', async () => {
+  it('shows declared servers with a primary badge and read-only relay-derived servers', async () => {
     servers.declared = ['https://blossom.mine.example'];
     servers.fromRelayList = ['https://blossom.primal.net'];
     const sk = generateSecretKey();
@@ -91,12 +91,52 @@ describe('StorageSection', () => {
 
     expect(await screen.findByText('https://blossom.mine.example')).toBeTruthy();
     expect(screen.getByText('https://blossom.primal.net')).toBeTruthy();
-    expect(screen.getByText('first')).toBeTruthy();
-    expect(screen.getByText('via relays')).toBeTruthy();
-    // The nip-65 row is not removable from here.
+    // Only your own list is editable: the declared row carries the badge
+    // and remove control; the relay-derived row is read-only.
     const rows = document.querySelectorAll('li');
-    expect(within(rows[1] as HTMLElement).queryByRole('button', { name: 'remove' })).toBeNull();
+    expect(within(rows[0] as HTMLElement).getByText('primary')).toBeTruthy();
+    expect(screen.getByText('from relays')).toBeTruthy();
     expect(within(rows[0] as HTMLElement).getByRole('button', { name: 'remove' })).toBeTruthy();
+    expect(within(rows[2] as HTMLElement).queryByRole('button', { name: 'remove' })).toBeNull();
+  });
+
+  it('moves a server up and down to reorder fallback precedence', async () => {
+    servers.declared = ['https://a.example', 'https://b.example'];
+    const sk = generateSecretKey();
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(sk)}>
+          <StorageSection />
+        </Unlock>
+      </TestApp>,
+    );
+
+    await screen.findByText('https://a.example');
+    // On open the first row is primary and can't move up; the second can.
+    expect(screen.getByRole('button', { name: 'move https://a.example up' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'move https://b.example up' })).toBeEnabled();
+
+    await user.click(screen.getByRole('button', { name: 'move https://b.example up' }));
+    // b is now primary; the list reorders and a moves down.
+    const rows = document.querySelectorAll('li');
+    expect(rows[0]).toHaveTextContent('https://b.example');
+    expect(rows[1]).toHaveTextContent('https://a.example');
+    expect(screen.getByRole('button', { name: 'publish list' })).toBeEnabled();
+  });
+
+  it('shows the app default server when no list exists yet', async () => {
+    const sk = generateSecretKey();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(sk)}>
+          <StorageSection />
+        </Unlock>
+      </TestApp>,
+    );
+
+    expect(await screen.findByText('using the app default until you add one')).toBeTruthy();
+    expect(screen.getByText('default')).toBeTruthy();
   });
 
   it('adds a server and broadcasts a kind 10063 with the new list', async () => {
