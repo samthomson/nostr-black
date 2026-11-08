@@ -15,8 +15,8 @@ import { EventInfoDialog } from '@/components/EventInfoDialog';
 import { Chip, RelayPill, RoutePill } from '@/components/Pills';
 import { EngagementCount } from '@/components/EngagementDialog';
 import { useEngagementFeed } from '@/data/hooks/useEngagementFeed';
+import { NoteSkeleton } from '@/components/NoteSkeleton';
 import { Composer } from '@/components/Composer';
-
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
 import { ProfileHoverCard } from '@/components/ProfileHoverCard';
@@ -237,6 +237,25 @@ const ReplyContext = ({
  * Separate from content (below read-more) and visually distinct: muted relay
  * pills vs a colored route pill.
  */
+/**
+ * The referenced note nested inside its actor's: the original author's
+ * note, indented under a left rule, so the derived action — repost,
+ * quote, reply — reads on the container card. One rendering for all
+ * three: the note when resolved, a skeleton while it loads, a muted
+ * line when nothing arrived.
+ */
+const ReferencedNote = ({ event, pending }: { event: NostrEvent | undefined; pending: boolean }) => (
+  <div className="mt-2 border-l pl-3">
+    {event ? (
+      <Note event={event} showContext={false} />
+    ) : pending ? (
+      <NoteSkeleton />
+    ) : (
+      <p className="text-muted-foreground py-2 text-xs">note not on your relays</p>
+    )}
+  </div>
+);
+
 const fmt = (n: number, capped: boolean): string => `${n}${capped ? '+' : ''}`;
 
 /** Replies: same two-part shape, but both halves are the note route —
@@ -591,23 +610,24 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const embedded = repostedEvent(event);
   const media = mediaUrls(event);
   const allMedia = [...media, ...(embedded ? mediaUrls(embedded) : [])];
-  const isLongform = !embedded && event.kind === 30023;
+  // Reposts (6/16) have no body of their own: the content is the embedded
+  // note (or empty), and the e tag points at the reposted note — never a
+  // reply parent. The reposted author rides the p tag (NIP-18).
+  const isRepost = event.kind === 6 || event.kind === 16;
+  const repostId = isRepost && !embedded ? event.tags.find(([n]) => n === 'e')?.[1] : undefined;
+  const repostAuthor = isRepost ? event.tags.find(([n]) => n === 'p')?.[1] : undefined;
+  const isLongform = !isRepost && event.kind === 30023;
   const longformTitle = isLongform
     ? event.tags.find(([n]) => n === 'title')?.[1]
     : undefined;
   // Longform preview: the markdown stripped to prose, clamped like any
   // other note (fade + read more). The title renders as a heading and
   // the cover lands in the media grid.
-  const renderedText = embedded
-    ? embedded.content
-    : (event.kind === 30023 ? stripMd(event.content) : event.content);
+  const renderedText = isRepost ? '' : (event.kind === 30023 ? stripMd(event.content) : event.content);
   const clampable =
-    !embedded && (renderedText.length > CLAMP_THRESHOLD || allMedia.length > IMAGE_CLAMP_COUNT);
+    !isRepost && (renderedText.length > CLAMP_THRESHOLD || allMedia.length > IMAGE_CLAMP_COUNT);
   const kindLabel = KIND_LABELS[event.kind];
-  // Reposts (6/16) point their e tag at the reposted note, not a reply
-  // parent — they embed that note but never read as a reply.
-  const isRepost = event.kind === 6 || event.kind === 16;
-  const quoteTag = !embedded ? event.tags.find(([n]) => n === 'q') : undefined;
+  const quoteTag = !isRepost ? event.tags.find(([n]) => n === 'q') : undefined;
   const quotedId = quoteTag?.[1];
   const quotedAuthor = quoteTag?.[3];
   const quotedRelays = quoteTag?.[2] ? [quoteTag[2]] : [];
@@ -616,7 +636,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   // markers (and legacy positional tags). The replied-to *person* is the
   // author of the reply-target event — never "last p tag" (p tags are
   // unordered; reverse-iteration often puts the thread OP last).
-  const nip10Ref = !embedded && !quotedViaTag && !isPrivate ? nip10.parse(event) : undefined;
+  const nip10Ref = !isRepost && !quotedViaTag && !isPrivate ? nip10.parse(event) : undefined;
   const parentId = nip10Ref?.reply?.id ?? nip10Ref?.root?.id;
   const taggedAuthor =
     nip10Ref?.reply?.author
@@ -630,9 +650,21 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const reacted = !!user && feed.reactions.some((r) => r.pubkey === user.pubkey);
   const quoted = useEvent(quotedId, { author: quotedAuthor, hints: quotedRelays });
   const parent = useEvent(parentId, { author: taggedAuthor, hints: parentHints });
-  // A reaction is a broadcast like everything else: the heart opens the
-  // modal (pre-filled with the chosen emoji), confirmation enqueues. The
-  // heart toggles — engaging again un-reacts via a kind 5 of your own.
+  const repostTarget = useEvent(repostId, { author: repostAuthor, hints: foundOn });
+  // One nested slot for every derived action: the repost embeds (or,
+  // failing that, the fetched e-tag target), the quote's q-tag target,
+  // and the reply's parent — the original author's note, inside this
+  // card, under a left rule. At most one applies per event kind.
+  const referenced = embedded
+    ?? (isRepost ? repostTarget.event : undefined)
+    ?? (quotedViaTag ? quoted.event : undefined)
+    ?? (showContext && parentId ? parent.event : undefined);
+  const referencedPending = !embedded && (
+    isRepost ? repostTarget.pending
+      : quotedViaTag ? quoted.pending
+        : showContext && parentId ? parent.pending
+          : false
+  );
   // The identity is a choice: the modal's burner switch re-signs the
   // kind 7 under a throwaway key; the un-react is pinned to whichever
   // key the visible reaction was published with.
@@ -777,17 +809,12 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
             />
           ) : (
           <>
-          {showContext && parentId && !isRepost && (
+          {showContext && parentId && (
             <ReplyContext
               parentPubkey={parentPubkey}
               settled={!parent.pending}
               loaded={!!parent.event}
             />
-          )}
-          {showContext && parentId && parent.event && (
-            <div className="mb-3">
-              <Note event={parent.event} showContext={false} />
-            </div>
           )}
 
           {/* Body: hard max-height with a bottom fade when collapsed — no
@@ -797,39 +824,21 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
               {isLongform && longformTitle && (
                 <p className="text-base font-semibold leading-snug">{longformTitle}</p>
               )}
-              {!embedded && (
+              {!isRepost && (
                 <div className="mt-1 whitespace-pre-wrap break-words text-sm">
                   <RenderedContent content={renderedText} grade={grade} />
                 </div>
               )}
-              {!embedded && <MediaGrid urls={media} alt={altText} onOpen={setOpenMedia} />}
+              {!isRepost && <MediaGrid urls={media} alt={altText} onOpen={setOpenMedia} />}
             </div>
             {clampable && !expanded && (
               <div className={cn('pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-privacy-public to-transparent')} />
             )}
           </div>
 
-          {embedded && (
-            <div className="mt-3">
-              <Note event={embedded} showContext={false} />
-            </div>
+          {(referenced || referencedPending) && (
+            <ReferencedNote event={referenced} pending={referencedPending} />
           )}
-
-          {quotedViaTag && (
-            quoted.event ? (
-              <div className="mt-3">
-                <Note event={quoted.event} showContext={false} />
-              </div>
-            ) : (
-              <Link
-                to={quotedId ? (eventHref(quotedId, quotedAuthor ?? event.pubkey) ?? '/') : '/'}
-                className="text-muted-foreground mt-1.5 block truncate rounded-sm border p-2.5 text-sm hover:underline"
-              >
-                quoting {quotedId?.slice(0, 16)}…
-              </Link>
-            )
-          )}
-
           {clampable && (
             <Button
               variant="ghost"

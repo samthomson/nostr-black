@@ -314,6 +314,33 @@ describe('Note', () => {
     expect(await screen.findByText('the reposted words')).toBeTruthy();
     expect(screen.queryByText(/replying to/)).toBeNull();
   });
+  it('a repost without an embed shows a skeleton while the target loads, then the note', async () => {
+    const alice = generateSecretKey();
+    const target = note(alice, 'arrives from the fetch');
+    const repost = finalizeEvent({
+      kind: 6,
+      created_at: target.created_at + 5,
+      content: '',
+      tags: [['e', target.id], ['p', target.pubkey]],
+    }, generateSecretKey());
+    // the fetch never answers — the only way out of pending is the store
+    queryRelay.mockImplementation(() => new Promise(() => {}));
+
+    render(
+      <TestApp>
+        <Note event={repost} />
+      </TestApp>,
+    );
+
+    // pending: the nested slot holds the skeleton, not an empty card
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeTruthy();
+    expect(screen.queryByText(/replying to/)).toBeNull();
+
+    // the target lands in the store: the note replaces the skeleton
+    store.ingest([target], 'wss://relay/');
+    expect(await screen.findByText('arrives from the fetch')).toBeTruthy();
+    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull();
+  });
   it('a generic repost (kind 16) renders the embedded event, never its raw JSON', async () => {
     const bob = generateSecretKey();
     // The shape seen in the wild: Amethyst reposting a kind-1111 comment
