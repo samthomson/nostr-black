@@ -145,11 +145,10 @@ function DialogDescription({
 }
 
 /**
- * The one modal body. Height is held at the tallest content seen while
- * open: it grows with a smooth transition, never shrinks — tab
- * switches, expanders and late-loaded lists can never jolt the frame.
- * Capped by `maxHeight` (viewport share by default), overflow scrolls
- * inside.
+ * The one modal body: the frame follows its content's height — tab
+ * switches, expanders and late-loaded lists grow and shrink it with a
+ * smooth transition, floored by `minHeight` and capped by `maxHeight`
+ * (viewport share by default) with the overflow scrolling inside.
  */
 function SmoothDialogContent({
   className,
@@ -165,24 +164,19 @@ function SmoothDialogContent({
   /** Cap (px); content beyond it scrolls. Defaults to 85% of viewport. */
   maxHeight?: number;
 }) {
-  const innerRef = React.useRef<HTMLDivElement>(null);
+  const [innerEl, setInnerEl] = React.useState<HTMLDivElement | null>(null);
   const [height, setHeight] = React.useState<number | undefined>(undefined);
 
   React.useLayoutEffect(() => {
-    const inner = innerRef.current;
-    if (!inner) return;
+    if (!innerEl) return;
     const cap = maxHeight ?? Math.round(window.innerHeight * 0.85);
-    const measure = () => {
-      const next = Math.min(inner.scrollHeight, cap);
-      setHeight((prev) =>
-        prev === undefined ? Math.max(minHeight ?? 0, next) : Math.max(prev, next));
-    };
+    const measure = () =>
+      setHeight(Math.max(minHeight ?? 0, Math.min(innerEl.scrollHeight, cap)));
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(inner);
+    observer.observe(innerEl);
     return () => observer.disconnect();
-  }, [minHeight, maxHeight, children]);
-
+  }, [innerEl, minHeight, maxHeight, children]);
   return (
     <DialogContent
       data-slot="smooth-dialog-content"
@@ -191,11 +185,12 @@ function SmoothDialogContent({
       {...props}
     >
       <div
+        data-slot="smooth-dialog-frame"
         className="flex flex-col overflow-hidden transition-[height] duration-200 ease-out"
         style={{ height }}
       >
         <div className="min-h-0 flex-1 overflow-y-auto" data-slot="smooth-dialog-scroll">
-          <div ref={innerRef} className="flex min-h-full flex-col">{children}</div>
+          <div ref={setInnerEl} className="flex flex-col">{children}</div>
         </div>
       </div>
     </DialogContent>
