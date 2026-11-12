@@ -80,7 +80,13 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
   return (
     <div className="space-y-3">
       <div className={cn('overflow-hidden rounded-sm border', PRIVACY.public.surface)}>
-        <ProfileBanner url={sanitizeUrl(about?.banner)} onOpen={bannerIndex >= 0 ? () => setOpenMedia(bannerIndex) : undefined} />
+        {/* The banner sits above every sibling that might paint over its
+            lower strip (z-10 beats z-auto relatives); the identity strip
+            rides above it (z-20) but passes clicks through — only its
+            avatar/name and buttons take pointer events. */}
+        <div className="relative z-10">
+          <ProfileBanner url={sanitizeUrl(about?.banner)} onOpen={bannerIndex >= 0 ? () => setOpenMedia(bannerIndex) : undefined} />
+        </div>
         <div className="relative px-4 pb-4">
           {/* Identity rides up over the banner like the hover cards —
               avatar with the name beside it. Transform, not a negative
@@ -88,10 +94,14 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
               drags this whole block over the banner, where its full-width
               box eats the banner's clicks. The block below pulls back up
               by the same translate amount to close the gap. */}
-          <div className="flex items-end justify-between gap-2 -translate-y-8 sm:-translate-y-10">
+          {/* The strip passes clicks through to the banner beneath;
+            only its interactive elements — the avatar trigger and the
+            action buttons — take pointer events. The name is not
+            interactive: clicks over it open the banner. */}
+          <div className="pointer-events-none relative z-20 flex items-end justify-between gap-2 -translate-y-8 sm:-translate-y-10">
             <div className="flex min-w-0 items-end gap-3">
               {pictureIndex >= 0 ? (
-                <LightboxTrigger label="open profile picture" onOpen={() => setOpenMedia(pictureIndex)} className="shrink-0">
+                <LightboxTrigger label="open profile picture" onOpen={() => setOpenMedia(pictureIndex)} className="pointer-events-auto shrink-0">
                   <ProfileAvatar
                     pubkey={pubkey}
                     metadata={about}
@@ -109,7 +119,7 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
               )}
               <p className="min-w-0 truncate pb-0.5 text-xl font-semibold">{displayName}</p>
             </div>
-            <div className="flex shrink-0 items-center gap-2 self-end pb-1">
+            <div className="pointer-events-auto flex shrink-0 items-center gap-2 self-end pb-1">
               {!ownProfile && (
                 <>
                   <FollowButton pubkey={pubkey} />
