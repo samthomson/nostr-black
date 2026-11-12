@@ -716,9 +716,13 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
     });
   };
   const openSelf = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('a, button')) return;
+    // Interactive chrome keeps its own click meaning; text selection is
+    // not an open; anything inside a nested referenced note belongs to
+    // that note's own card handler (this one stops propagation).
+    if ((e.target as HTMLElement).closest('a, button, input, textarea, [contenteditable]')) return;
     const selection = window.getSelection();
     if (selection && selection.toString().length > 0) return;
+    e.stopPropagation();
     if (openNote) {
       openAndScroll(e.currentTarget as HTMLElement);
       return;
@@ -842,11 +846,20 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const clientTag = event.tags.find(([n]) => n === 'client')?.[1];
   const altText = event.tags.find(([n]) => n === 'alt')?.[1] ?? 'image from a followed author';
   return (
-    <Card data-anchor={isAnchored || undefined} className={cn('py-0 transition-opacity', tentative && 'opacity-50', PRIVACY[grade].surface)}>
+    <Card
+      data-anchor={isAnchored || undefined}
+      onClick={openSelf}
+      className={cn(
+        'py-0 transition-opacity',
+        (openNote || selfHref) && 'cursor-pointer',
+        tentative && 'opacity-50',
+        PRIVACY[grade].surface,
+      )}
+    >
       <CardContent className="flex gap-3 px-4 py-3">
         {href ? (
           <ProfileHoverCard pubkey={event.pubkey}>
-            <Link to={href} className="shrink-0" aria-label="profile">
+            <Link to={href} className="shrink-0 self-start" aria-label="profile">
               <ProfileAvatar
                 pubkey={event.pubkey}
                 metadata={metadata}
@@ -959,7 +972,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
 
           {/* Body: hard max-height with a bottom fade when collapsed — no
               note may dominate the screen, whatever its text or images. */}
-          <div className="relative cursor-pointer" onClick={openSelf}>
+          <div className="relative">
             <div className={clampable && !expanded ? 'max-h-80 overflow-hidden' : ''}>
               {isLongform && longformTitle && (
                 <p className="text-base font-semibold leading-snug">{longformTitle}</p>

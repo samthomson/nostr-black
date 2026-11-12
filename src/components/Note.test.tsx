@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import { queuedEntries, resetQueue } from '@/data/publish/queue';
 import { store } from '@/data/store';
 import userEvent from '@testing-library/user-event';
@@ -580,5 +580,31 @@ describe('Note', () => {
     expect(screen.getByRole('button', { name: /read more/ })).toBeTruthy();
     // the cover rides in the media grid, clickable into the lightbox
     expect(screen.getAllByRole('button', { name: 'open image' })).toHaveLength(1);
+  });
+
+  it('the whole card opens the note; interactive chrome keeps its own meaning', async () => {
+    const event = note(generateSecretKey(), 'open me from anywhere');
+    const onOpen = vi.fn();
+
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(generateSecretKey())}>
+          <Note event={event} onOpen={onOpen} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    // the card chrome itself — the gutter below the avatar included
+    const card = (await screen.findByText('open me from anywhere')).closest('[data-slot="card"]')!;
+    fireEvent.click(card);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+
+    // the avatar stays a profile link, never an open
+    fireEvent.click(screen.getByRole('link', { name: 'profile' }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+
+    // neither does the event info button
+    fireEvent.click(screen.getByRole('button', { name: 'event info' }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
   });
 });
