@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { nip19 } from 'nostr-tools';
-import { ChevronDown } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import {
   Dialog,
@@ -13,6 +13,9 @@ import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { useSessionKey } from '@/data/hooks/useSessionKey';
 import { isPrivateKind, privateNoteLayers, type EventLayer } from '@/lib/feedEncryption';
+import { useRouting } from '@/data/hooks/useRouting';
+import { useAppContext } from '@/hooks/useAppContext';
+import { useRelayList } from '@/data/hooks/useProfile';
 
 /** One row of a parsed field, when it applies. */
 const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
@@ -58,14 +61,85 @@ const layerTitle = (layer: EventLayer, i: number): string => {
     : '';
   return `layer ${i + 1} · ${layer.name}${kind}`;
 };
+/** One relay row with its lookup status: found on (accented, checked),
+ * in the lookup plan (would have been asked), or present but never
+ * asked. */
+const RelayRow = ({ url, found, planned }: { url: string; found: boolean; planned: boolean }) => (
+  <li
+    className={cn(
+      'flex items-center gap-2 text-sm',
+      found ? 'text-copper font-medium' : planned ? 'text-foreground/70' : 'text-muted-foreground/60',
+    )}
+  >
+    {found ? (
+      <Check aria-hidden="true" className="size-3.5 shrink-0" />
+    ) : (
+      <span aria-hidden="true">{planned ? '○' : '·'}</span>
+    )}
+    <span className="min-w-0 flex-1 break-all font-mono text-xs">{url}</span>
+    <span className={cn('shrink-0 text-xs', !found && 'text-muted-foreground')}>
+      {found ? 'found here' : planned ? 'asked' : 'not asked'}
+    </span>
+  </li>
+);
 
+/** Where this app looks for one event: your read relays, discovery, and
+ * the author's NIP-65 — each marked with whether the lookup plan would
+ * have asked it and whether it actually served the event. */
+export const RelayDebugRows = ({ id, author, foundOn }: {
+  id: string;
+  author?: string;
+  foundOn?: readonly string[];
+}) => {
+  const { config } = useAppContext();
+  const { myRead, plan } = useRouting();
+  const authorList = useRelayList(author).list;
+  const planned = new Set(
+    plan({ kind: 'resolveById', id, author, hints: [...(foundOn ?? [])] })
+      .tiers.flatMap((tier) => [...tier.groups.keys()]),
+  );
+  const found = new Set(foundOn ?? []);
+  const groups: readonly [string, readonly string[]][] = [
+    ['your read relays', myRead],
+    ['discovery relays', config.discoveryRelays],
+    [`author's relays${author ? '' : ' (unknown author)'}`, [...authorList.read, ...authorList.write]],
+  ];
+  return (
+    <div className="space-y-3">
+      {groups.map(([title, urls]) => (
+        <div key={title}>
+          <p className="text-muted-foreground text-xs">{title}</p>
+          {urls.length === 0 ? (
+            <p className="text-muted-foreground/60 text-xs">none known</p>
+          ) : (
+            <ul className="space-y-1">
+              {[...new Set(urls)].map((url) => (
+                <RelayRow key={url} url={url} found={found.has(url)} planned={planned.has(url)} />
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
 /**
- * Event inspector. The load-bearing parts parsed into links (author,
- * id, tag references), everything else in labelled toggles: for a
+ * Event inspector, three tabs (the ConnectionsDialog row pattern):
+ * `event` — the load-bearing fields parsed into links (author, id, tag
+ * references), plus private layers and tags; `relays` — where this app
+ * looked and what served the event; `raw` — the JSON event. For a
  * private wrapper (1370/1470) one toggle per decoded layer — wrapper,
- * seal, rumour — each as formatted JSON; then the tags and the raw
- * event. A layer that cannot open with the keys at hand says so.
+ * seal, rumour — each as formatted JSON; a layer that cannot open with
+ * the keys at hand says so.
  */
+type EventInfoTab = 'event' | 'relays' | 'raw';
+
+const TABS: readonly { id: EventInfoTab; label: string }[] = [
+  { id: 'event', label: 'event' },
+  { id: 'relays', label: 'relays' },
+  { id: 'raw', label: 'raw' },
+];
+
 export const EventInfoDialog = ({
   event,
   foundOn,
@@ -88,6 +162,7 @@ export const EventInfoDialog = ({
     [open, sk, event, replyCek],
   );
   const authorHref = profileHref(event.pubkey);
+  const [tab, setTab] = useState<EventInfoTab>('event');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -98,88 +173,116 @@ export const EventInfoDialog = ({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3 px-6 pb-6 pt-4">
-          <div className="space-y-1">
-            <Row label="id">
-              {(() => {
-                const href = eventHref(event.id, event.pubkey);
-                return href ? (
-                  <Link className="text-primary underline underline-offset-2" to={href}>
-                    {event.id}
+        <div className="flex gap-1 border-b px-6 py-2">
+          {TABS.map(({ id, label }) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+              className={cn(
+                'cursor-pointer rounded-sm px-2 py-1 text-xs transition-colors',
+                tab === id ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {tab === 'event' && (
+          <div className="space-y-3 px-6 pb-6 pt-4">
+            <div className="space-y-1">
+              <Row label="id">
+                {(() => {
+                  const href = eventHref(event.id, event.pubkey);
+                  return href ? (
+                    <Link className="text-primary underline underline-offset-2" to={href}>
+                      {event.id}
+                    </Link>
+                  ) : (
+                    event.id
+                  );
+                })()}
+              </Row>
+              <Row label="author">
+                {authorHref ? (
+                  <Link className="text-primary underline underline-offset-2" to={authorHref}>
+                    {nip19.npubEncode(event.pubkey)}
                   </Link>
                 ) : (
-                  event.id
-                );
-              })()}
-            </Row>
-            <Row label="author">
-              {authorHref ? (
-                <Link className="text-primary underline underline-offset-2" to={authorHref}>
-                  {nip19.npubEncode(event.pubkey)}
-                </Link>
-              ) : (
-                event.pubkey
+                  event.pubkey
+                )}
+              </Row>
+              <Row label="kind">{event.kind}</Row>
+              <Row label="created">
+                {new Date(event.created_at * 1000).toISOString()} ({event.created_at})
+              </Row>
+              <Row label="sig">
+                <span className="font-mono text-xs">{shortHex(event.sig)}</span>
+              </Row>
+              {foundOn && foundOn.length > 0 && (
+                <Row label="found on"><span className="text-copper font-medium">{foundOn.join(', ')}</span></Row>
               )}
-            </Row>
-            <Row label="kind">{event.kind}</Row>
-            <Row label="created">
-              {new Date(event.created_at * 1000).toISOString()} ({event.created_at})
-            </Row>
-            <Row label="sig">
-              <span className="font-mono text-xs">{shortHex(event.sig)}</span>
-            </Row>
-            {foundOn && foundOn.length > 0 && (
-              <Row label="found on">{foundOn.join(', ')}</Row>
+            </div>
+
+            {layers && layers.length > 0 && (
+              <div className="space-y-2">
+                {layers.map((layer, i) => (
+                  <Toggle key={layer.name} title={layerTitle(layer, i)}>
+                    {typeof layer.decoded === 'string' ? (
+                      <p className="text-muted-foreground text-sm">{layer.decoded}</p>
+                    ) : (
+                      <JsonBlock value={layer.decoded as NostrEvent} />
+                    )}
+                  </Toggle>
+                ))}
+              </div>
+            )}
+
+            {event.tags.length > 0 && (
+              <Toggle title="tags">
+                <ul className="space-y-1 text-sm">
+                  {event.tags.map((tag, i) => {
+                    const [name, value] = tag;
+                    const href =
+                      name === 'p' && value ? profileHref(value)
+                      : name === 'e' && value ? eventHref(value, event.pubkey)
+                      : undefined;
+                    return (
+                      <li key={i} className="min-w-0">
+                        <span className="text-muted-foreground">[{name}] </span>
+                        {href ? (
+                          <Link className="text-primary break-all underline underline-offset-2" to={href}>
+                            {value}
+                          </Link>
+                        ) : (
+                          <span className="break-all">{value ?? ''}</span>
+                        )}
+                        {tag.slice(2).length > 0 && (
+                          <span className="text-muted-foreground break-all text-xs"> {tag.slice(2).join(', ')}</span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Toggle>
             )}
           </div>
+        )}
 
-          {layers && layers.length > 0 && (
-            <div className="space-y-2">
-              {layers.map((layer, i) => (
-                <Toggle key={layer.name} title={layerTitle(layer, i)}>
-                  {typeof layer.decoded === 'string' ? (
-                    <p className="text-muted-foreground text-sm">{layer.decoded}</p>
-                  ) : (
-                    <JsonBlock value={layer.decoded as NostrEvent} />
-                  )}
-                </Toggle>
-              ))}
-            </div>
-          )}
+        {tab === 'relays' && (
+          <div className="px-6 pb-6 pt-4">
+            <RelayDebugRows id={event.id} author={event.pubkey} foundOn={foundOn} />
+          </div>
+        )}
 
-          {event.tags.length > 0 && (
-            <Toggle title="tags">
-              <ul className="space-y-1 text-sm">
-                {event.tags.map((tag, i) => {
-                  const [name, value] = tag;
-                  const href =
-                    name === 'p' && value ? profileHref(value)
-                    : name === 'e' && value ? eventHref(value, event.pubkey)
-                    : undefined;
-                  return (
-                    <li key={i} className="min-w-0">
-                      <span className="text-muted-foreground">[{name}] </span>
-                      {href ? (
-                        <Link className="text-primary break-all underline underline-offset-2" to={href}>
-                          {value}
-                        </Link>
-                      ) : (
-                        <span className="break-all">{value ?? ''}</span>
-                      )}
-                      {tag.slice(2).length > 0 && (
-                        <span className="text-muted-foreground break-all text-xs"> {tag.slice(2).join(', ')}</span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-            </Toggle>
-          )}
-
-          <Toggle title="raw event">
+        {tab === 'raw' && (
+          <div className="px-6 pb-6 pt-4">
             <JsonBlock value={event} />
-          </Toggle>
-        </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

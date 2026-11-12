@@ -37,11 +37,11 @@ export const RenderedContent = ({
   </>
 );
 
-/** Link/accent colour for a privacy-graded surface: maroon pops on the
+/** Link/accent colour for a privacy-graded surface: copper pops on the
  * light public surface; on dark grades the grade's own fg keeps links
  * readable. */
 const refClass = (grade: PrivacyGrade): string =>
-  grade === 'public' ? 'text-maroon' : 'text-privacy-private-fg';
+  grade === 'public' ? 'text-copper' : 'text-privacy-private-fg';
 
 const ContentToken = ({ token, grade }: { token: string; grade: PrivacyGrade }) => {
   if (token.startsWith('nostr:')) {

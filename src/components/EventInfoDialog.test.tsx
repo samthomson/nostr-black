@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { nip19 } from 'nostr-tools';
 
 import { EventInfoDialog } from './EventInfoDialog';
@@ -53,11 +53,23 @@ describe('EventInfoDialog', () => {
     expect(screen.getByText('[t]')).toBeTruthy();
   });
 
-  it('shows the raw event json', async () => {
+  it('shows the raw event json under the raw tab', async () => {
     renderDialog();
+
+    expect(screen.queryByText(/"kind": 1/)).toBeNull();
+    fireEvent.click(screen.getByRole('tab', { name: 'raw' }));
 
     expect(await screen.findByText(/"kind": 1/)).toBeTruthy();
     expect(screen.getByText(/"content": "hello"/)).toBeTruthy();
+  });
+
+  it('the relays tab shows the lookup plan groups', async () => {
+    renderDialog();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'relays' }));
+
+    expect(await screen.findByText('your read relays')).toBeTruthy();
+    expect(screen.getByText('discovery relays')).toBeTruthy();
   });
 
   it('never crashes on malformed ids — falls back to plain text', async () => {
@@ -155,7 +167,7 @@ describe('Note UI', () => {
     );
 
     expect(await screen.findByTestId('note-counts')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'reply' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'open replies' })).toBeTruthy();
     expect(screen.getByTestId('count-reply')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'repost' })).toBeTruthy();
     expect(screen.getByTestId('count-repost')).toBeTruthy();

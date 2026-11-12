@@ -27,7 +27,7 @@
   --color-muted-foreground: var(--muted-foreground);
 
   --color-accent: var(--accent);
-  --color-maroon: var(--maroon);
+  --color-copper: var(--copper);
   --color-privacy-private: var(--privacy-private);
   --color-privacy-private-fg: var(--privacy-private-fg);
   --color-privacy-private-soft: var(--privacy-private-soft);
@@ -49,7 +49,7 @@
   --color-privacy-public-soft: var(--privacy-public-soft);
   --color-privacy-public-muted: var(--privacy-public-muted);
   --color-accent-foreground: var(--accent-foreground);
-  --color-maroon-foreground: var(--maroon-foreground);
+  --color-copper-foreground: var(--copper-foreground);
 
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
@@ -71,7 +71,7 @@
   --radius: 0.25rem;
 
   /* Off-black base: pure black is reserved for redaction marks so they
-     contrast against the app. Palette: white, off-black, greys, maroon. */
+     contrast against the app. Palette: white, off-black, greys, copper. */
   --background: hsl(240 5% 17%);
   --foreground: hsl(0 0% 98%);
 
@@ -90,8 +90,8 @@
   --muted: hsl(240 5% 17%);
   --muted-foreground: hsl(0 0% 62%);
 
-  /* Quiet hover surface — grey, not maroon. Maroon is reserved for
-     deliberate accent moments via --maroon. */
+  /* Quiet hover surface — grey, not copper. Copper is reserved for
+     deliberate accent moments via --copper. */
   --accent: hsl(240 5% 22%);
   --accent-foreground: hsl(0 0% 98%);
 
@@ -121,9 +121,9 @@
   --privacy-public-soft: hsl(40 12% 85%);
   --privacy-public-muted: hsl(240 5% 35%);
 
-  /* Maroon: the one accent, used sparingly. */
-  --maroon: hsl(0 60% 42%);
-  --maroon-foreground: hsl(0 0% 98%);
+  /* Copper: the one accent, used sparingly. */
+  --copper: hsl(22 60% 40%);
+  --copper-foreground: hsl(0 0% 98%);
 
   --destructive: hsl(0 72% 45%);
   --destructive-foreground: hsl(0 0% 98%);

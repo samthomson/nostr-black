@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { nowSec } from '@/lib/timestamp';
 import { Link, useNavigate } from 'react-router-dom';
 import { finalizeEvent, getPublicKey, nip10 } from 'nostr-tools';
@@ -6,12 +6,14 @@ import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat, T
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { Rumor } from '@/lib/feedEncryption';
 import { useProfile } from '@/data/hooks/useProfile';
+import { useProvenance } from '@/data/hooks/useProvenance';
 import { useEvent } from '@/data/hooks/useEvent';
 import { useAppContext } from '@/hooks/useAppContext';
 import { Card, CardContent } from '@/components/ui/card';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { EventInfoDialog, RelayDebugRows } from '@/components/EventInfoDialog';
 import { Button } from '@/components/ui/button';
-import { EventInfoDialog } from '@/components/EventInfoDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Chip, RelayPill, RoutePill } from '@/components/Pills';
 import { EngagementCount } from '@/components/EngagementDialog';
 import { useEngagementFeed } from '@/data/hooks/useEngagementFeed';
@@ -123,8 +125,17 @@ const KIND_LABELS: Record<number, string> = {
   30023: 'long-form',
 };
 
+/** The derived-kind marker on a note header — repost, quote, picture…
+ * Deliberately loud in the app's one accent (copper): a derived note
+ * never reads as a top-level post at a glance. Value chips stay quiet;
+ * kind is not a value. */
+const KindTag = ({ children }: { children: React.ReactNode }) => (
+  <span className="bg-copper text-copper-foreground rounded-sm px-2 py-0.5 font-mono text-xs font-bold leading-none">
+    {children}
+  </span>
+);
+
 /** Embedded event of a repost, if parseable: kind 6 wraps a note,
- * kind 16 (NIP-18) wraps any other kind — both carry the event as
  * JSON in content. Unparseable content renders as text, as before. */
 const repostedEvent = (event: NostrEvent | Rumor): NostrEvent | null => {
   if (event.kind !== 6 && event.kind !== 16) return null;
@@ -233,28 +244,130 @@ const ReplyContext = ({
 };
 
 /**
- * Provenance footer: which relays served the event, and over which route.
- * Separate from content (below read-more) and visually distinct: muted relay
- * pills vs a colored route pill.
+ * The referenced note inside its actor's: the original author's note,
+ * above the derived action — repost, quote, reply — so every derived
+ * kind reads the same way, thread order. One rendering for all three
+ * states (note, loading, missing) and both formats (JSON-embedded and
+ * tag-referenced). The box is capped, scaled down and dimmed — the
+ * reference is context, not content: a huge parent cannot stretch the
+ * card, the loader occupies the box the note will (nothing jumps), and
+ * a clipped parent gets the note body's own treatment — a bottom fade
+ * and 'read more' to expand in place, no forced scrolling.
  */
-/**
- * The referenced note nested inside its actor's: the original author's
- * note, indented under a left rule, so the derived action — repost,
- * quote, reply — reads on the container card. One rendering for all
- * three: the note when resolved, a skeleton while it loads, a muted
- * line when nothing arrived.
- */
-const ReferencedNote = ({ event, pending }: { event: NostrEvent | undefined; pending: boolean }) => (
-  <div className="mt-2 border-l pl-3">
-    {event ? (
-      <Note event={event} showContext={false} />
-    ) : pending ? (
-      <NoteSkeleton />
-    ) : (
-      <p className="text-muted-foreground py-2 text-xs">note not on your relays</p>
-    )}
-  </div>
-);
+const ReferencedNote = ({ event, pending, debug }: {
+  event: NostrEvent | undefined;
+  pending: boolean;
+  /** For a tag-referenced miss: what we were looking for and where —
+   * enough to debug a parent that never arrived. */
+  debug?: { id: string; author?: string; hints?: readonly string[] };
+}) => {
+  const [expanded, setExpanded] = useState(false);
+  const [clipped, setClipped] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  // Clipped = content taller than the capped box: drives the fade and
+ // the read-more affordance. Re-measured when the content changes and —
+ // where available — when late-loading media resizes it after paint.
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box || expanded) return;
+    const check = () => setClipped(box.scrollHeight > box.clientHeight + 2);
+    check();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(check);
+    observer.observe(box);
+    for (const child of box.children) observer.observe(child);
+    return () => observer.disconnect();
+  }, [event, pending, expanded]);
+
+  return (
+    // Dashed border + inset shadow carry the reference state — this is a
+    // contained parent, not a card of its own — and the cap sizes to its
+    // content: a one-line parent takes one line, a huge one stops at the
+    // cap. The read-more lives on the note it expands, gradient-backed so
+    // it never floats on raw text.
+    <div className="border-border/70 relative mt-2 rounded-sm border border-dashed [box-shadow:inset_0_2px_8px_color-mix(in_srgb,currentColor_10%,transparent)]">
+      <div
+        ref={boxRef}
+        data-testid="referenced-note"
+        className={cn(
+          'transition-[opacity,zoom] max-h-44 overflow-y-auto duration-200 ease-out',
+          !expanded && 'opacity-75 [zoom:0.6]',
+          expanded && 'max-h-none overflow-visible',
+        )}
+      >
+        {event ? (
+          <Note event={event} showContext={false} clamp={false} />
+        ) : pending ? (
+          <NoteSkeleton />
+        ) : (
+          <div className="flex items-center justify-between gap-2 py-2 pr-1 pl-2">
+            <p className="text-muted-foreground text-xs">note not on your relays</p>
+            {debug && <MissingNoteInfo debug={debug} />}
+          </div>
+        )}
+      </div>
+      {clipped && (
+        <div className="from-privacy-public via-privacy-public/90 to-transparent absolute inset-x-0 bottom-0 flex justify-center bg-gradient-to-t pt-5 pb-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground h-6 px-2"
+            onClick={() => setExpanded(!expanded)}
+          >
+            {expanded ? 'show less' : 'read more'}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/** The missing reference inspector: the id we were looking for, linked
+ * so it can be opened directly, plus the relay plan that would have
+ * found it — the same debug rows the event info dialog shows. */
+const MissingNoteInfo = ({ debug }: { debug: { id: string; author?: string; hints?: readonly string[] } }) => {
+  const [open, setOpen] = useState(false);
+  const href = eventHref(debug.id, debug.author);
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="text-muted-foreground h-6 w-6 shrink-0"
+        onClick={() => setOpen(true)}
+        aria-label="missing note info"
+      >
+        <Info className="size-3.5" />
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[70dvh] overflow-y-auto p-0 gap-0">
+          <DialogHeader className="px-6 pt-6">
+            <DialogTitle className="text-lg font-semibold leading-none tracking-tight">
+              missing note
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 px-6 pb-6 pt-4">
+            <p className="text-muted-foreground text-sm">
+              looked for this note and no relay in the plan below served it.
+            </p>
+            <div className="flex gap-2 text-sm">
+              <span className="text-muted-foreground w-20 shrink-0">id</span>
+              {href ? (
+                <Link className="text-primary break-all underline underline-offset-2" to={href}>
+                  {debug.id}
+                </Link>
+              ) : (
+                <span className="break-all font-mono text-xs">{debug.id}</span>
+              )}
+            </div>
+            <RelayDebugRows id={debug.id} author={debug.author} foundOn={debug.hints} />
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};
 
 const fmt = (n: number, capped: boolean): string => `${n}${capped ? '+' : ''}`;
 
@@ -415,7 +528,7 @@ const scrollCardToTop = (card: HTMLElement, durationMs = 550): void => {
   requestAnimationFrame(step);
 };
 
-export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showContext = true, onReplies, onOpen, anchored, replyCek, onEdit, onDelete, edited = false, onEditHistory, children }: {
+export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showContext = true, clamp = true, onReplies, onOpen, anchored, replyCek, onEdit, onDelete, edited = false, onEditHistory, children }: {
   event: NostrEvent | Rumor;
   /** Present when the item is private: the kind 1370/1470 wrapper. */
   wrapper?: NostrEvent;
@@ -425,18 +538,21 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   /** Feed-only: render the replied-to parent inline. Thread pages pass
    * false — the parent is already above, so replies read as replies. */
   showContext?: boolean;
+  /** False inside a reference box: the box owns the clipping (fade +
+   * read more), so the note must not clamp itself a second time. */
+  clamp?: boolean;
   /** The conversation's reply CEK — lets the info dialog decode a 1470. */
   replyCek?: Uint8Array;
   onReplies?: () => void;
   /** Open this note elsewhere (a column) instead of navigating — body
-   *  click and the reply count both route here. */
+   * click and the reply count both route here. */
   onOpen?: () => void;
   /** True when the column to the right pertains to this note: it stays
-   *  lit (and ringed) while its column dims everything else. Undefined
-   *  lets the feed-level default apply (first open pane's note). */
+   * lit (and ringed) while its column dims everything else. Undefined
+   * lets the feed-level default apply (first open pane's note). */
   anchored?: boolean;
   /** Present when the item is editable (private notes): publish a
-   *  revision with this content. */
+   * revision with this content. */
   onEdit?: (content: string) => void;
   /** Present when the parent owns deletion (a private note deletes its
    * whole conversation). Falls back to a single-event NIP-09. */
@@ -464,10 +580,16 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const mine = !!user && event.pubkey === user.pubkey;
   const { request, dialog: broadcastDialog } = useBroadcastFlow();
   const { relays: planRelays } = useRouting();
+  // Where this note was actually served from, read from the store rather
+  // than threaded as a prop: every surface (feed, profile, panes) then
+  // routes parent fetches, engagement and links to the relays that hold
+  // the note — not just to ours. The prop stays authoritative where a
+  const { foundOn: servedFrom, route: servedRoute } = useProvenance(event.id);
+  const foundOnRelays = foundOn ?? servedFrom;
   // Where this note circulates and where its author reads: the audience
   // any engagement on it (reply, reaction, repost, deletion) addresses
   // alongside our own outbox.
-  const parentAudience = { foundOn: foundOn ?? [], author: event.pubkey };
+  const parentAudience = { foundOn: foundOnRelays ?? [], author: event.pubkey };
   const sessionSk = useSessionKey();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
@@ -554,7 +676,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
     setEditing(false);
   };
   const navigate = useNavigate();
-  const selfHref = eventHref(event.id, event.pubkey, foundOn ?? []);
+  const selfHref = eventHref(event.id, event.pubkey, foundOnRelays ?? []);
   // Column opening: an explicit onOpen wins (a pane's replies name their
   // depth); otherwise a public note inside the column system opens one,
   // and only where panes fit — mobile keeps navigating as before. With
@@ -574,7 +696,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
           author: event.pubkey,
           // Relay hints are for public fetches; a sealed pointer reads the
           // decrypted conversation instead, so it carries none.
-          relays: wrapper === undefined ? foundOn : undefined,
+          relays: wrapper === undefined ? foundOnRelays : undefined,
           private: wrapper !== undefined,
         });
       }
@@ -624,7 +746,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   // other note (fade + read more). The title renders as a heading and
   // the cover lands in the media grid.
   const renderedText = isRepost ? '' : (event.kind === 30023 ? stripMd(event.content) : event.content);
-  const clampable =
+  const clampable = clamp &&
     !isRepost && (renderedText.length > CLAMP_THRESHOLD || allMedia.length > IMAGE_CLAMP_COUNT);
   const kindLabel = KIND_LABELS[event.kind];
   const quoteTag = !isRepost ? event.tags.find(([n]) => n === 'q') : undefined;
@@ -641,16 +763,18 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const taggedAuthor =
     nip10Ref?.reply?.author
     ?? (nip10Ref?.profiles?.length === 1 ? nip10Ref.profiles[0].pubkey : undefined);
+  // Parent routing: the e-tag relay hint first, then wherever this very
+  // note was served from — a reply usually lives beside its parent.
   const parentHints = [
     ...(nip10Ref?.reply?.relays ?? nip10Ref?.root?.relays ?? []),
-    ...(foundOn ?? []),
+    ...(foundOnRelays ?? []),
   ];
   const feed = useEngagementFeed(isPrivate ? undefined : event.id);
   const reposted = !!user && feed.reposts.some((r) => r.pubkey === user.pubkey);
   const reacted = !!user && feed.reactions.some((r) => r.pubkey === user.pubkey);
   const quoted = useEvent(quotedId, { author: quotedAuthor, hints: quotedRelays });
   const parent = useEvent(parentId, { author: taggedAuthor, hints: parentHints });
-  const repostTarget = useEvent(repostId, { author: repostAuthor, hints: foundOn });
+  const repostTarget = useEvent(repostId, { author: repostAuthor, hints: foundOnRelays });
   // One nested slot for every derived action: the repost embeds (or,
   // failing that, the fetched e-tag target), the quote's q-tag target,
   // and the reply's parent — the original author's note, inside this
@@ -665,6 +789,10 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
         : showContext && parentId ? parent.pending
           : false
   );
+  // A reply's parent is context: it renders above the reply body, thread
+  // order. Quotes and reposts embed their target below the body — there
+  // the referenced note IS the content, not context for it.
+  const parentContext = showContext && parentId !== undefined;
   // The identity is a choice: the modal's burner switch re-signs the
   // kind 7 under a throwaway key; the un-react is pinned to whichever
   // key the visible reaction was published with.
@@ -761,9 +889,9 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
                 edited
               </button>
             )}
-            {(kindLabel || quotedViaTag) && (
+            {(kindLabel || quotedViaTag || parentContext) && (
               <span className="flex shrink-0 items-center">
-                <Chip>{kindLabel ?? 'quoted'}</Chip>
+                <KindTag>{kindLabel ?? (quotedViaTag ? 'quoted' : 'reply')}</KindTag>
               </span>
             )}
             <Button
@@ -816,6 +944,18 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
               loaded={!!parent.event}
             />
           )}
+          {(parentContext || quotedViaTag || isRepost) && (
+            <ReferencedNote
+              event={referenced}
+              pending={referencedPending}
+              debug={
+                parentContext ? { id: parentId!, author: taggedAuthor, hints: parentHints }
+                : quotedViaTag && quotedId ? { id: quotedId, author: quotedAuthor, hints: quotedRelays }
+                : repostId ? { id: repostId, author: repostAuthor, hints: foundOnRelays }
+                : undefined
+              }
+            />
+          )}
 
           {/* Body: hard max-height with a bottom fade when collapsed — no
               note may dominate the screen, whatever its text or images. */}
@@ -836,9 +976,6 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
             )}
           </div>
 
-          {(referenced || referencedPending) && (
-            <ReferencedNote event={referenced} pending={referencedPending} />
-          )}
           {clampable && (
             <Button
               variant="ghost"
@@ -894,7 +1031,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
             </div>
           )}
           {children}
-          <NoteMeta foundOn={foundOn} route={route} client={clientTag} />
+          <NoteMeta foundOn={foundOnRelays} route={route ?? servedRoute} client={clientTag} />
         </div>
       </CardContent>
       {broadcastDialog}

@@ -23,8 +23,11 @@ const EMPTY: EntityState = Object.freeze({});
 export const isPending = (state: EntityState): boolean =>
   !state.event && state.settledAt === undefined;
 
-/** Subscribe to one entity and declare the want that fills it. */
-export const useEntity = (want: Want | undefined, lane: Lane = 'interactive'): EntityState => {
+/** Subscribe to one entity and declare the want that fills it. `version`
+ * re-declares without changing entity identity: a want whose routing
+ * inputs grew (provenance merging relays in) asks again at the better
+ * relays instead of holding a miss settled on stale hints. */
+export const useEntity = (want: Want | undefined, lane: Lane = 'interactive', version = ''): EntityState => {
   const key = want ? wantEntity(want) : undefined;
   const id = want ? wantKey(want) : undefined;
   const latest = useRef(want);
@@ -46,7 +49,7 @@ export const useEntity = (want: Want | undefined, lane: Lane = 'interactive'): E
     if (!w) return;
     scheduler.want(w, lane);
     return () => scheduler.drop(w);
-  }, [id, lane]);
+  }, [id, lane, version]);
 
   return state;
 };

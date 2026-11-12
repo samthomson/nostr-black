@@ -14,9 +14,9 @@ export const profileHref = (pubkey: string): string | undefined => {
 /** Route href for an event (nevent, falling back to note); undefined if
  *  unencodable. `relays` are hints — where the note was seen — so the
  *  opened page queries relays that actually hold it. */
-export const eventHref = (id: string, author: string, relays: readonly string[] = []): string | undefined => {
+export const eventHref = (id: string, author: string | undefined, relays: readonly string[] = []): string | undefined => {
   try {
-    return `/${nip19.neventEncode({ id, author, relays: [...relays] })}`;
+    return `/${nip19.neventEncode({ id, ...(author ? { author } : {}), relays: [...relays] })}`;
   } catch {
     // fall through — malformed ids are untrusted relay data
   }

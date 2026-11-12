@@ -337,6 +337,110 @@ describe('event wants', () => {
     expect(calls.map(([url]) => url).sort()).toEqual(['wss://discovery/', 'wss://hint/', 'wss://mine/']);
     expect(calls.every(([, filters]) => filters[0].ids?.[0] === id)).toBe(true);
   });
+  it('a hit on the hint tier stops the walk — discovery is never asked', async () => {
+    const { scheduler } = build();
+    const id = '5'.repeat(64);
+    const hit: NostrEvent = {
+      id,
+      pubkey: 'b'.repeat(64),
+      kind: 1,
+      tags: [],
+      content: 'found on the hint relay',
+      created_at: 1,
+      sig: 's',
+    };
+    queryRelay.mockImplementation(async (url) => (url === 'wss://hint/' ? [hit] : []));
+
+    scheduler.want({ type: 'event', id, hints: ['wss://hint/'] }, 'interactive');
+    await scheduler.flush();
+
+    const urls = queryRelay.mock.calls.map(([url]) => url);
+    expect(urls).toEqual(['wss://hint/']);
+  });
+  it('re-asks a missed event when its hints grow — provenance arriving late is not a verdict', async () => {
+    const { scheduler, store } = build();
+    const id = '6'.repeat(64);
+    const parent: NostrEvent = {
+      id,
+      pubkey: 'b'.repeat(64),
+      kind: 1,
+      tags: [],
+      content: 'found once provenance lands',
+      created_at: 1,
+      sig: 's',
+    };
+
+    // first ask: no hints known, every relay misses it
+    scheduler.want({ type: 'event', id }, 'interactive');
+    await scheduler.flush();
+    expect(store.getEvent(id)).toBeUndefined();
+    expect(store.get(wantEntity({ type: 'event', id })!).settledAt).toBeDefined();
+
+    // the note this one derives from turns up on a relay: the same want,
+    // re-declared with that hint, re-asks immediately — the freshness
+    // window must not hold the earlier miss.
+    queryRelay.mockImplementation(async (url) => (url === 'wss://late-hint/' ? [parent] : []));
+    scheduler.want({ type: 'event', id, hints: ['wss://late-hint/'] }, 'interactive');
+    await scheduler.flush();
+    expect(store.getEvent(id)).toEqual(parent);
+  });
+  it('a settled miss holds across re-wants — the parent loader is not re-opened on every render', async () => {
+    const { scheduler, store } = build();
+    const id = '2'.repeat(64);
+    const key = wantEntity({ type: 'event', id })!;
+
+    scheduler.want({ type: 'event', id }, 'interactive');
+    await scheduler.flush();
+    expect(store.get(key).settledAt).toBeDefined();
+
+    // a remount asks again; within the miss window nothing re-runs and
+    // the settled verdict stays — no second "fetching parent" round.
+    queryRelay.mockClear();
+    scheduler.want({ type: 'event', id }, 'interactive');
+    await scheduler.flush();
+    expect(queryRelay).not.toHaveBeenCalled();
+    expect(store.get(key).settledAt).toBeDefined();
+  });
+  it('a miss re-asks once the window has passed, and a hit stays fresh forever', async () => {
+    vi.useFakeTimers();
+    try {
+      const { scheduler, store } = build();
+      const missed = '3'.repeat(64);
+      const found: NostrEvent = {
+        id: '4'.repeat(64),
+        pubkey: 'b'.repeat(64),
+        kind: 1,
+        tags: [],
+        content: 'hit',
+        created_at: 1,
+        sig: 's',
+      };
+      queryRelay.mockImplementation(async (_url, filters) =>
+        filters[0].ids?.includes(found.id) ? [found] : []);
+
+      scheduler.want({ type: 'event', id: missed }, 'interactive');
+      scheduler.want({ type: 'event', id: found.id }, 'interactive');
+      await vi.advanceTimersByTimeAsync(80);
+      await scheduler.flush();
+      expect(store.getEvent(found.id)).toEqual(found);
+
+      // past the miss window: the miss is asked again, the hit never is.
+      vi.setSystemTime(Date.now() + 6 * 60_000);
+      queryRelay.mockClear();
+      scheduler.want({ type: 'event', id: missed }, 'interactive');
+      scheduler.want({ type: 'event', id: found.id }, 'interactive');
+      await vi.advanceTimersByTimeAsync(80);
+      await scheduler.flush();
+
+      const askedIds = queryRelay.mock.calls
+        .filter(([, filters]) => filters[0].ids)
+        .flatMap(([, filters]) => filters[0].ids ?? []);
+      expect(askedIds).toContain(missed);
+      expect(askedIds).not.toContain(found.id);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it('an addressable longform in the store opens by id without any relay round-trip', async () => {
     const { store } = build();

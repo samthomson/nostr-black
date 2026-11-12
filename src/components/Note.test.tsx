@@ -369,7 +369,7 @@ describe('Note', () => {
     expect(screen.queryByText(/"id":/)).toBeNull();
     expect(screen.queryByText('https://liminal.blossom.band/pic.jpg')).toBeNull();
   });
-  it('renders the replied-to parent as a full note when it is in the store', async () => {
+  it("renders a reply's parent above the reply, inside the limited context box", async () => {
     const parent = note(generateSecretKey(), 'the parent words');
     const reply = finalizeEvent({
       kind: 1,
@@ -385,9 +385,102 @@ describe('Note', () => {
       </TestApp>,
     );
 
-    expect(await screen.findByText('my reply')).toBeTruthy();
-    expect(screen.getByText('the parent words')).toBeTruthy();
+    // thread order: the parent context reads before the reply body
+    const card = (await screen.findByText('my reply')).closest('[data-slot="card"]')!;
+    const text = card.textContent ?? '';
+    expect(text.indexOf('the parent words')).toBeLessThan(text.indexOf('my reply'));
     expect(screen.queryByText(/replying to/)).toBeTruthy();
+
+    // the box is bounded: content-sized cap, inner scroll, scaled, dimmed
+    const box = card.querySelector('[data-testid="referenced-note"]')!;
+    for (const cls of ['max-h-44', 'overflow-y-auto', 'opacity-75', '[zoom:0.6]']) {
+      expect(box.className).toContain(cls);
+    }
+    // and the box is contained: dashed border + inset shadow carry that
+    // this is a parent reference, not a card of its own
+    expect(box.parentElement!.className).toContain('border-dashed');
+    // a reply is tagged as one — a derived note never reads top-level
+    expect(card.querySelector('.bg-copper')?.textContent).toBe('reply');
+  });
+  it("renders a quote's target above the quote, same order as replies", async () => {
+    const quotedEvent = note(generateSecretKey(), 'the quoted words');
+    const quoter = finalizeEvent({
+      kind: 1,
+      created_at: quotedEvent.created_at + 5,
+      tags: [['q', quotedEvent.id, '', quotedEvent.pubkey]],
+      content: 'look at this',
+    }, generateSecretKey());
+    store.ingest([quotedEvent], '');
+
+    render(
+      <TestApp>
+        <Note event={quoter} />
+      </TestApp>,
+    );
+
+    const card = (await screen.findByText('look at this')).closest('[data-slot="card"]')!;
+    const text = card.textContent ?? '';
+    expect(text.indexOf('the quoted words')).toBeLessThan(text.indexOf('look at this'));
+  });
+  it('a huge parent cannot stretch the reply card — it stays in the bounded box', async () => {
+    const giant = note(generateSecretKey(), `giant ${'x'.repeat(5000)}`);
+    const reply = finalizeEvent({
+      kind: 1,
+      created_at: giant.created_at + 5,
+      tags: [['e', giant.id, '', 'reply']],
+      content: 'small reply',
+    }, generateSecretKey());
+    store.ingest([giant], '');
+
+    render(
+      <TestApp>
+        <Note event={reply} />
+      </TestApp>,
+    );
+
+    const card = (await screen.findByText('small reply')).closest('[data-slot="card"]')!;
+    const box = card.querySelector('[data-testid="referenced-note"]')!;
+    expect(box.className).toContain('max-h-44');
+    expect(box.className).toContain('overflow-y-auto');
+  });
+  it('fetches a reply parent from relays when it is not in the store', async () => {
+    const parent = note(generateSecretKey(), 'fetched parent words');
+    const reply = finalizeEvent({
+      kind: 1,
+      created_at: parent.created_at + 5,
+      tags: [['e', parent.id, 'wss://hint.relay', 'reply'], ['p', parent.pubkey]],
+      content: 'my reply',
+    }, generateSecretKey());
+    queryRelay.mockImplementation(async () => [parent]);
+
+    render(
+      <TestApp>
+        <Note event={reply} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByText('fetched parent words', {}, { timeout: 5000 })).toBeTruthy();
+  });
+  it('a parent miss renders inside the fixed box, never collapses the card shape', async () => {
+    const parent = note(generateSecretKey(), 'never fetched words');
+    const reply = finalizeEvent({
+      kind: 1,
+      created_at: parent.created_at + 5,
+      tags: [['e', parent.id, 'wss://hint.relay', 'reply'], ['p', parent.pubkey]],
+      content: 'my reply',
+    }, generateSecretKey());
+    queryRelay.mockResolvedValue([]);
+
+    render(
+      <TestApp>
+        <Note event={reply} />
+      </TestApp>,
+    );
+
+    expect(await screen.findByText(/parent not on your relays/, {}, { timeout: 20000 })).toBeTruthy();
+    const box = document.querySelector('[data-testid="referenced-note"]')!;
+    expect(box.className).toContain('max-h-44');
+    expect(box.textContent).toContain('note not on your relays');
   });
   it('a note with a malformed nostr: reference does not crash', async () => {
     render(

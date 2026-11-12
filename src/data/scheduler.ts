@@ -56,14 +56,18 @@ const REPLACEABLE_KIND: Record<ReplaceableWantType, number> = {
   muteList: 10000,
 };
 
-/** How long a satisfied want stays fresh before it may be asked again. */
+/** How long a satisfied want stays fresh before it may be asked again.
+ * For events this is the *miss* window: a hit is immutable and fresh
+ * forever (see `fresh`), but a miss must re-ask on a window — never on
+ * every mount, which would re-pend a settled "not found" each time the
+ * note renders and spin its parent loader indefinitely. */
 const STALE_MS: Record<Want['type'], number> = {
   profile: 15 * 60_000,
   relayList: 60 * 60_000,
   followList: 15 * 60_000,
   muteList: 15 * 60_000,
   blossomServers: 24 * 60 * 60_000,
-  event: Number.POSITIVE_INFINITY,
+  event: 5 * 60_000,
   addressable: 15 * 60_000,
   engagement: 5 * 60_000,
   thread: 2 * 60_000,
@@ -256,18 +260,20 @@ export const createScheduler = (
    * makes the next enqueue bypass the freshness dedupe once the list has
    * landed — one bounded re-ask at the outbox, then it is a verdict. */
   const awaitingRoute = new Map<string, number>();
+  /** Distinct hint relays each event want was last asked at — a later
+   * declaration with more hints re-asks even inside the freshness
+   * window: the first ask ran before provenance landed, so its miss is
+   * stale routing, not a verdict. */
+  const askedHints = new Map<string, number>();
 
   const fresh = (want: Want): boolean => {
     const at = satisfiedAt.get(wantKey(want));
     if (at === undefined) return false;
-    const window = STALE_MS[want.type];
-    if (!Number.isFinite(window)) {
-      // Immutable events: a *hit* stays forever. A miss does not — we may
-      // not have known the author's relays yet.
-      if (want.type === 'event' && target.getEvent(want.id)) return true;
-      return false;
-    }
-    return Date.now() - at < window;
+    // An event hit is immutable: fresh forever. A miss goes stale on the
+    // STALE_MS window like everything else, so its settled verdict holds
+    // across remounts instead of re-pending every render.
+    if (want.type === 'event' && target.getEvent(want.id)) return true;
+    return Date.now() - at < STALE_MS[want.type];
   };
 
   /** The author whose kind 10002 this want's routing depends on — the
@@ -293,7 +299,12 @@ export const createScheduler = (
       retries !== undefined && retries < 2 && routeOf(want, context()) !== undefined;
     if (retries !== undefined && !retriable) awaitingRoute.delete(key);
     if (retriable) awaitingRoute.set(key, retries + 1);
-    if (inflight.has(key) || (!retriable && fresh(want))) return;
+    const hintsGrew =
+      want.type === 'event'
+      && !target.getEvent(want.id)
+      && satisfiedAt.has(key)
+      && (askedHints.get(key) ?? 0) < new Set(want.hints ?? []).size;
+    if (inflight.has(key) || (!retriable && !hintsGrew && fresh(want))) return;
 
     // Re-asking a missed event reopens the question: the UI pends while
     // this run is in flight instead of showing the earlier miss. A miss
@@ -304,8 +315,14 @@ export const createScheduler = (
     }
     const queued = pending.get(key);
     if (queued) {
-      // Already queued: the most urgent caller wins.
+      // Already queued: the most urgent caller wins, and the best-known
+      // routing wins — a later declaration may carry hints the first
+      // one predates.
       if (rank(lane) < rank(queued.lane)) queued.lane = lane;
+      if (
+        want.type === 'event' && queued.want.type === 'event'
+        && new Set(want.hints ?? []).size > new Set(queued.want.hints ?? []).size
+      ) queued.want = want;
       return;
     }
 
@@ -526,30 +543,47 @@ export const createScheduler = (
       ) : undefined,
     ]);
   };
-
   const runEventWants = async (
     lane: Lane,
     ctx: RoutingContext,
     wants: Extract<Want, { type: 'event' }>[],
   ): Promise<void> => {
-    const groups: Groups = new Map();
-
     for (const want of wants) {
       if (want.author && !ctx.authorRelays.get(want.author)) {
         enqueue({ type: 'relayList', pubkey: want.author }, 'background');
       }
-      const plan = relayPlan({
+    }
+
+    // Tiers run in order (relayPlan's contract): the hint and our-read
+    // tiers ask the relays that plausibly hold the event; discovery is
+    // asked only about the ids every earlier tier missed. A hit stops
+    // the walk — no broader ask, no discovery round, for a found id.
+    const remaining = new Set(wants);
+    const depth = Math.max(
+      ...wants.map((want) => relayPlan({
         kind: 'resolveById',
         id: want.id,
         author: want.author,
         hints: want.hints ?? [],
-      }, ctx);
-      for (const tier of plan.tiers) {
-        for (const url of tier.groups.keys()) addGroup(groups, url, [want.id]);
+      }, ctx).tiers.length),
+    );
+    for (let tier = 0; tier < depth && remaining.size > 0; tier += 1) {
+      const groups: Groups = new Map();
+      for (const want of remaining) {
+        const plan = relayPlan({
+          kind: 'resolveById',
+          id: want.id,
+          author: want.author,
+          hints: want.hints ?? [],
+        }, ctx);
+        for (const url of plan.tiers[tier]?.groups.keys() ?? []) addGroup(groups, url, [want.id]);
+      }
+      if (groups.size === 0) continue;
+      await runGroups(lane, groups, (ids) => ({ ids }), 50);
+      for (const want of [...remaining]) {
+        if (target.getEvent(want.id)) remaining.delete(want);
       }
     }
-
-    await runGroups(lane, groups, (ids) => ({ ids }), 50);
   };
 
   const runAddressableWants = async (
@@ -815,6 +849,7 @@ export const createScheduler = (
             ? !!want.author
             : want.type === 'profile' || want.type === 'authorNotes' || want.type === 'authorActivity');
         if (misrouted) awaitingRoute.set(key, awaitingRoute.get(key) ?? 0);
+        if (want.type === 'event') askedHints.set(key, new Set(want.hints ?? []).size);
         if (want.type === 'relayList' && want.pubkey === ctx.pubkey) selfRelayListSettled = true;
         satisfiedAt.set(key, now);
         const entity = wantEntity(want);
@@ -860,6 +895,7 @@ export const createScheduler = (
       inflight.clear();
       satisfiedAt.clear();
       awaitingRoute.clear();
+      askedHints.clear();
       running = undefined;
     },
   };
