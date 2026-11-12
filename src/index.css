@@ -49,6 +49,12 @@
   --color-privacy-public-soft: var(--privacy-public-soft);
   --color-privacy-public-muted: var(--privacy-public-muted);
   --color-accent-foreground: var(--accent-foreground);
+  --color-json-key-1: var(--json-key-1);
+  --color-json-key-2: var(--json-key-2);
+  --color-json-key-3: var(--json-key-3);
+  --color-json-key-4: var(--json-key-4);
+  --color-json-key-5: var(--json-key-5);
+  --color-json-key-6: var(--json-key-6);
   --color-copper-foreground: var(--copper-foreground);
 
   --color-destructive: var(--destructive);
@@ -124,6 +130,16 @@
   /* Copper: the one accent, used sparingly. */
   --copper: hsl(22 60% 40%);
   --copper-foreground: hsl(0 0% 98%);
+
+  /* JSON viewer key tones — deterministic per key name (djb2 in
+   * src/lib/json.ts), muted hues so the raw view reads as structure,
+   * not confetti. Values stay foreground; copper stays the accent. */
+  --json-key-1: hsl(20 45% 62%);
+  --json-key-2: hsl(45 50% 60%);
+  --json-key-3: hsl(95 25% 60%);
+  --json-key-4: hsl(175 30% 58%);
+  --json-key-5: hsl(215 35% 64%);
+  --json-key-6: hsl(265 30% 64%);
 
   --destructive: hsl(0 72% 45%);
   --destructive-foreground: hsl(0 0% 98%);

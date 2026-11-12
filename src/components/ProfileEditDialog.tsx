@@ -22,7 +22,7 @@ import {
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
-  DialogContent,
+  SmoothDialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
@@ -441,7 +441,7 @@ export const ProfileEditDialog = ({
   return (
     <>
       <Dialog open={open} onOpenChange={close}>
-        <DialogContent className="max-h-[85dvh] max-w-[calc(100vw-2rem)] gap-0 overflow-y-auto rounded-sm p-0 sm:max-w-md">
+        <SmoothDialogContent className="max-w-[calc(100vw-2rem)] rounded-sm sm:max-w-md">
           <DialogHeader className="px-4 pt-4 pb-2">
             <DialogTitle className="text-sm">edit profile</DialogTitle>
             <DialogDescription className="text-xs">
@@ -510,7 +510,7 @@ export const ProfileEditDialog = ({
               </p>
             )}
           </div>
-        </DialogContent>
+        </SmoothDialogContent>
       </Dialog>
       {dialog}
     </>

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ChevronDown, RefreshCw, Trash2 } from 'lucide-react';
 import {
   Dialog,
-  DialogContent,
+  SmoothDialogContent,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -61,7 +61,7 @@ export const BroadcastQueueDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] max-w-[calc(100vw-2rem)] gap-0 overflow-hidden p-0 sm:max-w-md">
+      <SmoothDialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
         <DialogHeader className="flex-row items-center gap-2 px-4 pt-4 pb-3">
           <DialogTitle className="text-sm leading-none font-semibold tracking-tight">
             broadcast queue
@@ -147,7 +147,7 @@ export const BroadcastQueueDialog = ({
             </div>
           )}
         </div>
-      </DialogContent>
+      </SmoothDialogContent>
     </Dialog>
   );
 };

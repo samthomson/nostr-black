@@ -13,7 +13,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { EventInfoDialog, RelayDebugRows } from '@/components/EventInfoDialog';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, SmoothDialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Chip, RelayPill, RoutePill } from '@/components/Pills';
 import { EngagementCount } from '@/components/EngagementDialog';
 import { useEngagementFeed } from '@/data/hooks/useEngagementFeed';
@@ -341,7 +341,7 @@ const MissingNoteInfo = ({ debug }: { debug: { id: string; author?: string; hint
         <Info className="size-3.5" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-h-[70dvh] overflow-y-auto p-0 gap-0">
+        <SmoothDialogContent>
           <DialogHeader className="px-6 pt-6">
             <DialogTitle className="text-lg font-semibold leading-none tracking-tight">
               missing note
@@ -363,7 +363,7 @@ const MissingNoteInfo = ({ debug }: { debug: { id: string; author?: string; hint
             </div>
             <RelayDebugRows id={debug.id} author={debug.author} foundOn={debug.hints} />
           </div>
-        </DialogContent>
+        </SmoothDialogContent>
       </Dialog>
     </>
   );

@@ -146,7 +146,7 @@ describe('PrivateFeedPage', () => {
     await user.click(screen.getAllByRole('button', { name: 'event info' })[0]);
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText('event info')).toBeTruthy();
-    expect(within(dialog).getByText('1370')).toBeTruthy();
+    expect(within(dialog).getAllByText('1370').length).toBeGreaterThan(0);
     expect(within(dialog).getByText(/rumour/)).toBeTruthy();
   });
 

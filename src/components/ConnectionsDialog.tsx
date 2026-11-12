@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, SmoothDialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useProfiles } from '@/data/hooks/useProfile';
 import { npubOf } from '@/lib/format';
@@ -49,7 +49,7 @@ export const ConnectionsDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[70dvh] max-w-[95vw] flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+      <SmoothDialogContent className="max-w-[95vw] sm:max-w-md">
         <DialogHeader className="border-b px-4 pt-4 pb-3">
           <DialogTitle className="text-sm font-semibold">
             {tab === 'relays'
@@ -114,7 +114,7 @@ export const ConnectionsDialog = ({
             })}
           </ul>
         )}
-      </DialogContent>
+      </SmoothDialogContent>
     </Dialog>
   );
 };

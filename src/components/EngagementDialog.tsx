@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, SmoothDialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { useProfiles } from '@/data/hooks/useProfile';
 import { npubOf, profileHref } from '@/lib/format';
@@ -51,7 +51,7 @@ export const EngagementDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85dvh] max-w-[95vw] gap-0 overflow-hidden p-0 sm:max-w-md">
+      <SmoothDialogContent className="max-w-[95vw] sm:max-w-md">
         <DialogHeader className="border-b px-4 pt-4 pb-3">
           <DialogTitle className="text-sm font-semibold">
             {tab === 'reactions'
@@ -118,7 +118,7 @@ export const EngagementDialog = ({
             );
           })}
         </ul>
-      </DialogContent>
+      </SmoothDialogContent>
     </Dialog>
   );
 };

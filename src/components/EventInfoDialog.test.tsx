@@ -17,7 +17,7 @@ const event = {
   kind: 1,
   tags: [
     ['p', B],
-    ['e', 'f'.repeat(64)],
+    ['e', 'f'.repeat(64), 'wss://hint.relay', 'reply'],
     ['t', 'nostr'],
   ],
   content: 'hello',
@@ -50,17 +50,31 @@ describe('EventInfoDialog', () => {
       tagLinks.some((a) => a.getAttribute('href') === `/${nip19.npubEncode(B)}`),
     ).toBe(true);
     expect(tagLinks.some((a) => (a.getAttribute('href') ?? '').includes('nevent1'))).toBe(true);
-    expect(screen.getByText('[t]')).toBeTruthy();
+    expect(screen.getByText('t')).toBeTruthy();
   });
 
   it('shows the raw event json under the raw tab', async () => {
     renderDialog();
 
-    expect(screen.queryByText(/"kind": 1/)).toBeNull();
+    expect(screen.queryByTestId('json-block')).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'raw' }));
 
-    expect(await screen.findByText(/"kind": 1/)).toBeTruthy();
-    expect(screen.getByText(/"content": "hello"/)).toBeTruthy();
+    const raw = screen.getByTestId('json-block');
+    expect(raw.textContent).toContain('"kind": 1');
+    expect(raw.textContent).toContain('"content": "hello"');
+  });
+
+  it('the tag table links values and drops relay hints into the relays tab', async () => {
+    renderDialog();
+
+    expect(screen.getByText('e')).toBeTruthy();
+    expect(screen.getByText('t')).toBeTruthy();
+    // routing hints live in the relays tab, never in the tag rows
+    expect(screen.queryByText(/wss:\/\//)).toBeNull();
+    // the e-tag marker survives as a quiet chip
+    expect(screen.getByText('reply')).toBeTruthy();
+    // every value offers copy on hover
+    expect(screen.getAllByRole('button', { name: 'copy value' }).length).toBeGreaterThanOrEqual(3);
   });
 
   it('the relays tab shows the lookup plan groups', async () => {

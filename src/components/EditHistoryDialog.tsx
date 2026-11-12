@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, SmoothDialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { diffLines, type DiffRow, type DiffSegment } from '@/lib/diff';
 import { formatTimestamp } from '@/lib/format';
 import type { Rumor } from '@/lib/feedEncryption';
@@ -81,7 +81,7 @@ export const EditHistoryDialog = ({
   onOpenChange: (open: boolean) => void;
 }) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="max-h-[85dvh] max-w-[95vw] overflow-y-auto sm:max-w-2xl">
+    <SmoothDialogContent className="max-w-[95vw] p-6 sm:max-w-2xl">
       <DialogHeader>
         <DialogTitle className="text-lg font-semibold">edit history</DialogTitle>
       </DialogHeader>
@@ -90,6 +90,6 @@ export const EditHistoryDialog = ({
           <Version key={curr.id} index={i} prev={i > 0 ? versions[i - 1] : undefined} curr={curr} />
         ))}
       </div>
-    </DialogContent>
+    </SmoothDialogContent>
   </Dialog>
 );
