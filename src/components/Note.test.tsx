@@ -607,4 +607,71 @@ describe('Note', () => {
     fireEvent.click(screen.getByRole('button', { name: 'event info' }));
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
+
+  it('clicking a video in the feed is a play, never an open', async () => {
+    const event = note(generateSecretKey(), 'watch https://cdn.example/clip.mp4');
+    const onOpen = vi.fn();
+
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(generateSecretKey())}>
+          <Note event={event} onOpen={onOpen} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    const video = await waitFor(() => {
+      const el = document.querySelector('video');
+      expect(el).toBeTruthy();
+      return el!;
+    });
+    fireEvent.click(video);
+    expect(onOpen).not.toHaveBeenCalled();
+
+    // the same card still opens from its chrome
+    const card = video.closest('[data-slot="card"]')!;
+    fireEvent.click(card);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it('links in the content and text selection never open the note', async () => {
+    const alice = generateSecretKey();
+    const bob = generateSecretKey();
+    const event = finalizeEvent({
+      kind: 1,
+      created_at: 1,
+      tags: [['p', getPublicKey(bob)]],
+      content: `hello ${nip19.npubEncode(getPublicKey(bob))} select these words`,
+    }, alice);
+    const onOpen = vi.fn();
+
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(alice)}>
+          <Note event={event} onOpen={onOpen} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    // a mention link navigates, never opens
+    const mention = await screen.findByRole('link', { name: /npub1/ });
+    fireEvent.click(mention);
+    expect(onOpen).not.toHaveBeenCalled();
+
+    // a click while text is selected is a selection, never an open
+    const body = screen.getByText(/select these words/);
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const card = body.closest('[data-slot="card"]')!;
+    fireEvent.click(card);
+    expect(onOpen).not.toHaveBeenCalled();
+
+    // and with the selection cleared, the same card opens
+    selection.removeAllRanges();
+    fireEvent.click(card);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
 });

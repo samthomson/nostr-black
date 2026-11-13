@@ -55,6 +55,47 @@ const stripMd = (md: string): string => md
  * wrapped anywhere (break-all) so no host runs the card wide. */
 const truncatedUrl = (url: string): string => (url.length > 80 ? `${url.slice(0, 77)}…` : url);
 
+/** A feed video with a real thumbnail: once the metadata preload has
+ * the first frame, seek a beat in and paint it to a canvas as the
+ * poster — no second fetch, nothing beyond what preload="metadata"
+ * already brought. Codecs that refuse to paint keep the bare player
+ * (the failed attempt is recorded so it never retries). */
+const VideoWithFirstFrame = ({ src, className }: { src: string; className?: string }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [poster, setPoster] = useState<string | null>(null);
+
+  const captureFrame = () => {
+    const video = videoRef.current;
+    if (!video || poster !== null || video.videoWidth === 0) return;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext('2d')?.drawImage(video, 0, 0);
+      setPoster(canvas.toDataURL('image/jpeg', 0.7));
+    } catch {
+      setPoster(null);
+    }
+  };
+
+  return (
+    <video
+      ref={videoRef}
+      src={src}
+      controls
+      preload="metadata"
+      poster={poster ?? undefined}
+      className={className}
+      onLoadedMetadata={() => {
+        const video = videoRef.current;
+        if (video && video.currentTime === 0) video.currentTime = 0.1;
+      }}
+      onSeeked={captureFrame}
+      onCanPlay={captureFrame}
+    />
+  );
+};
+
 /** One media item from an event: <img> or <video> (with controls), fetched
  * through the transport layer via useAsset. Failures are visible — a media
  * layer that fails silently is undebuggable. Images with `onOpen` zoom into
@@ -99,7 +140,7 @@ const MediaItem = ({ url, alt, onOpen, tile = false }: { url: string; alt: strin
   if (VIDEO_URL.test(url)) {
     return (
       <div ref={ref}>
-        <video src={src} controls preload="metadata" className={frame} />
+        <VideoWithFirstFrame src={src} className={frame} />
       </div>
     );
   }
@@ -719,7 +760,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
     // Interactive chrome keeps its own click meaning; text selection is
     // not an open; anything inside a nested referenced note belongs to
     // that note's own card handler (this one stops propagation).
-    if ((e.target as HTMLElement).closest('a, button, input, textarea, [contenteditable]')) return;
+    if ((e.target as HTMLElement).closest('a, button, input, textarea, video, audio, [contenteditable]')) return;
     const selection = window.getSelection();
     if (selection && selection.toString().length > 0) return;
     e.stopPropagation();
