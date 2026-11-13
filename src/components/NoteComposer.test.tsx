@@ -228,4 +228,26 @@ describe('NoteComposer', () => {
     expect(note.pubkey).not.toBe(identity);
     expect((note as unknown as { content: string }).content).toBe('anon words more');
   });
+
+  it('derives t tags from hashtags at publish — deduped, url fragments excluded', async () => {
+    const sk = generateSecretKey();
+    const user = userEvent.setup();
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(sk)}>
+          <NoteComposer />
+        </Unlock>
+      </TestApp>,
+    );
+
+    const box = await screen.findByRole('textbox', { name: "what's happening?" });
+    await user.type(box, 'hello #Nostr and #nostr see https://x.com/page#anchor #real');
+    await user.click(screen.getByRole('button', { name: 'broadcast' }));
+    await confirmBroadcast(user);
+
+    await waitFor(() => expect(publish).toHaveBeenCalled());
+    const [note] = publish.mock.calls.at(-1)!;
+    const tTags = (note as unknown as { tags: string[][] }).tags.filter(([name]) => name === 't');
+    expect(tTags).toEqual([['t', 'nostr'], ['t', 'real']]);
+  });
 });

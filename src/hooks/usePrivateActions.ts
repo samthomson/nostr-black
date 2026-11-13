@@ -16,6 +16,7 @@ import { useAppContext } from '@/hooks/useAppContext';
 import { clientTagOf } from '@/lib/clientTag';
 import { KIND_PRIVATE_NOTE } from '@/lib/feedEncryption';
 import { mentionedPubkeysOf, pTagsOf } from '@/lib/mentions';
+import { tTagsOf } from '@/lib/hashtags';
 
 /**
  * The private conversation actions — post, reply, react, edit, delete —
@@ -115,6 +116,7 @@ export const usePrivateActions = () => {
           ...cekAndRumor.rumor.tags,
           ...(client ? [['client', client]] : []),
           ...pTagsOf(mentionedPubkeysOf(content)),
+          ...tTagsOf(content),
           ...mediaTags(media.map((image, i) => ({ ...image, url: urls[i]! })), cekAndRumor.replyCek),
         ],
       });
@@ -173,7 +175,7 @@ export const usePrivateActions = () => {
       const { rumor } = makeRumor(getPublicKey(key), content, [
         ['e', parent.rumor.id],
         ...(clientTagOf(config.clientTag, content) ? [['client', clientTagOf(config.clientTag, content)!]] : []),
-        ...pTagsOf(mentionedPubkeysOf(content)),
+        ...tTagsOf(content),
         ...mediaTags(media.map((image, i) => ({ ...image, url: urls[i]! })), parent.replyCek),
       ]);
       return wrapPrivateReply(key, parent.replyCek, rumor);
@@ -198,16 +200,17 @@ export const usePrivateActions = () => {
     // no aliases, no connection state.
     const revision = makeRevision(getPublicKey(key), parent.rumor, content);
     const client = clientTagOf(config.clientTag, content);
-    // Mention tags re-derive from the new content — an edit that adds
-    // or drops a mention keeps the sealed conversation's tags truthful.
-    // On private rumors `p` tags are only ever mention tags, so
-    // dropping and re-adding them is exact.
+    // Mention and hashtag tags re-derive from the new content — an edit
+    // that adds or drops either keeps the sealed conversation's tags
+    // truthful. On private rumors `p`/`t` tags are only ever derived,
+    // so dropping and re-adding them is exact.
     const mentionTags = pTagsOf(mentionedPubkeysOf(content));
     const tagged: Rumor = {
       ...revision,
       tags: [
-        ...revision.tags.filter(([name]) => name !== 'p'),
+        ...revision.tags.filter(([name]) => name !== 'p' && name !== 't'),
         ...mentionTags,
+        ...tTagsOf(content),
         ...(client ? [['client', client]] : []),
       ],
     };
@@ -219,14 +222,16 @@ export const usePrivateActions = () => {
   };
 
   const editReply = (parent: OpenedNote, reply: OpenedReply, content: string) => {
+    // Same truthfulness rule as note revisions: mentions and hashtags
+    // follow content.
     const revision = makeRevision(getPublicKey(key), reply.rumor, content);
-    // Same truthfulness rule as note revisions: mentions follow content.
     const mentionTags = pTagsOf(mentionedPubkeysOf(content));
     const tagged: Rumor = {
       ...revision,
       tags: [
-        ...revision.tags.filter(([name]) => name !== 'p'),
+        ...revision.tags.filter(([name]) => name !== 'p' && name !== 't'),
         ...mentionTags,
+        ...tTagsOf(content),
       ],
     };
     const event = wrapPrivateReply(key, parent.replyCek, tagged);

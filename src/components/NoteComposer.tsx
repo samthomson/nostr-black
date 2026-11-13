@@ -18,6 +18,7 @@ import { prepareImage } from '@/lib/imageCompress';
 import { useBlossomUpload } from '@/hooks/useBlossomUpload';
 import { useBlossomServers } from '@/data/hooks/useBlossomServers';
 import { mentionedPubkeysOf, pTagsOf } from '@/lib/mentions';
+import { tTagsOf } from '@/lib/hashtags';
 
 /** One confirmed upload, as the note references it (NIP-92 imeta). */
 interface UploadedImage extends UploadedFile {
@@ -180,6 +181,7 @@ const signedNote = (
   tags.push(...pTagsOf([parent?.pubkey, ...mentionedPubkeysOf(content)].filter(
     (pubkey): pubkey is string => !!pubkey,
   )));
+  tags.push(...tTagsOf(content));
   for (const image of uploaded) {
     tags.push([
       'imeta',
