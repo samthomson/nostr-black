@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { nowSec } from '@/lib/timestamp';
 import { Link, useNavigate } from 'react-router-dom';
 import { finalizeEvent, getPublicKey, nip10 } from 'nostr-tools';
-import { CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat, Trash2 } from 'lucide-react';
+import { ChevronDown, CornerDownRight, Heart, Info, Loader2, MessageCircle, Pencil, Repeat, Trash2 } from 'lucide-react';
 import type { NostrEvent } from '@nostrify/nostrify';
 import type { Rumor } from '@/lib/feedEncryption';
 import { useProfile } from '@/data/hooks/useProfile';
@@ -15,7 +15,7 @@ import { EventInfoDialog, RelayDebugRows } from '@/components/EventInfoDialog';
 import { Button } from '@/components/ui/button';
 import { Dialog, SmoothDialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Chip, RelayPill, RoutePill } from '@/components/Pills';
-import { EngagementCount } from '@/components/EngagementDialog';
+import { EngagementCount, countNumberClass } from '@/components/EngagementDialog';
 import { useEngagementFeed } from '@/data/hooks/useEngagementFeed';
 import { NoteSkeleton } from '@/components/NoteSkeleton';
 import { Composer } from '@/components/Composer';
@@ -428,56 +428,67 @@ export const ReplyCount = ({
   onReplies?: () => void;
   href?: string;
 }) => (
-  <span className="inline-flex items-center gap-1">
+  <span className="inline-flex items-center gap-0.5">
+    {/* Mobile reactions row spec: the row is justify-between — reply
+        flush left (aligned with the text above), caret flush right,
+        equal gaps between all four groups; icon and count snug. */}
     {href ? (
       <Link
         to={href}
-        className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+        className="text-muted-foreground inline-flex h-11 cursor-pointer items-center justify-center pl-0 pr-1.5 hover:text-foreground sm:h-auto sm:pl-0.5 sm:pr-0.5"
         aria-label="open replies"
       >
-        <MessageCircle className="size-3.5" />
+        <MessageCircle className="size-5 sm:size-3.5" />
       </Link>
     ) : (
       <button
         type="button"
-        className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+        className="text-muted-foreground inline-flex h-11 cursor-pointer items-center justify-center pl-0 pr-1.5 hover:text-foreground sm:h-auto sm:pl-0.5 sm:pr-0.5"
         onClick={onReplies}
         aria-label="reply"
       >
-        <MessageCircle className="size-3.5" />
+        <MessageCircle className="size-5 sm:size-3.5" />
       </button>
     )}
     {replies === 0 && !pending ? (
-      <span className="text-muted-foreground inline-flex items-center" aria-label="replies" data-testid="count-reply">
-        <span className="text-sm">0</span>
+      <span
+        className={cn('text-muted-foreground inline-flex h-11 items-center px-0.5 sm:h-auto sm:px-0', countNumberClass)}
+        aria-label="replies"
+        data-testid="count-reply"
+      >
+        0
       </span>
     ) : href ? (
       <Link
         to={href}
-        className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+        className={cn('text-muted-foreground inline-flex h-11 cursor-pointer items-center px-0.5 hover:text-foreground sm:h-auto sm:px-0', countNumberClass)}
         aria-label="replies"
         data-testid="count-reply"
       >
-        {pending ? <Loader2 className="size-3 animate-spin" /> : (
-          <span className="text-sm underline underline-offset-2">{fmt(replies, capped)}</span>
+        {pending ? <Loader2 className="size-5 animate-spin sm:size-3" /> : (
+          <span className="underline underline-offset-2">{fmt(replies, capped)}</span>
         )}
       </Link>
     ) : onReplies ? (
       <button
         type="button"
         onClick={onReplies}
-        className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+        className={cn('text-muted-foreground inline-flex h-11 cursor-pointer items-center px-0.5 hover:text-foreground sm:h-auto sm:px-0', countNumberClass)}
         aria-label="replies"
         data-testid="count-reply"
       >
-        {pending ? <Loader2 className="size-3 animate-spin" /> : (
-          <span className="text-sm underline underline-offset-2">{fmt(replies, capped)}</span>
+        {pending ? <Loader2 className="size-5 animate-spin sm:size-3" /> : (
+          <span className="underline underline-offset-2">{fmt(replies, capped)}</span>
         )}
       </button>
     ) : (
-      <span className="text-muted-foreground inline-flex items-center" aria-label="replies" data-testid="count-reply">
-        {pending ? <Loader2 className="size-3 animate-spin" /> : (
-          <span className="text-sm underline underline-offset-2">{fmt(replies, capped)}</span>
+      <span
+        className={cn('text-muted-foreground inline-flex h-11 items-center px-0.5 sm:h-auto sm:px-0', countNumberClass)}
+        aria-label="replies"
+        data-testid="count-reply"
+      >
+        {pending ? <Loader2 className="size-5 animate-spin sm:size-3" /> : (
+          <span className="underline underline-offset-2">{fmt(replies, capped)}</span>
         )}
       </span>
     )}
@@ -610,6 +621,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
   const { metadata, pending: authorPending } = useProfile(event.pubkey);
   const [expanded, setExpanded] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
+  const [metaOpen, setMetaOpen] = useState(false);
   const [openMedia, setOpenMedia] = useState<number | null>(null);
   const isPrivate = wrapper !== undefined;
   // A live optimistic copy reads its store entity key: the wrapper id for
@@ -1046,7 +1058,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
 
 
           {!isPrivate && (
-            <div ref={countsRef} className="text-privacy-public-muted flex items-center gap-4 pt-1 text-sm" data-testid="note-counts">
+            <div ref={countsRef} className="text-privacy-public-muted flex items-center justify-between gap-0 pt-1 text-sm md:justify-start md:gap-4" data-testid="note-counts">
               <ReplyCount
                 replies={feed.replies}
                 pending={feed.pending}
@@ -1057,7 +1069,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
               {/* zaps: no send/receive yet — the row ships without it
               <Count icon={<Zap className="size-4" />} count={...} label="zaps" /> */}
               <EngagementCount
-                icon={<Repeat className="size-3.5" />}
+                icon={<Repeat className="size-5 sm:size-3.5" />}
                 count={feed.reposts.length}
                 capped={feed.repostsCapped}
                 pending={feed.pending}
@@ -1069,7 +1081,7 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
                 ariaLabel="repost"
               />
               <EngagementCount
-                icon={<Heart className={cn('size-4', reacted && 'fill-current')} />}
+                icon={<Heart className={cn('size-5 sm:size-4', reacted && 'fill-current')} />}
                 count={feed.reactions.length}
                 capped={feed.reactionsCapped}
                 pending={feed.pending}
@@ -1082,10 +1094,37 @@ export const Note = ({ event, wrapper, foundOn, route, linkReplies = true, showC
                 onChoose={(emoji) => void react(emoji)}
                 ariaLabel="react"
               />
+              {/* Mobile: relay/route info folds behind this caret at the
+                  right of the reactions; desktop shows the pills inline. */}
+              {(foundOnRelays?.length ?? 0) > 0 && (
+                <button
+                  type="button"
+                  aria-label="note relays"
+                  onClick={() => setMetaOpen((open) => !open)}
+                  className="text-muted-foreground hover:text-foreground inline-flex h-11 cursor-pointer items-center justify-end pl-1.5 pr-0 md:hidden"
+                >
+                  {/* size-6, one over the solid icons: a stroked chevron
+                      renders lighter, so this reads the same. */}
+                  <ChevronDown className={cn('size-6 transition-transform', metaOpen && 'rotate-180')} />
+                </button>
+              )}
             </div>
           )}
           {children}
-          <NoteMeta foundOn={foundOnRelays} route={route ?? servedRoute} client={clientTag} />
+          {(foundOnRelays?.length ?? 0) > 0 && !isPrivate ? (
+            <>
+              <div className="hidden md:block">
+                <NoteMeta foundOn={foundOnRelays} route={route ?? servedRoute} client={clientTag} />
+              </div>
+              {metaOpen && (
+                <div className="pt-1 md:hidden">
+                  <NoteMeta foundOn={foundOnRelays} route={route ?? servedRoute} client={clientTag} />
+                </div>
+              )}
+            </>
+          ) : (
+            <NoteMeta foundOn={foundOnRelays} route={route ?? servedRoute} client={clientTag} />
+          )}
         </div>
       </CardContent>
       {broadcastDialog}

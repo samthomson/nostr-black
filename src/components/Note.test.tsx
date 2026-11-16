@@ -674,4 +674,23 @@ describe('Note', () => {
     fireEvent.click(card);
     expect(onOpen).toHaveBeenCalledTimes(1);
   });
+
+  it('the relays caret toggles the meta pills row', async () => {
+    const target = note(generateSecretKey(), 'with provenance');
+
+    render(
+      <TestApp>
+        <Unlock nsec={nip19.nsecEncode(generateSecretKey())}>
+          <Note event={target} foundOn={['wss://a.example/']} />
+        </Unlock>
+      </TestApp>,
+    );
+
+    // one inline instance (desktop block); the caret folds a second
+    fireEvent.click(await screen.findByRole('button', { name: 'note relays' }));
+    expect(screen.getAllByText('a.example')).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole('button', { name: 'note relays' }));
+    expect(screen.getAllByText('a.example')).toHaveLength(1);
+  });
 });

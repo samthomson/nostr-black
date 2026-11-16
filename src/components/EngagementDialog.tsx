@@ -123,6 +123,11 @@ export const EngagementDialog = ({
   );
 };
 
+/** The one count typography — every number in the reactions row, link
+ * or plain, zero or not: the icon size (text-xl to size-5), never
+ * bold, so icon and number read as one unit. Desktop stays text-sm. */
+export const countNumberClass = 'text-xl font-normal leading-none sm:text-sm';
+
 /**
  * The one engagement affordance: icon left, underlined count right.
  *
@@ -195,11 +200,11 @@ export const EngagementCount = ({
   };
 
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex items-center gap-0.5">
       <button
         type="button"
         className={cn(
-          'text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground',
+          'text-muted-foreground inline-flex h-11 cursor-pointer items-center justify-center px-1 hover:text-foreground sm:h-auto sm:px-0.5',
           mine && 'text-foreground',
         )}
         onPointerDown={startPress}
@@ -211,20 +216,23 @@ export const EngagementCount = ({
         {icon}
       </button>
       {count === 0 && !pending ? (
-        <span className="text-muted-foreground inline-flex items-center" data-testid={`count-${ariaLabel}`}>
-          <span className="text-sm">0</span>
+        <span
+          className={cn('text-muted-foreground inline-flex h-11 items-center px-0.5 sm:h-auto sm:px-0', countNumberClass)}
+          data-testid={`count-${ariaLabel}`}
+        >
+          0
         </span>
       ) : (
         <button
           type="button"
-          className="text-muted-foreground inline-flex cursor-pointer items-center hover:text-foreground"
+          className={cn('text-muted-foreground inline-flex h-11 cursor-pointer items-center px-0.5 hover:text-foreground sm:h-auto sm:px-0', countNumberClass)}
           onClick={() => (onShow ? onShow() : setViewerOpen(true))}
           aria-label={`${ariaLabel}s`}
           data-testid={`count-${ariaLabel}`}
         >
           {pending
-            ? <Loader2 className="size-3 animate-spin" />
-            : <span className="text-sm underline underline-offset-2">{capped ? `${count}+` : count}</span>}
+            ? <Loader2 className="size-5 animate-spin sm:size-3" />
+            : <span className="underline underline-offset-2">{capped ? `${count}+` : count}</span>}
         </button>
       )}
 
