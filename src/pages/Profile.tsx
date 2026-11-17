@@ -23,7 +23,7 @@ import { NpubCopy } from '@/components/NpubCopy';
 import { sanitizeUrl } from '@/lib/sanitizeUrl';
 import { parseFollows } from '@/lib/outbox';
 import { Card, CardContent } from '@/components/ui/card';
-import { FeedSkeleton } from '@/components/NoteSkeleton';
+import { Loading } from '@/components/Loading';
 import { useMemo, useState } from 'react';
 import { Pencil } from 'lucide-react';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -196,7 +196,7 @@ const ProfileBody = ({ pubkey }: { pubkey: string }) => {
         </div>
       </div>
 
-      {(notes.pending || privateNotes.pending || activity.pending) && items.length === 0 && <FeedSkeleton />}
+      {(notes.pending || privateNotes.pending || activity.pending) && items.length === 0 && <Loading />}
       {items.length > 0 && (
         <p className="px-1 text-xs text-muted-foreground">{items.length} items</p>
       )}

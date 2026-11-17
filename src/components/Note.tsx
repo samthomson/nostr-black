@@ -17,7 +17,7 @@ import { Dialog, SmoothDialogContent, DialogHeader, DialogTitle } from '@/compon
 import { Chip, RelayPill, RoutePill } from '@/components/Pills';
 import { EngagementCount, countNumberClass } from '@/components/EngagementDialog';
 import { useEngagementFeed } from '@/data/hooks/useEngagementFeed';
-import { NoteSkeleton } from '@/components/NoteSkeleton';
+import { Loading } from '@/components/Loading';
 import { Composer } from '@/components/Composer';
 import { ProfileAvatar } from '@/components/ProfileAvatar';
 import { Lightbox, LightboxTrigger } from '@/components/Lightbox';
@@ -131,9 +131,8 @@ const MediaItem = ({ url, alt, onOpen, tile = false }: { url: string; alt: strin
       );
     }
     return (
-      <div ref={ref} className="flex h-32 w-full items-center justify-center gap-2 rounded-sm bg-muted text-xs text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" />
-        loading media…
+      <div ref={ref} className="w-full rounded-sm bg-muted">
+        <Loading text="loading media…" className="h-32 py-0" />
       </div>
     );
   }
@@ -340,7 +339,7 @@ const ReferencedNote = ({ event, pending, debug }: {
         {event ? (
           <Note event={event} showContext={false} clamp={false} />
         ) : pending ? (
-          <NoteSkeleton />
+          <Loading text="loading note" className="py-6" />
         ) : (
           <div className="flex items-center justify-between gap-2 py-2 pr-1 pl-2">
             <p className="text-muted-foreground text-xs">note not on your relays</p>

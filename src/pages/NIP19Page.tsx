@@ -10,7 +10,7 @@ import { Page } from '@/components/Page';
 import { ProfilePage } from '@/pages/Profile';
 import type { DecodeResult } from '@/lib/format';
 import { Card, CardContent } from '@/components/ui/card';
-import { NoteSkeleton } from '@/components/NoteSkeleton';
+import { Loading } from '@/components/Loading';
 import NotFound from './NotFound';
 
 /** Resolves a decoded pointer to (id, relay hints) for fetching. */
@@ -51,7 +51,7 @@ const EventPage = ({ identifier }: { identifier: string }) => {
   }, [isLoading, event, attempt, author, pointer]);
 
   if (isLoading) {
-    return <NoteSkeleton />;
+    return <Loading text="resolving note" />;
   }
 
   if (!event) {

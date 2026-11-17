@@ -1,4 +1,4 @@
-import { Loader2 } from 'lucide-react';
+import { Loading } from '@/components/Loading';
 import { LightboxTrigger } from '@/components/Lightbox';
 import { useAsset } from '@/hooks/useAsset';
 
@@ -22,7 +22,7 @@ export const ProfileBanner = ({ url, onOpen }: { url: string | undefined; onOpen
   if (!src) {
     return (
       <div className="bg-muted flex h-32 w-full items-center justify-center sm:h-40">
-        <Loader2 className="text-muted-foreground size-5 animate-spin" />
+        <Loading className="py-0" />
       </div>
     );
   }

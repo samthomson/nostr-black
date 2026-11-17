@@ -39,11 +39,10 @@ Plan of record: `README.md`.
 - TypeScript, never `any`
 - const arrow functions; async/await, no `.then()` ladders
 - lowercase UI copy (labels, buttons, status)
-- shadcn/ui components (`src/components/ui`), Tailwind, `cn()` merge; skeletons for loading, spinners only for buttons
 - buttons / chips / tags are near-square — use `rounded-sm` only (token is ~2px). never `rounded-md`/`rounded-lg`/`rounded-xl`/`rounded-full`/pills for chrome
-- privacy is colour: private=black, public=white, greys between (low/medium/high). all privacy-coloured buttons/pills/labels use the consts in `src/lib/privacy.ts` (text is the inversion) — never ad-hoc colours
+- shadcn/ui components (`src/components/ui`), Tailwind, `cn()` merge; one loading affordance — the `Loading` component (spinner + optional caption) everywhere content loads, never skeleton cards
 - `PrivacyTag` and similar inline labels inherit font-size from their parent — never hardcode `text-[Npx]` / `text-xs` on them
-- images (avatars, banners, media): spinner or skeleton while loading — never letter/initials/npub-slice text placeholders. empty muted only when there is no image. all avatars go through `ProfileAvatar` + `useAsset`
+- images (avatars, banners, media): the `Loading` spinner while loading — never letter/initials/npub-slice text placeholders. empty muted only when there is no image. all avatars go through `ProfileAvatar` + `useAsset`
 - mobile: header with hamburger drawer below `md`; desktop keeps the side rail. use `h-dvh` and safe-area insets
 - read `App.tsx`, `AppRouter.tsx`, `NostrProvider` before touching them
 - json is always formatted with 4-space indentation

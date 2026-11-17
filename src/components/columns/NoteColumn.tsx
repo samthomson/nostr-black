@@ -10,7 +10,7 @@ import { usePrivateActions } from '@/hooks/usePrivateActions';
 import { SealedReplies } from '@/components/PrivateNote';
 import { Note } from '@/components/Note';
 import { NoteComposer } from '@/components/NoteComposer';
-import { FeedSkeleton, NoteSkeleton } from '@/components/NoteSkeleton';
+import { Loading } from '@/components/Loading';
 import { Card, CardContent } from '@/components/ui/card';
 import type { ColumnPointer } from './columnsState';
 import { useAnchorSpacer, useSpacerRefs } from './useAnchorSpacer';
@@ -114,12 +114,12 @@ export const NoteColumn = ({
           the first reply near the opened note's offset in the column to
           the left. */}
       <div className="flex flex-col gap-1.5 pt-10">
-        {!priv && root.pending && <NoteSkeleton />}
+        {!priv && root.pending && <Loading text="loading note" />}
         {!priv && !root.pending && !root.event && <MissingNote />}
         {!priv && root.event && thread.pending && thread.children.length === 0 && (
-          <FeedSkeleton count={2} />
+          <Loading text="loading replies" />
         )}
-        {priv && privFeed.pending && privFeed.posts.length === 0 && <NoteSkeleton grade="private" />}
+        {priv && privFeed.pending && privFeed.posts.length === 0 && <Loading text="loading private note" />}
         {priv && !privFeed.pending && !privPost && <MissingNote />}
 
         {!priv && root.event && (

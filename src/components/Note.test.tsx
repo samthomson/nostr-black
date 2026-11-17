@@ -314,7 +314,7 @@ describe('Note', () => {
     expect(await screen.findByText('the reposted words')).toBeTruthy();
     expect(screen.queryByText(/replying to/)).toBeNull();
   });
-  it('a repost without an embed shows a skeleton while the target loads, then the note', async () => {
+  it('a repost without an embed shows the loading slot while the target loads, then the note', async () => {
     const alice = generateSecretKey();
     const target = note(alice, 'arrives from the fetch');
     const repost = finalizeEvent({
@@ -332,14 +332,14 @@ describe('Note', () => {
       </TestApp>,
     );
 
-    // pending: the nested slot holds the skeleton, not an empty card
-    expect(document.querySelector('[data-slot="skeleton"]')).toBeTruthy();
+    // pending: the nested slot holds the loader, not an empty card
+    expect(screen.getByText('loading note')).toBeTruthy();
     expect(screen.queryByText(/replying to/)).toBeNull();
 
-    // the target lands in the store: the note replaces the skeleton
+    // the target lands in the store: the note replaces the loader
     store.ingest([target], 'wss://relay/');
     expect(await screen.findByText('arrives from the fetch')).toBeTruthy();
-    expect(document.querySelector('[data-slot="skeleton"]')).toBeNull();
+    expect(screen.queryByText('loading note')).toBeNull();
   });
   it('a generic repost (kind 16) renders the embedded event, never its raw JSON', async () => {
     const bob = generateSecretKey();

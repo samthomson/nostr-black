@@ -6,7 +6,7 @@ import { Page } from '@/components/Page';
 import { PrivacyTag } from '@/components/PrivacyTag';
 import { PrivateNote } from '@/components/PrivateNote';
 import { Composer } from '@/components/Composer';
-import { FeedSkeleton } from '@/components/NoteSkeleton';
+import { Loading } from '@/components/Loading';
 import { Card, CardContent } from '@/components/ui/card';
 import { usePrivateFeed } from '@/data/hooks/usePrivateFeed';
 import { useAttachments } from '@/hooks/useAttachments';
@@ -117,7 +117,7 @@ const PrivateFeedBody = () => {
           )}
         </>
       )}
-      {pending && posts.length === 0 && <FeedSkeleton grade="private" />}
+      {pending && posts.length === 0 && <Loading text="loading private notes" />}
       {!pending && connectedPeers.length === 0 && empty(
         "only once you've connected with people can you make private posts",
         { to: '/connections', label: 'add connections' },

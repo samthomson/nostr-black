@@ -3,7 +3,7 @@ import type { NostrEvent } from '@nostrify/nostrify';
 import { ArrowUp } from 'lucide-react';
 import { Note } from '@/components/Note';
 import { Card, CardContent } from '@/components/ui/card';
-import { FeedSkeleton } from '@/components/NoteSkeleton';
+import { Loading } from '@/components/Loading';
 import { useFeed } from '@/data/hooks/useFeed';
 import { useProvenance } from '@/data/hooks/useProvenance';
 import { useVisibility } from '@/data/hooks/useVisibility';
@@ -79,7 +79,7 @@ export const Feed = () => {
       {!isLoading && shown.length > 0 && (
         <p className="px-1 text-xs text-muted-foreground">{shown.length} notes</p>
       )}
-      {isLoading && shown.length === 0 && <FeedSkeleton count={5} />}
+      {isLoading && shown.length === 0 && <Loading text="loading notes" />}
 
       {shown.map((event) => (
         <FeedNote key={event.id} event={event} />

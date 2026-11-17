@@ -1,6 +1,7 @@
 import { useRef } from 'react';
-import { ChevronLeft, ChevronRight, Loader2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { Loading } from '@/components/Loading';
 import { useAsset } from '@/hooks/useAsset';
 import { VIDEO_URL } from '@/lib/mediaUrls';
 import { PRIVACY, type PrivacyGrade } from '@/lib/privacy';
@@ -128,7 +129,7 @@ const Showing = ({ url, alt }: { url: string; alt: string }) => {
     return error ? (
       <div className="p-8 font-mono text-xs opacity-70" role="alert">media failed: {error}</div>
     ) : (
-      <Loader2 className="size-8 animate-spin opacity-70" aria-label="loading media" />
+      <Loading className="p-8" />
     );
   }
   if (VIDEO_URL.test(url)) {
