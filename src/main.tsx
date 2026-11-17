@@ -7,7 +7,12 @@ import './lib/polyfills.ts';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import App from './App.tsx';
-import './index.css';
+
+// The PWA's own update path: the build's service worker precaches the
+// shell and auto-updates on every deploy (vite-plugin-pwa virtual).
+import { registerSW } from 'virtual:pwa-register';
+
+registerSW({ immediate: true });
 
 
 createRoot(document.getElementById("root")!).render(

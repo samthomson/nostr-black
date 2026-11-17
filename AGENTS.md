@@ -4,8 +4,8 @@ Plan of record: `README.md`.
 
 ## Conduct
 
-- be concise in dialog always. use no more words than needed
-- hard caps: answers ≤5 lines unless a decision genuinely needs more; task-done replies are one line; explanations max 3 bullets, only when asked or load-bearing. never restate known context, never summarize completed work unprompted, never preview next steps unprompted
+- be concise in dialog always: hard caps ≤5 lines unless a decision genuinely needs more; task-done replies are one line; explanations max 3 bullets, only when asked or load-bearing. never restate known context, never summarize completed work unprompted, never preview next steps unprompted
+- one question/point, one sentence: never exceed one sentence per question or point unless truly impossible, and then use the bare minimum extra
 - when answering multiple questions in one message, lead each answer with a bolded one-sentence summary of its question, comprehensible on its own
 - programming-style feedback from the user is captured here as rules. components stay thin and dumb (props in, render out); generic deterministic pure functions live once in `src/lib` utils, never duplicated inside components
 - output must be product relevant: code, plans, technical docs. no marketing speak or filler
