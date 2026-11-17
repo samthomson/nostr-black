@@ -377,8 +377,6 @@ describe('Note', () => {
       tags: [['e', parent.id, '', 'reply'], ['p', parent.pubkey]],
       content: 'my reply',
     }, generateSecretKey());
-    store.ingest([parent], '');
-
     render(
       <TestApp>
         <Note event={reply} />
@@ -391,9 +389,10 @@ describe('Note', () => {
     expect(text.indexOf('the parent words')).toBeLessThan(text.indexOf('my reply'));
     expect(screen.queryByText(/replying to/)).toBeTruthy();
 
-    // the box is bounded: content-sized cap, inner scroll, scaled, dimmed
+    // the box is bounded: content-sized cap, clipped (no scroll until
+    // expanded), scaled, dimmed
     const box = card.querySelector('[data-testid="referenced-note"]')!;
-    for (const cls of ['max-h-44', 'overflow-y-auto', 'opacity-75', '[zoom:0.6]']) {
+    for (const cls of ['max-h-44', 'overflow-hidden', 'opacity-75', '[zoom:0.6]']) {
       expect(box.className).toContain(cls);
     }
     // and the box is contained: dashed border + inset shadow carry that
@@ -441,7 +440,7 @@ describe('Note', () => {
     const card = (await screen.findByText('small reply')).closest('[data-slot="card"]')!;
     const box = card.querySelector('[data-testid="referenced-note"]')!;
     expect(box.className).toContain('max-h-44');
-    expect(box.className).toContain('overflow-y-auto');
+    expect(box.className).toContain('overflow-hidden');
   });
   it('fetches a reply parent from relays when it is not in the store', async () => {
     const parent = note(generateSecretKey(), 'fetched parent words');

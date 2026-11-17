@@ -331,7 +331,7 @@ const ReferencedNote = ({ event, pending, debug }: {
         ref={boxRef}
         data-testid="referenced-note"
         className={cn(
-          'transition-[opacity,zoom] max-h-44 overflow-y-auto duration-200 ease-out',
+          'transition-[opacity,zoom] max-h-44 overflow-hidden duration-200 ease-out',
           !expanded && 'opacity-75 [zoom:0.6]',
           expanded && 'max-h-none overflow-visible',
         )}
