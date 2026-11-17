@@ -125,7 +125,7 @@ export const EngagementDialog = ({
 
 /** The one count typography — every number in the reactions row, link
  * or plain, zero or not: the icon size (text-xl to size-5), never
- * bold, so icon and number read as one unit. Desktop stays text-sm. */
+ * bold, so icon and number read as one unit. Desktop is text-sm. */
 export const countNumberClass = 'text-xl font-normal leading-none sm:text-sm';
 
 /**
