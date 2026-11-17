@@ -7,12 +7,14 @@ import './lib/polyfills.ts';
 
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import App from './App.tsx';
-
-// The PWA's own update path: the build's service worker precaches the
-// shell and auto-updates on every deploy (vite-plugin-pwa virtual).
-import { registerSW } from 'virtual:pwa-register';
-
-registerSW({ immediate: true });
+import './index.css';
+// The installed-PWA update path: the service worker (public/sw.js)
+// keeps the shell network-first and assets cache-first, so deploys can
+// never strand the app on assets that no longer exist. Production only
+// — the dev server owns its own asset pipeline.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  void navigator.serviceWorker.register('/sw.js');
+}
 
 
 createRoot(document.getElementById("root")!).render(
